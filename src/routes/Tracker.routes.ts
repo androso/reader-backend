@@ -53,6 +53,7 @@ router.get(
                 });
                 return;
             }
+
             console.log(progress.progressPosition);
             res.status(200).json({
                 progressPosition: progress.progressPosition,
