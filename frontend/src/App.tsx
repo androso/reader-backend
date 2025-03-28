@@ -1,22 +1,14 @@
-import { useState } from "react";
-import "./App.css";
+import { Route, Switch } from "wouter";
+import Home from "./pages/Home";
+import Login from "./pages/Login";
 
-function App() {
-    const [count, setCount] = useState(0);
-
+export default function App() {
     return (
         <div className="App">
-            <h1>Mentarie App</h1>
-            <div className="card">
-                <button onClick={() => setCount((count) => count + 1)}>
-                    count is {count}
-                </button>
-                <p>
-                    Edit <code>src/App.tsx</code> and save to test HMR
-                </p>
-            </div>
+            <Switch>
+                <Route path="/" component={Home} />
+                <Route path="/login" component={Login} />
+            </Switch>
         </div>
     );
 }
-
-export default App;
