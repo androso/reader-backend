@@ -1,17 +1,18 @@
-import { useUser } from "@/lib/auth";
-import { useRouter } from "next/navigation";
+import { useUser } from "../lib/auth";
 import { useEffect } from "react";
 import { LoadingSpinner } from "./ui/LoadingSpinner";
+import { useLocation } from "wouter";
 
 export function AuthProtection({ children }: { children: React.ReactNode }) {
-    const router = useRouter();
+    // const router = useRouter();
+    const [_, setLocation] = useLocation();
     const { status: userStatus, data: userData } = useUser();
 
     useEffect(() => {
         if ((userStatus == "success" && !userData) || userStatus == "error") {
-            router.push("/login");
+            setLocation("/login");
         }
-    }, [userStatus, userData, router]);
+    }, [userStatus, userData]);
 
     if (userStatus == "pending") {
         return <LoadingSpinner />;
