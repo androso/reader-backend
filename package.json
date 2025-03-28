@@ -10,7 +10,7 @@
     "build:server": "tsc -p tsconfig.json",
     "build:client": "cd frontend && vite build",
     "build": "npm run build:server && npm run build:client",
-    "start": "NODE_ENV=production node dist/index.js",
+    "start": "NODE_ENV=production node build/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepare": "husky install"
   },

@@ -14,7 +14,7 @@ export default defineConfig({
         host: "0.0.0.0",
         allowedHosts: [
             "d138364d-7f62-462b-b93d-75d5933deeb3-00-bb9r8rw8nelt.janeway.replit.dev",
-        ], // Allow all hosts to connect
+        ],
     },
     build: {
         outDir: "../public",

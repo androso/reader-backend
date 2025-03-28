@@ -115,3 +115,4 @@ dist
 Thumbs.db
 #build
 build/
+/public/
