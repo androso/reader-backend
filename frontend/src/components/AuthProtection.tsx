@@ -4,7 +4,6 @@ import { LoadingSpinner } from "./ui/LoadingSpinner";
 import { useLocation } from "wouter";
 
 export function AuthProtection({ children }: { children: React.ReactNode }) {
-    // const router = useRouter();
     const [_, setLocation] = useLocation();
     const { status: userStatus, data: userData } = useUser();
 

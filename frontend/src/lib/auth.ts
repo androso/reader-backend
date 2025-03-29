@@ -8,20 +8,19 @@ export interface User {
     provider: string;
 }
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 export function useUser() {
     return useQuery({
-        queryKey: [`${process.env.NEXT_PUBLIC_API_URL}/api/user`],
+        queryKey: [`${API_URL}/api/user`],
         queryFn: async () => {
             const token = localStorage.getItem("token");
             if (!token) return null;
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/user`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
-            );
+            const response = await fetch(`${API_URL}/api/user`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
             if (!response.ok) {
                 throw new Error("Network response was not ok");
             }
@@ -35,16 +34,13 @@ export function useUser() {
 export function useGoogleSignIn() {
     return useMutation({
         mutationFn: async (token: string) => {
-            const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ token }),
-                }
-            );
+            const res = await fetch(`${API_URL}/api/auth/google`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ token }),
+            });
 
             if (!res.ok) {
                 throw new Error("Authentication failed");
@@ -56,7 +52,7 @@ export function useGoogleSignIn() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({
-                queryKey: [`${process.env.NEXT_PUBLIC_API_URL}/api/user`],
+                queryKey: [`${API_URL}/api/user`],
             });
         },
     });
