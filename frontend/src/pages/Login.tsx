@@ -40,7 +40,7 @@ export default function Login() {
     }
 
     return (
-        <div className="container mx-auto flex items-center justify-center min-h-screen">
+        <div className="container mx-auto flex items-center justify-center min-h-screen w-screen">
             <Card className="w-full max-w-md p-6">
                 <h1 className="text-2xl font-semibold text-center mb-6">
                     Login

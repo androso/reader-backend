@@ -4,7 +4,7 @@ import Login from "./pages/Login";
 
 export default function App() {
     return (
-        <div className="App">
+        <div className="App w-screen h-screen">
             <Switch>
                 <Route path="/" component={Home} />
                 <Route path="/login" component={Login} />
