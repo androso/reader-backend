@@ -56,9 +56,7 @@ if (isProduction) {
 } else {
     // In development, show a message for the API root
     app.get("/", (req, res) => {
-        res.send(
-            "API is running. Frontend is available at http://localhost:5173"
-        );
+        res.send("API is running");
     });
 }
 export default app;

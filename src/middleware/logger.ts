@@ -16,10 +16,8 @@ export const logger = (req: Request, res: Response, next: NextFunction) => {
 
     res.on("finish", () => {
         const duration = Date.now() - start;
-        if (path.startsWith("/api")) {
-            let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-            log(logLine);
-        }
+        let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+        log(logLine);
     });
 
     next();
