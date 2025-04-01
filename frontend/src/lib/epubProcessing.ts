@@ -4,7 +4,7 @@ import {
     type TocEntry,
     type EpubMetadata,
     type ManifestItem,
-} from "@/types/EpubReader";
+} from "../types/EpubReader";
 
 const CONTAINER_PATH = "META-INF/container.xml";
 
