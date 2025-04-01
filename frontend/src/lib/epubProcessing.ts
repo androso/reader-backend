@@ -147,7 +147,13 @@ export const processEpubFile = async (
     epubData: ArrayBuffer
 ): Promise<[EpubContent, JSZip]> => {
     const zip = new JSZip();
-    const zipData = await zip.loadAsync(epubData);
+    let zipData;
+    // try {
+    zipData = await zip.loadAsync(epubData);
+    // } catch (error) {
+    // console.error("Error loading EPUB data:", error);
+    // throw error;
+    // }
 
     const containerFile = zipData.file(CONTAINER_PATH);
     if (!containerFile) {

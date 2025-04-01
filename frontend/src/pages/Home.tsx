@@ -128,7 +128,11 @@ function Home() {
                         <Card
                             key={book.id}
                             className="relative transition-colors hover:bg-slate-200 p-5 cursor-pointer"
-                            onClick={() => setLocation(`/read/${book.fileKey}`)}
+                            onClick={() =>
+                                setLocation(
+                                    `/read/${book.fileKey}?bookId=${book.id}`
+                                )
+                            }
                             onMouseEnter={() => setHoveredBookId(book.id)}
                             onMouseLeave={() => setHoveredBookId(null)}
                         >

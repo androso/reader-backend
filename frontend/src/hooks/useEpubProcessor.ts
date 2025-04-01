@@ -19,11 +19,14 @@ export const useEpubProcessor = () => {
                     Authorization: `Bearer ${token}`,
                 },
             });
+
+            console.log({ response });
             if (!response.ok) {
                 throw new Error(`Failed to fetch EPUB: ${response.statusText}`);
             }
 
             const arrayBuffer = await response.arrayBuffer();
+            console.log({ arrayBuffer });
             const [content, zip] = await processEpubFile(arrayBuffer);
 
             setZipData(zip);
@@ -32,7 +35,8 @@ export const useEpubProcessor = () => {
             const errorMessage =
                 err instanceof Error ? err.message : "Unknown error occurred";
             setError("Failed to process EPUB file: " + errorMessage);
-            console.error(err);
+            console.log({ err });
+            // console.error(err);
         } finally {
             setIsLoading(false);
         }

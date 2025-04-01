@@ -307,7 +307,7 @@ router.get("/", authenticate, async (req, res) => {
  *                   example: "Internal server error"
  */
 
-router.get("/:id", authenticate, async (req, res) => {
+router.get("/:id", async (req, res) => {
     const id = req.params.id;
 
     try {
