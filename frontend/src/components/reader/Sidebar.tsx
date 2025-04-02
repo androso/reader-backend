@@ -1,14 +1,16 @@
 import React, { useState, memo } from "react";
-import { type EpubContent } from "@/types/EpubReader";
+import { type EpubContent } from "../../types/EpubReader";
 
 interface SidebarProps {
     epubContent: EpubContent;
     isOpen: boolean;
     onClose: () => void;
+    onTocItemClick: (href: string) => void;
+    activeHref: string | null;
 }
 
 const Sidebar: React.FC<SidebarProps> = memo(
-    ({ epubContent, isOpen, onClose }) => {
+    ({ epubContent, isOpen, onClose, onTocItemClick, activeHref }) => {
         const [expandedItems, setExpandedItems] = useState<Set<string>>(
             new Set()
         );
@@ -63,14 +65,22 @@ const Sidebar: React.FC<SidebarProps> = memo(
             return (
                 <div key={`${entry.id}-${index}`}>
                     <div
-                        className={`toc-item level-${entry.level} flex items-center cursor-pointer hover:bg-gray-100 px-2 py-1`}
+                        className={`toc-item level-${entry.level} flex items-center cursor-pointer hover:bg-gray-100 px-2 py-1 ${entry.href === activeHref ? "bg-blue-100" : ""}`}
                         style={{
                             paddingLeft: `${entry.level * 1.5}rem`,
+                        }}
+                        onClick={() => {
+                            onTocItemClick(entry.href!);
+                            onClose();
                         }}
                     >
                         {hasChildrenItems && (
                             <button
-                                onClick={() => handleToggle(index)}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleToggle(index);
+                                }}
                                 className="bg-none border-none p-1 cursor-pointer mr-1 text-gray-600"
                             >
                                 {isExpanded ? "▼" : "▶"}
@@ -78,8 +88,12 @@ const Sidebar: React.FC<SidebarProps> = memo(
                         )}
                         <a
                             href={`#${entry.href}`}
-                            onClick={onClose}
                             className={`text-decoration-none flex-1 py-1 ${entry.isPage ? "text-gray-600 text-sm" : ""}`}
+                            onClick={(e) => {
+                                if (hasChildrenItems) {
+                                    e.preventDefault();
+                                }
+                            }}
                         >
                             {entry.title}
                         </a>

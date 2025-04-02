@@ -1,10 +1,11 @@
-import { TextBlock } from "@/types/EpubReader";
+import { TextBlock } from "../types/EpubReader";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 export const useTextBlockNavigation = (
     flatTextBlocks: TextBlock[],
     contentRef: React.RefObject<HTMLDivElement | null>
 ) => {
+    const [isLoading, setIsLoading] = useState(true);
     const [activeTextBlockId, setActiveTextBlockId] = useState<string | null>(
         null
     );
@@ -12,25 +13,96 @@ export const useTextBlockNavigation = (
     const [isManualScroll, setIsManualScroll] = useState(false);
     const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
 
+    const fetchProgress = async (bookId: string) => {
+        try {
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/${bookId}/progress`,
+                {
+                    method: "GET",
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem("token")}`,
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Handle null progressPosition
+            if (!data.progressPosition) {
+                return null;
+            }
+
+            return data.progressPosition;
+        } catch (error) {
+            console.error("An error ocurred while progress was fetched", error);
+            return null;
+        }
+    };
+
+    //save progress
+    const [hasInitialProgress, setHasInitialProgress] = useState(false);
+
+    const saveProgress = async (textBlockId: string) => {
+        console.log("saveProgress", { hasInitialProgress });
+        if (!textBlockId) {
+            console.log("no textblock id");
+            return;
+        }
+        const bookId = window.location.pathname.split("/")[2];
+        try {
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/${bookId}/progress`,
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem("token")}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        progress_block: textBlockId,
+                        progress_chapter: textBlockId.split("-")[0], // assuming format like "c01-block-16"
+                    }),
+                }
+            );
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+        } catch (error) {
+            console.error("Progress cant be saved", error);
+        }
+    };
+
     useEffect(() => {
         if (!activeTextBlockId && flatTextBlocks.length > 0) {
             const bookId = window.location.pathname.split("/")[2];
-            const storedId = localStorage.getItem(`book-progress-${bookId}`);
-            setActiveTextBlockId(storedId || flatTextBlocks[0].id);
-            const element = document.getElementById(
-                storedId || flatTextBlocks[0].id
-            );
-            if (element) {
-                element.scrollIntoView({ behavior: "smooth", block: "center" });
-            }
+            const initializeProgress = async () => {
+                try {
+                    const storedId = await fetchProgress(bookId);
+                    if (storedId) {
+                        setHasInitialProgress(true);
+                    }
+                    setActiveTextBlockId(storedId || flatTextBlocks[0].id);
+                    const element = document.getElementById(
+                        storedId || flatTextBlocks[0].id
+                    );
+                    if (element) {
+                        element.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                        });
+                    }
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            //this retrieves the progress from the server
+            initializeProgress();
         }
     }, [flatTextBlocks]);
-
-    const saveProgress = (textBlockId: string) => {
-        // store in local storage the id along with the book and chapter so that it is better recognizable
-        const bookId = window.location.pathname.split("/")[2];
-        localStorage.setItem(`book-progress-${bookId}`, textBlockId);
-    };
 
     const getVisibilityRatio = useCallback((element: HTMLElement) => {
         const rect = element.getBoundingClientRect();
@@ -88,11 +160,15 @@ export const useTextBlockNavigation = (
 
             scrollTimeout.current = setTimeout(() => {
                 const mostVisibleId = findMostVisibleBlock();
-                if (mostVisibleId && mostVisibleId !== activeTextBlockId) {
-                    setActiveTextBlockId(mostVisibleId);
+                if (mostVisibleId) {
+                    console.log({ mostVisibleId });
                     saveProgress(mostVisibleId);
+                    if (mostVisibleId !== activeTextBlockId) {
+                        console.log({ mostVisibleId, activeTextBlockId });
+                        setActiveTextBlockId(mostVisibleId);
+                    }
                 }
-            }, 1000);
+            }, 300);
         }
     }, [activeTextBlockId, isManualScroll]);
 
@@ -132,18 +208,15 @@ export const useTextBlockNavigation = (
                     const targetBlock = flatTextBlocks[newIndex];
                     setActiveTextBlockId(targetBlock.id);
                     saveProgress(targetBlock.id);
-                    // scroll
-                    // we could replace document with the container ref
                     document.getElementById(targetBlock.id)?.scrollIntoView({
                         behavior: "smooth",
                         block: "center",
                     });
                 }
 
-                // we enable scroll after the animation of the keydown is done
                 setTimeout(() => {
                     setIsManualScroll(false);
-                }, 1000);
+                }, 300);
             }
         };
 
@@ -153,5 +226,6 @@ export const useTextBlockNavigation = (
 
     return {
         activeTextBlockId,
+        isLoading,
     };
 };

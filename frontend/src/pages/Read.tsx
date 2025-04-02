@@ -1,7 +1,7 @@
 import { useLocation, useParams } from "wouter";
 import { useWindowSize } from "../hooks/useWindowSize";
 import { ChatInterface } from "../components/reader/ChatInterface";
-import EpubReader from "../components/reader-test/EpubReader";
+import EpubReader from "../components/reader/EpubReader";
 
 export default function Read() {
     const params = useParams();

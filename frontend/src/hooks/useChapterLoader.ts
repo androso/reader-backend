@@ -1,8 +1,8 @@
 import { useCallback, useReducer, useEffect } from "react";
 import JSZip from "jszip";
-import { TextBlock, type EpubContent } from "../../types/EpubReader";
-import { useImageLoader } from "../../hooks/useImageLoader";
-import { resolveRelativePath } from "../../lib/utils";
+import { TextBlock, type EpubContent } from "../types/EpubReader";
+import { useImageLoader } from "../hooks/useImageLoader";
+import { resolveRelativePath } from "../lib/utils";
 
 export interface Chapter {
     id: string;
