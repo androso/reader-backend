@@ -42,7 +42,7 @@ router.get(
                 .where(
                     and(
                         eq(Progress.userId, user_id),
-                        eq(Progress.bookId, book.fileKey)
+                        eq(Progress.bookId, book.id)
                     )
                 );
 
@@ -98,7 +98,7 @@ router.post(
                 .where(
                     and(
                         eq(Progress.userId, user_id),
-                        eq(Progress.bookId, book.fileKey)
+                        eq(Progress.bookId, book.id)
                     )
                 );
 
@@ -114,7 +114,7 @@ router.post(
                     .where(
                         and(
                             eq(Progress.userId, user_id),
-                            eq(Progress.bookId, book.fileKey)
+                            eq(Progress.bookId, book.id)
                         )
                     )
                     .returning();
