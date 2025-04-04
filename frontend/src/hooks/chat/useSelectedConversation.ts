@@ -13,7 +13,7 @@ const useSelectedConversation = (chatState: ChatState, bookId: string) => {
             if (!chatState.currentConversation?.id) return null;
             const token = localStorage.getItem("token");
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/book/${bookId}/conversations/${chatState.currentConversation.id}`,
+                `${import.meta.env.VITE_API_URL}/api/book/${bookId}/conversations/${chatState.currentConversation.id}`,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,

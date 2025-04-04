@@ -9,11 +9,24 @@ import { Icon } from "@iconify/react";
 import { useLocation } from "wouter";
 import { ScrollArea } from "../components/ui/scroll-area";
 
+// Define interfaces for type safety
+interface Book {
+    id: string;
+    title: string;
+    userId: string;
+    fileKey: string;
+    createdAt: string | Date;
+}
+
+interface BooksResponse {
+    books: Book[];
+}
+
 function Home() {
     const [_, setLocation] = useLocation();
     const [hoveredBookId, setHoveredBookId] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
-    const { data: booksData } = useQuery({
+    const { data: booksData } = useQuery<BooksResponse>({
         queryKey: [`${import.meta.env.VITE_API_URL}/api/books`],
         queryFn: async () => {
             const token = localStorage.getItem("token");
@@ -55,7 +68,7 @@ function Home() {
             }
             return response.json();
         },
-        onSuccess: (data) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({
                 queryKey: [`${import.meta.env.VITE_API_URL}/api/books`],
             });
@@ -92,9 +105,21 @@ function Home() {
 
             return response;
         },
-        onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: ["/api/books"] });
-            toast.success(result.message);
+        onSuccess: async (result) => {
+            queryClient.invalidateQueries({ 
+                queryKey: [`${import.meta.env.VITE_API_URL}/api/books`] 
+            });
+            // Since result is a Response, we need to parse the JSON to get the message
+            let message = "Book deleted successfully";
+            try {
+                const data = await result.json();
+                if (data && data.message) {
+                    message = data.message;
+                }
+            } catch (e) {
+                // Continue with default message
+            }
+            toast.success(message);
         },
         onError: (err) => {
             toast.error(err.message);
@@ -124,7 +149,7 @@ function Home() {
 
             <ScrollArea className="h-[calc(100vh-12rem)]">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {booksData?.books?.map((book) => (
+                    {booksData?.books?.map((book: Book) => (
                         <Card
                             key={book.id}
                             className="relative transition-colors hover:bg-slate-200 p-5 cursor-pointer"
