@@ -17,7 +17,7 @@ const isProduction = process.env.NODE_ENV === "production";
 if (!process.env.FRONTEND_URL && !isProduction) {
     console.warn("FRONTEND_URL not set, CORS is using default frontend URL");
 }
-
+console.log({env: process.env.FRONTEND_URL})
 app.use(
     cors({
         origin: process.env.FRONTEND_URL,
