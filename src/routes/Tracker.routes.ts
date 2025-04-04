@@ -42,7 +42,7 @@ router.get(
                 .where(
                     and(
                         eq(Progress.userId, user_id),
-                        eq(Progress.bookId, book.id)
+                        eq(Progress.bookId, book.fileKey)
                     )
                 );
 
@@ -91,14 +91,14 @@ router.post(
                 return;
             }
 
-            // Check existing progress using book.id
+            // Check existing progress using book.fileKey
             const existingProgress = await db
                 .select()
                 .from(Progress)
                 .where(
                     and(
                         eq(Progress.userId, user_id),
-                        eq(Progress.bookId, book.id)
+                        eq(Progress.bookId, book.fileKey)
                     )
                 );
 
@@ -114,7 +114,7 @@ router.post(
                     .where(
                         and(
                             eq(Progress.userId, user_id),
-                            eq(Progress.bookId, book.id)
+                            eq(Progress.bookId, book.fileKey)
                         )
                     )
                     .returning();
@@ -123,7 +123,7 @@ router.post(
                     .insert(Progress)
                     .values({
                         userId: user_id,
-                        bookId: book.id,
+                        bookId: book.fileKey,
                         progressPosition: progress_block,
                         progressChapter: progress_chapter,
                         createdAt: new Date(),

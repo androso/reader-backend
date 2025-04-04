@@ -15,8 +15,9 @@ export const useTextBlockNavigation = (
 
     const fetchProgress = async (bookId: string) => {
         try {
+            const apiUrl = import.meta.env.VITE_API_URL as string;
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/${bookId}/progress`,
+                `${apiUrl}/api/${bookId}/progress`,
                 {
                     method: "GET",
                     headers: {
@@ -54,8 +55,9 @@ export const useTextBlockNavigation = (
         }
         const bookId = window.location.pathname.split("/")[2];
         try {
+            const apiUrl = import.meta.env.VITE_API_URL as string;
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/${bookId}/progress`,
+                `${apiUrl}/api/${bookId}/progress`,
                 {
                     method: "POST",
                     headers: {
