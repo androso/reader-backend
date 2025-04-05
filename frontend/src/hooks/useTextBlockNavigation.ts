@@ -3,12 +3,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 export const useTextBlockNavigation = (
     flatTextBlocks: TextBlock[],
-    contentRef: React.RefObject<HTMLDivElement | null>
+    contentRef: React.RefObject<HTMLDivElement | null>,
+    chapters: any 
 ) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeTextBlockId, setActiveTextBlockId] = useState<string | null>(
         null
     );
+    const [activeChapter, setActiveChapter] = useState<any>(null);
+    const [activeHref, setActiveHref] = useState<string | null>(null);
+    
     // manual scroll == navigation using arrow up and down
     const [isManualScroll, setIsManualScroll] = useState(false);
     const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -226,8 +230,34 @@ export const useTextBlockNavigation = (
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, [flatTextBlocks, activeTextBlockId]);
 
+    useEffect(() => {
+        if (!isLoading && activeTextBlockId && chapters.length > 0) {
+            const chapterId = activeTextBlockId.split("-")[0];
+            const chapter = chapters.find(
+                (c) => c.hrefId.includes(chapterId) || c.id.includes(chapterId)
+            );
+            if (chapter && !activeHref) {
+                setActiveChapter(chapter);
+                setActiveHref(chapter.hrefId);
+                // Give time for the chapter to render before scrolling
+                setTimeout(() => {
+                    const element = document.getElementById(activeTextBlockId);
+                    if (element) {
+                        element.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                        });
+                    }
+                }, 100);
+            }
+        }
+    }, [isLoading, activeTextBlockId, chapters]);
+    
     return {
         activeTextBlockId,
         isLoading,
+        activeChapter,
+        activeHref,
+        setActiveChapter
     };
 };
