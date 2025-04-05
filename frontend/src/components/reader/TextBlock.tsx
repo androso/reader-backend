@@ -1,5 +1,6 @@
 import { Bookmark, MessageCircle, Share2 } from "lucide-react";
 import React, { memo } from "react";
+import { useDeviceDetect } from "../../hooks/useDeviceDetect";
 
 const TextBlock = memo(
     ({
@@ -11,6 +12,7 @@ const TextBlock = memo(
         content: string;
         isActive: boolean;
     }) => {
+        const { isMobile, isDesktop } = useDeviceDetect();
         const [offset, setOffset] = React.useState(0);
         const [isDragging, setIsDragging] = React.useState(false);
         const [startX, setStartX] = React.useState(0);
@@ -18,6 +20,9 @@ const TextBlock = memo(
         const dragThreshold = 80;
 
         const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+            // Prevent drag functionality on desktop
+            if (isDesktop) return;
+            
             const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
             setStartX(clientX);
             if (!isLocked) {
@@ -26,6 +31,9 @@ const TextBlock = memo(
         };
 
         const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
+            // Prevent drag functionality on desktop
+            if (isDesktop) return;
+            
             if (!isDragging || isLocked) return;
             const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
             const deltaX = clientX - startX;
@@ -33,6 +41,9 @@ const TextBlock = memo(
         };
 
         const handleDragEnd = () => {
+            // Prevent drag functionality on desktop
+            if (isDesktop) return;
+            
             setIsDragging(false);
             if (offset > dragThreshold) {
                 setOffset(100);
@@ -56,7 +67,9 @@ const TextBlock = memo(
         };
 
         const renderActionIcons = () => {
-            if (!isLocked && offset === 0) return null;
+            // Don't render action icons on desktop or when not visible
+            if (isDesktop || (!isLocked && offset === 0)) return null;
+            
             const opacity = Math.min((offset / dragThreshold) * 1.2, 1);
             const scale = 0.6 + opacity * 0.4;
 
@@ -87,36 +100,39 @@ const TextBlock = memo(
         return (
             <div
                 id={id}
-                className={`transition-all transform select-none cursor-grab active:cursor-grabbing relative  `}
+                className={`transition-all transform select-none ${isMobile ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} relative`}
             >
-                <div
-                    className="absolute inset-0 z-10"
-                    onMouseDown={handleDragStart}
-                    onTouchStart={(e) => {
-                        const touch = e.touches[0];
-                        setStartX(touch.clientX);
-                    }}
-                    onMouseMove={handleDragMove}
-                    onTouchMove={(e) => {
-                        if (
-                            !isDragging &&
-                            Math.abs(e.touches[0].clientX - startX) > 10
-                        ) {
-                            setIsDragging(true);
-                            e.preventDefault();
-                        }
-                        if (isDragging) {
-                            e.preventDefault();
-                            handleDragMove(e);
-                        }
-                    }}
-                    onMouseUp={handleDragEnd}
-                    onTouchEnd={handleDragEnd}
-                    onMouseLeave={handleDragEnd}
-                    style={{
-                        touchAction: isDragging ? "none" : "pan-y",
-                    }}
-                />
+                {/* Only apply touch/drag events for mobile devices */}
+                {!isDesktop && (
+                    <div
+                        className="absolute inset-0 z-10"
+                        onMouseDown={handleDragStart}
+                        onTouchStart={(e) => {
+                            const touch = e.touches[0];
+                            setStartX(touch.clientX);
+                        }}
+                        onMouseMove={handleDragMove}
+                        onTouchMove={(e) => {
+                            if (
+                                !isDragging &&
+                                Math.abs(e.touches[0].clientX - startX) > 10
+                            ) {
+                                setIsDragging(true);
+                                e.preventDefault();
+                            }
+                            if (isDragging) {
+                                e.preventDefault();
+                                handleDragMove(e);
+                            }
+                        }}
+                        onMouseUp={handleDragEnd}
+                        onTouchEnd={handleDragEnd}
+                        onMouseLeave={handleDragEnd}
+                        style={{
+                            touchAction: isDragging ? "none" : "pan-y",
+                        }}
+                    />
+                )}
                 <div className="relative">
                     {renderActionIcons()}
                     <div
@@ -124,12 +140,12 @@ const TextBlock = memo(
                             isActive
                                 ? "border-l-4 border-blue-500 bg-blue-50"
                                 : "border-l-4 border-transparent"
-                        } ${isDragging || isLocked ? "shadow-lg" : "shadow-sm"} ${
+                        } ${!isDesktop && (isDragging || isLocked) ? "shadow-lg" : "shadow-sm"} ${
                             isLocked ? "cursor-pointer" : ""
                         }`}
                         onClick={handleParagraphClick}
                         style={{
-                            transform: `translateX(${offset}px)`,
+                            transform: !isDesktop ? `translateX(${offset}px)` : "translateX(0)",
                             transition: !isDragging
                                 ? "transform 0.2s ease-out"
                                 : "none",
