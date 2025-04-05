@@ -12,6 +12,7 @@ export const useEpubProcessor = () => {
     const processEpub = useCallback(async (url: string) => {
         try {
             setIsLoading(true);
+            
             setError(null);
             const token = localStorage.getItem("token");
             const response = await fetch(url, {
