@@ -140,7 +140,7 @@ const TextBlock = memo(
                             isActive
                                 ? "border-l-4 border-blue-500 bg-blue-50"
                                 : "border-l-4 border-transparent"
-                        } ${!isDesktop && (isDragging || isLocked) ? "shadow-lg" : "shadow-sm"} ${
+                        } ${!isDesktop && (isDragging || isLocked) ? "shadow-lg" : "shadow-none"} ${
                             isLocked ? "cursor-pointer" : ""
                         }`}
                         onClick={handleParagraphClick}
