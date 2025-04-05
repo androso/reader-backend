@@ -23,26 +23,27 @@ router.get(
     async (req: Request, res: Response) => {
         try {
             const user_id = req.user.id;
-            const book_id = req.params.rid;
+            const book_fileKey = req.params.rid;
 
             // First get the book to ensure it exists
             const [book] = await db
                 .select()
                 .from(Books)
-                .where(eq(Books.fileKey, book_id));
+                .where(eq(Books.fileKey, book_fileKey));
 
             if (!book) {
                 res.status(404).json({ message: "Book not found" });
                 return;
             }
 
+            // we compare against Progress.bookId because this column initially the book id but with recent changes it points to the fileKey
             const [progress] = await db
                 .select()
                 .from(Progress)
                 .where(
                     and(
                         eq(Progress.userId, user_id),
-                        eq(Progress.bookId, book.id)
+                        eq(Progress.bookId, book.fileKey)
                     )
                 );
 
@@ -90,7 +91,7 @@ router.post(
                 res.status(404).json({ message: "Book not found" });
                 return;
             }
-
+            
             // Check existing progress using book.fileKey
             const existingProgress = await db
                 .select()
@@ -98,10 +99,11 @@ router.post(
                 .where(
                     and(
                         eq(Progress.userId, user_id),
-                        eq(Progress.bookId, book.id)
+                        eq(Progress.bookId, book.fileKey)
                     )
                 );
 
+            // we compare against Progress.bookId because this column initially the book id but with recent changes it points to the fileKey
             let progress;
             if (existingProgress.length > 0) {
                 [progress] = await db
@@ -114,7 +116,7 @@ router.post(
                     .where(
                         and(
                             eq(Progress.userId, user_id),
-                            eq(Progress.bookId, book.id)
+                            eq(Progress.bookId, book.fileKey)
                         )
                     )
                     .returning();
