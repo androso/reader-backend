@@ -1,13 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "./queryClient";
 
-export interface User {
-    id: string;
-    displayName: string;
-    email?: string;
-    provider: string;
-}
-
 const API_URL = import.meta.env.VITE_API_URL;
 
 export function useUser() {

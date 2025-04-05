@@ -3,13 +3,7 @@ import JSZip from "jszip";
 import { TextBlock, type EpubContent } from "../types/EpubReader";
 import { useImageLoader } from "../hooks/useImageLoader";
 import { resolveRelativePath } from "../lib/utils";
-
-export interface Chapter {
-    id: string;
-    content: string;
-    hrefId: string;
-    textBlocks: TextBlock[];
-}
+import { Chapter } from "../types/bookTypes";
 
 interface ChapterLoaderState {
     chapters: Chapter[];

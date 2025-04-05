@@ -8,15 +8,7 @@ import { Card } from "../components/ui/card";
 import { Icon } from "@iconify/react";
 import { useLocation } from "wouter";
 import { ScrollArea } from "../components/ui/scroll-area";
-
-// Define interfaces for type safety
-interface Book {
-    id: string;
-    title: string;
-    userId: string;
-    fileKey: string;
-    createdAt: string | Date;
-}
+import { Book } from "../types/bookTypes";
 
 interface BooksResponse {
     books: Book[];

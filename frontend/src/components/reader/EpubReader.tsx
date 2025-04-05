@@ -17,9 +17,6 @@ const EpubReader: React.FC<EpubReaderProps> = ({ url }) => {
     const contentRef = useRef<HTMLDivElement>(null);
     const { processEpub, isLoading, error, epubContent, zipData } =
         useEpubProcessor();
-    
-
-    
     const { chapters, loadAllChapters, flatTextBlocks } = useChapterLoader(
         epubContent,
         zipData
