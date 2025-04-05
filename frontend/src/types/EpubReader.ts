@@ -1,6 +1,6 @@
 export interface EpubMetadata {
-    title: string | null;
-    creator: string | null;
+    title: string;
+    creator: string;
 }
 
 export interface ManifestItem {
@@ -29,10 +29,4 @@ export interface TextBlock {
     id: string;
     content: string;
     element: HTMLElement;
-}
-
-export interface ChapterBlock {
-    id: string;
-    hrefId: string;
-    textBlocks: TextBlock[];
 }
