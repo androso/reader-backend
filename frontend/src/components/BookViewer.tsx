@@ -62,13 +62,13 @@ export function BookViewer({ bookId }: BookViewerProps) {
                     });
 
                     rendition.on("started", () => {
-                        console.log("EPUB started loading");
+                        // console.log("EPUB started loading");
                     });
                     rendition.on("displayed", () => {
-                        console.log("EPUB page displayed");
+                        // console.log("EPUB page displayed");
                     });
                     rendition.on("rendered", () => {
-                        console.log("EPUB content rendered");
+                        // console.log("EPUB content rendered");
                         const contents = rendition.getContents();
 
                         if (contents) {

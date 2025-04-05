@@ -9,7 +9,7 @@ export function ChatInput() {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         // Stub - would normally send to API
-        console.log("Sending message:", message);
+        // console.log("Sending message:", message);
         setMessage("");
     };
 

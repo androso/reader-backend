@@ -67,7 +67,7 @@ export const useChapterLoader = (
     });
 
     useEffect(() => {
-        console.log({ epubContent });
+        // console.log({ epubContent });
     }, [epubContent]);
 
     const loadCssContent = useCallback(

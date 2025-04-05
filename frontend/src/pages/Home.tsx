@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AuthProtection } from "../components/AuthProtection";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { FileUpload } from "../components/FileUpload";
 import { signOut } from "../lib/auth";
@@ -45,7 +45,9 @@ function Home() {
         },
         enabled: true,
     });
-
+    useEffect(() => {
+        console.log({booksData}) 
+    }, [booksData])
     const queryClient = useQueryClient();
 
     const { mutate: uploadFile } = useMutation({

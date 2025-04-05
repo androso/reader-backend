@@ -221,7 +221,7 @@ export const processEpubFile = async (
         .filter(Boolean);
 
     const toc = await processToc(tocFile!, manifest, basePath, zipData);
-    console.log({ toc });
+    // console.log({ toc });
     return [
         {
             metadata,

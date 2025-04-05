@@ -48,9 +48,9 @@ export const useTextBlockNavigation = (
     const [hasInitialProgress, setHasInitialProgress] = useState(false);
 
     const saveProgress = async (textBlockId: string) => {
-        console.log("saveProgress", { hasInitialProgress });
+        // console.log("saveProgress", { hasInitialProgress });
         if (!textBlockId) {
-            console.log("no textblock id");
+            // console.log("no textblock id");
             return;
         }
         const bookId = window.location.pathname.split("/")[2];
@@ -163,10 +163,10 @@ export const useTextBlockNavigation = (
             scrollTimeout.current = setTimeout(() => {
                 const mostVisibleId = findMostVisibleBlock();
                 if (mostVisibleId) {
-                    console.log({ mostVisibleId });
+                    // console.log({ mostVisibleId });
                     saveProgress(mostVisibleId);
                     if (mostVisibleId !== activeTextBlockId) {
-                        console.log({ mostVisibleId, activeTextBlockId });
+                        // console.log({ mostVisibleId, activeTextBlockId });
                         setActiveTextBlockId(mostVisibleId);
                     }
                 }

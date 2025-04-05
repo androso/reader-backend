@@ -31,19 +31,19 @@ export const useReadingProgress = (
         if (!element || element.scrollHeight == element.clientHeight) return;
 
         const savedProgress = localStorage.getItem(`book-progress-${bookId}`);
-        console.log({ savedProgress });
+        // console.log({ savedProgress });
         if (savedProgress) {
             const progressValue = parseFloat(savedProgress);
             const scrollHeight = element.scrollHeight;
             const clientHeight = element.clientHeight;
             const contentHeight = scrollHeight - clientHeight;
             const scrollPosition = (progressValue / 100) * contentHeight;
-            console.log({
-                scrollHeight,
-                clientHeight,
-                contentHeight,
-                progressValue,
-            });
+            // console.log({
+            //     scrollHeight,
+            //     clientHeight,
+            //     contentHeight,
+            //     progressValue,
+            // });
             setTimeout(() => {
                 element.scrollTop = scrollPosition;
             }, 0);
