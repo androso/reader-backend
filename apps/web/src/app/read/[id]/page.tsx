@@ -32,11 +32,11 @@ const isChatSidebarSide = (value: string | null): value is ChatSidebarSide =>
 export default function Reader() {
     const router = useRouter();
     const params = useParams();
-    const bookFileKey = params.id as string | null;
+    const routeBookId = params.id as string | null;
     const { width } = useWindowSize();
     const isMobile = width < 768;
     const searchParams = useSearchParams();
-    const bookId = searchParams.get("bookId");
+    const bookId = searchParams.get("bookId") ?? routeBookId;
     const fileType = searchParams.get("type");
     const [highlightContext, setHighlightContext] =
         useState<HighlightContext | null>(null);
@@ -48,8 +48,8 @@ export default function Reader() {
     const [isResizingChatPane, setIsResizingChatPane] = useState(false);
     const readerShellRef = useRef<HTMLDivElement>(null);
     const isResizingChatPaneRef = useRef(false);
-    const isPdf = fileType === "pdf" || bookFileKey?.startsWith("pdf-");
-    const bookUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/books/${bookFileKey}`;
+    const isPdf = fileType === "pdf";
+    const bookUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/books/${bookId}`;
 
     const getShellSizing = useCallback(() => {
         const shell = readerShellRef.current;
@@ -198,9 +198,7 @@ export default function Reader() {
         }
     };
 
-    const handleResizePointerCancel = (
-        event: PointerEvent<HTMLDivElement>
-    ) => {
+    const handleResizePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
         isResizingChatPaneRef.current = false;
         setIsResizingChatPane(false);
 

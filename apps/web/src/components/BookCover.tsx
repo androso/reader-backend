@@ -23,7 +23,9 @@ const imageMimeTypes: Record<string, string> = {
 
 const getMimeType = (path: string) => {
     const extension = path.split(".").pop()?.toLowerCase();
-    return extension ? imageMimeTypes[extension] ?? "image/jpeg" : "image/jpeg";
+    return extension
+        ? (imageMimeTypes[extension] ?? "image/jpeg")
+        : "image/jpeg";
 };
 
 const getOpfPath = async (zip: JSZip) => {
@@ -114,7 +116,7 @@ export default function BookCover({
             try {
                 const token = localStorage.getItem("token");
                 const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/books/${book.fileKey}`,
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/books/${book.id}`,
                     {
                         headers: {
                             Authorization: `Bearer ${token}`,
@@ -170,7 +172,9 @@ export default function BookCover({
                     <span
                         className={`material-symbols-outlined relative z-10 text-on-surface-variant ${iconClassName}`}
                     >
-                        {book.fileType === "pdf" ? "picture_as_pdf" : "menu_book"}
+                        {book.fileType === "pdf"
+                            ? "picture_as_pdf"
+                            : "menu_book"}
                     </span>
                 </>
             )}

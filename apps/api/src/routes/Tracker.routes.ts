@@ -29,7 +29,7 @@ router.get(
             const [book] = await db
                 .select()
                 .from(Books)
-                .where(eq(Books.fileKey, book_id));
+                .where(eq(Books.id, book_id));
 
             if (!book) {
                 res.status(404).json({ message: "Book not found" });
@@ -71,7 +71,7 @@ router.post(
     async (req: Request, res: Response) => {
         try {
             const user_id = req.user.id;
-            const file_key = req.params.rid;
+            const book_id = req.params.rid;
             const { progress_block, progress_chapter } = req.body;
 
             if (!progress_block) {
@@ -79,11 +79,11 @@ router.post(
                 return;
             }
 
-            // Get book by file key
+            // Get book by id
             const [book] = await db
                 .select()
                 .from(Books)
-                .where(eq(Books.fileKey, file_key));
+                .where(eq(Books.id, book_id));
 
             if (!book) {
                 res.status(404).json({ message: "Book not found" });
