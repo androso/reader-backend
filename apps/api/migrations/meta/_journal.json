@@ -85,6 +85,13 @@
       "when": 1782613449197,
       "tag": "0011_faulty_otto_octavius",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783497600000,
+      "tag": "0012_rag_eval_chunk_metadata",
+      "breakpoints": true
     }
   ]
 }

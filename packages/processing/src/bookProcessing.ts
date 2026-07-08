@@ -19,15 +19,29 @@ export interface ProcessBookDependencies {
     vectorStore: VectorStoreProvider;
     searchIndexStore?: SearchIndexStore;
     createEpubCollectionName?: (fileBuffer: Buffer) => Promise<string>;
-    extractEpubChunks?: (fileBuffer: Buffer) => Promise<string[]>;
+    extractEpubChunks?: (fileBuffer: Buffer) => Promise<TextChunk[]>;
     createPdfCollectionName?: (fileBuffer: Buffer) => Promise<string>;
-    extractPdfChunks?: (fileBuffer: Buffer) => Promise<string[]>;
+    extractPdfChunks?: (fileBuffer: Buffer) => Promise<TextChunk[]>;
 }
+
+export interface TextChunkMetadata {
+    chapterTitle?: string;
+    chapterIndex?: number;
+    pageNumber?: number;
+    blockIndex?: number;
+}
+
+export interface ProcessedTextChunk {
+    content: string;
+    metadata?: TextChunkMetadata | null;
+}
+
+export type TextChunk = string | ProcessedTextChunk;
 
 export interface SearchIndexStore {
     replaceCollectionChunks(
         collectionName: string,
-        chunks: string[]
+        chunks: TextChunk[]
     ): Promise<void>;
 }
 
@@ -120,15 +134,19 @@ export const processBookForSearch = async (
         input.fileType === "pdf"
             ? await pdfChunks(fileBuffer)
             : await epubChunks(fileBuffer);
+    const documents = chunks.map((chunk) =>
+        typeof chunk === "string" ? chunk : chunk.content
+    );
+
     log.info("Text chunks extracted", {
         fileKey: input.fileKey,
         collectionName,
         chunkCount: chunks.length,
-        firstChunkLength: chunks[0]?.length,
-        lastChunkLength: chunks[chunks.length - 1]?.length,
+        firstChunkLength: documents[0]?.length,
+        lastChunkLength: documents[documents.length - 1]?.length,
     });
 
-    if (!chunks.length) {
+    if (!documents.length) {
         log.error("No valid text chunks extracted", {
             fileKey: input.fileKey,
             fileType: input.fileType,
@@ -153,7 +171,7 @@ export const processBookForSearch = async (
         collectionName,
         chunkCount: chunks.length,
     });
-    await dependencies.vectorStore.addDocuments(collectionName, chunks);
+    await dependencies.vectorStore.addDocuments(collectionName, documents);
 
     const duration = Date.now() - start;
     log.info("Book processing complete", {

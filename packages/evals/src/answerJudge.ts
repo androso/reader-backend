@@ -1,0 +1,151 @@
+import OpenAI from "openai";
+import type {
+    AnswerCaseResult,
+    AnswerSummary,
+    EvalThresholds,
+    JudgeScores,
+    RagEvalCase,
+} from "./types";
+import { getJudgeMaxCases, getJudgeModel } from "./config";
+
+const mean = (values: number[]) =>
+    values.length
+        ? values.reduce((total, value) => total + value, 0) / values.length
+        : 0;
+
+const clampScore = (value: unknown, fallback: number) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, Math.min(1, parsed));
+};
+
+const parseJudgeJson = (content: string): JudgeScores => {
+    const parsed = JSON.parse(content) as Partial<JudgeScores>;
+    return {
+        groundedness: clampScore(parsed.groundedness, 0),
+        citationCoverage: clampScore(parsed.citationCoverage, 0),
+        refusalCorrectness: clampScore(parsed.refusalCorrectness, 0),
+        hallucinationRate: clampScore(parsed.hallucinationRate, 1),
+        rationale:
+            typeof parsed.rationale === "string"
+                ? parsed.rationale
+                : "Judge did not provide a rationale.",
+    };
+};
+
+export const buildJudgePrompt = (testCase: RagEvalCase) => {
+    const sources = testCase.chunks
+        .map(
+            (chunk) =>
+                `[${chunk.id}] ${chunk.content}${
+                    chunk.metadata
+                        ? `\nmetadata=${JSON.stringify(chunk.metadata)}`
+                        : ""
+                }`
+        )
+        .join("\n\n");
+
+    return [
+        "Score this RAG answer using only the provided sources.",
+        "Return strict JSON with groundedness, citationCoverage, refusalCorrectness, hallucinationRate, and rationale.",
+        "All numeric fields must be 0 to 1. Higher groundedness, citationCoverage, and refusalCorrectness are better. Lower hallucinationRate is better.",
+        "",
+        `Question: ${testCase.question}`,
+        `Expected answer: ${testCase.expectedAnswer ?? ""}`,
+        `Answer: ${testCase.candidateAnswer ?? ""}`,
+        `No-answer expected: ${Boolean(testCase.noAnswerExpected)}`,
+        "",
+        "Sources:",
+        sources,
+    ].join("\n");
+};
+
+export interface JudgeClient {
+    score(testCase: RagEvalCase, model: string): Promise<JudgeScores>;
+}
+
+export class OpenAIJudgeClient implements JudgeClient {
+    private readonly client: OpenAI;
+
+    constructor(client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })) {
+        this.client = client;
+    }
+
+    async score(testCase: RagEvalCase, model: string): Promise<JudgeScores> {
+        const response = await this.client.chat.completions.create({
+            model,
+            messages: [
+                {
+                    role: "system",
+                    content:
+                        "You are a strict evaluator for retrieval-augmented answer quality.",
+                },
+                {
+                    role: "user",
+                    content: buildJudgePrompt(testCase),
+                },
+            ],
+            response_format: { type: "json_object" },
+            max_completion_tokens: 400,
+        });
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+            throw new Error("OpenAI judge returned an empty response");
+        }
+
+        return parseJudgeJson(content);
+    }
+}
+
+export const runAnswerEval = async (
+    cases: RagEvalCase[],
+    thresholds: EvalThresholds,
+    judge: JudgeClient = new OpenAIJudgeClient()
+) => {
+    const model = getJudgeModel();
+    const selectedCases = cases
+        .filter((testCase) => Boolean(testCase.candidateAnswer))
+        .slice(0, getJudgeMaxCases());
+    const caseResults: AnswerCaseResult[] = [];
+
+    for (const testCase of selectedCases) {
+        const scores = await judge.score(testCase, model);
+        const passed =
+            scores.groundedness >= thresholds.minGroundedness &&
+            scores.citationCoverage >= thresholds.minCitationCoverage &&
+            scores.hallucinationRate <= thresholds.maxHallucinationRate;
+        caseResults.push({
+            id: testCase.id,
+            question: testCase.question,
+            answer: testCase.candidateAnswer ?? "",
+            expectedAnswer: testCase.expectedAnswer,
+            scores,
+            passed,
+        });
+    }
+
+    const summary: AnswerSummary = {
+        caseCount: caseResults.length,
+        groundedness: mean(
+            caseResults.map((result) => result.scores.groundedness)
+        ),
+        citationCoverage: mean(
+            caseResults.map((result) => result.scores.citationCoverage)
+        ),
+        refusalCorrectness: mean(
+            caseResults.map((result) => result.scores.refusalCorrectness)
+        ),
+        hallucinationRate: mean(
+            caseResults.map((result) => result.scores.hallucinationRate)
+        ),
+        passed: false,
+    };
+    summary.passed =
+        caseResults.length > 0 &&
+        summary.groundedness >= thresholds.minGroundedness &&
+        summary.citationCoverage >= thresholds.minCitationCoverage &&
+        summary.hallucinationRate <= thresholds.maxHallucinationRate &&
+        caseResults.every((result) => result.passed);
+
+    return { summary, cases: caseResults };
+};

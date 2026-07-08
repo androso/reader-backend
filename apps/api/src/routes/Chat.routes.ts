@@ -124,6 +124,7 @@ const buildContextSources = (
         score: result.score,
         bestRank: result.bestRank,
         excerpt: result.content,
+        metadata: result.metadata,
     }));
 
 const buildRagMessages = async (
