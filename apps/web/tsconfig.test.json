@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "../../.tmp/apps-web-test",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "incremental": false,
+    "tsBuildInfoFile": "../../.tmp/apps-web-test.tsbuildinfo"
+  },
+  "include": ["src/lib/readerNavigationBounds.ts", "test/**/*.test.ts"]
+}
