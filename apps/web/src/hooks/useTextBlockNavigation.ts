@@ -3,7 +3,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 export const useTextBlockNavigation = (
     flatTextBlocks: TextBlock[],
-    contentRef: React.RefObject<HTMLDivElement | null>
+    contentRef: React.RefObject<HTMLDivElement | null>,
+    bookId: string | null
 ) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeTextBlockId, setActiveTextBlockId] = useState<string | null>(
@@ -48,11 +49,10 @@ export const useTextBlockNavigation = (
 
     const saveProgress = async (textBlockId: string) => {
         console.log("saveProgress", { hasInitialProgress });
-        if (!textBlockId) {
+        if (!textBlockId || !bookId) {
             console.log("no textblock id");
             return;
         }
-        const bookId = window.location.pathname.split("/")[2];
         try {
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/api/${bookId}/progress`,
@@ -77,8 +77,7 @@ export const useTextBlockNavigation = (
     };
 
     useEffect(() => {
-        if (!activeTextBlockId && flatTextBlocks.length > 0) {
-            const bookId = window.location.pathname.split("/")[2];
+        if (!activeTextBlockId && flatTextBlocks.length > 0 && bookId) {
             const initializeProgress = async () => {
                 try {
                     const storedId = await fetchProgress(bookId);
@@ -102,7 +101,7 @@ export const useTextBlockNavigation = (
             //this retrieves the progress from the server
             initializeProgress();
         }
-    }, [flatTextBlocks]);
+    }, [activeTextBlockId, bookId, flatTextBlocks]);
 
     const getVisibilityRatio = useCallback((element: HTMLElement) => {
         const rect = element.getBoundingClientRect();
