@@ -148,6 +148,7 @@ const streamAssistantResponse = async ({
                     res.write(`data: ${JSON.stringify({ content })}\n\n`);
                 }
             },
+            shouldContinue: () => !res.writableEnded,
         });
 
         openAiSpan.update({

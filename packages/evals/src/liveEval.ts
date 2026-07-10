@@ -38,7 +38,7 @@ type StoredChunk = {
 };
 
 const normalizeText = (value: string) =>
-    value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+    value.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 
 const resolveExpectedChunk = (testCase: RagEvalCase, chunks: StoredChunk[]) => {
     if (!testCase.expectedEvidenceText) return undefined;

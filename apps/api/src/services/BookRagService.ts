@@ -231,12 +231,14 @@ export const generateBookAnswer = async ({
     model,
     options,
     onContent,
+    shouldContinue = () => true,
     service = answerService,
 }: {
     messages: ChatMessage[];
     model: OpenAIChatModel;
     options?: GenerateStreamResponseOptions;
     onContent?: (content: string) => void;
+    shouldContinue?: () => boolean;
     service?: OpenAIService;
 }): Promise<GeneratedBookAnswer> => {
     let answer = "";
@@ -252,6 +254,7 @@ export const generateBookAnswer = async ({
         );
 
         for await (const chunk of textStream) {
+            if (!shouldContinue()) break;
             const choice = chunk.choices[0];
             if (choice?.finish_reason) finishReason = choice.finish_reason;
             if (choice?.finish_reason === "stop") streamCompleted = true;
