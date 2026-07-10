@@ -2,7 +2,6 @@ import { and, desc, eq } from "drizzle-orm";
 import { createLogger } from "@reader/providers";
 import { db } from "../db";
 import {
-    Books,
     Conversations,
     Messages,
     type MessageContextSource,
@@ -12,32 +11,30 @@ import {
     OPENAI_CHAT_MAX_TOKENS,
     OPENAI_CHAT_MODEL,
     OPENAI_CHAT_TEMPERATURE,
-    OpenAIService,
     type ChatMessage,
     type OpenAIChatModel,
     isOpenAIChatModel,
 } from "../services/OpenAIServices";
 import {
     addHighlightContextMessage,
-    buildBookContextSystemPrompt,
     buildRetrievalQuery,
     normalizeHighlightContext,
     type HighlightContext,
 } from "../services/HighlightContext";
 import { Router, Request, Response } from "express";
-import { hybridBookSearchService } from "../services/HybridBookSearchService";
 import {
-    getLangfuseCaptureConfig,
     getNoopTraceObservation,
     recordObservationError,
-    snippetForLangfuse,
     withBookChatTrace,
     type TraceObservation,
 } from "../observability/langfuse";
 import { isValidResourceType } from "../services/ConversationScope";
+import {
+    generateBookAnswer,
+    retrieveBookContext,
+} from "../services/BookRagService";
 
 const router = Router();
-const oaiService = new OpenAIService();
 const log = createLogger("chat");
 
 const findScopedConversation = async ({
@@ -73,246 +70,12 @@ const touchConversation = async (conversationId: string) => {
         .where(eq(Conversations.id, conversationId));
 };
 
-const getErrorDetail = (error: unknown) => {
-    if (!error || typeof error !== "object") return String(error);
-    const details = error as {
-        code?: unknown;
-        errno?: unknown;
-        message?: unknown;
-        name?: unknown;
-    };
-
-    return [details.name, details.code, details.errno, details.message]
-        .filter(Boolean)
-        .join(" ");
-};
-
-const isPrematureCloseError = (error: unknown) =>
-    getErrorDetail(error).includes("ERR_STREAM_PREMATURE_CLOSE") ||
-    getErrorDetail(error).includes("Premature close");
-
 const resolveChatModel = (model: unknown): OpenAIChatModel | null => {
     if (model === undefined || model === null || model === "") {
         return OPENAI_CHAT_MODEL;
     }
 
     return isOpenAIChatModel(model) ? model : null;
-};
-
-const summarizeRetrievedChunks = (
-    results: Awaited<ReturnType<typeof hybridBookSearchService.search>>
-) => {
-    const capture = getLangfuseCaptureConfig();
-    return results.map((result) => {
-        const snippet = snippetForLangfuse(result.content, capture);
-        return {
-            id: result.id,
-            chunkIndex: result.chunkIndex,
-            score: result.score,
-            bestRank: result.bestRank,
-            ...(snippet ? { snippet } : {}),
-        };
-    });
-};
-
-const buildContextSources = (
-    results: Awaited<ReturnType<typeof hybridBookSearchService.search>>
-): MessageContextSource[] =>
-    results.map((result) => ({
-        id: result.id,
-        chunkIndex: result.chunkIndex,
-        score: result.score,
-        bestRank: result.bestRank,
-        excerpt: result.content,
-        metadata: result.metadata,
-    }));
-
-const buildRagMessages = async (
-    resourceType: string,
-    resourceId: string,
-    userId: string,
-    messages: ChatMessage[],
-    query: string,
-    highlightContext: HighlightContext | null = null,
-    trace: TraceObservation = getNoopTraceObservation()
-): Promise<{
-    messages: ChatMessage[];
-    status: "ready" | "processing" | "failed";
-    sources: MessageContextSource[] | null;
-    error?: string | null;
-}> => {
-    log.debug("Building RAG messages", {
-        resourceType,
-        resourceId,
-        userId,
-        query: query.slice(0, 200),
-    });
-    if (resourceType !== "book") {
-        log.debug("Non-book resource, skipping retrieval", {
-            resourceType,
-            resourceId,
-        });
-        return {
-            messages: addHighlightContextMessage(messages, highlightContext),
-            status: "ready",
-            sources: null,
-        };
-    }
-
-    const loadBookSpan = trace.startObservation("load_book", {
-        input: {
-            resourceType,
-            resourceId,
-        },
-    });
-    let book: typeof Books.$inferSelect | undefined;
-    try {
-        [book] = await db
-            .select()
-            .from(Books)
-            .where(and(eq(Books.id, resourceId), eq(Books.userId, userId)));
-        loadBookSpan.update({
-            output: {
-                found: Boolean(book),
-                processingStatus: book?.processingStatus,
-                hasCollection: Boolean(book?.collectionName),
-                collectionName: book?.collectionName,
-                processingError: book?.processingError,
-            },
-        });
-    } catch (error) {
-        recordObservationError(loadBookSpan, error, "Book lookup failed");
-        throw error;
-    } finally {
-        loadBookSpan.end();
-    }
-
-    if (!book) {
-        log.warn("Book not found for RAG", { resourceId, userId });
-        return { messages, status: "ready", sources: null };
-    }
-
-    if (book.processingStatus === "failed") {
-        log.warn("Book processing failed, cannot retrieve context", {
-            resourceId,
-            userId,
-            error: book.processingError,
-        });
-        return {
-            messages,
-            status: "failed",
-            sources: null,
-            error: book.processingError,
-        };
-    }
-
-    if (!book.collectionName) {
-        log.info("Book has no Chroma collection yet", {
-            resourceId,
-            userId,
-            processingStatus: book.processingStatus,
-        });
-        return { messages, status: "processing", sources: null };
-    }
-
-    try {
-        log.info("Retrieving book context", {
-            resourceId,
-            userId,
-            collectionName: book.collectionName,
-        });
-        const start = Date.now();
-        const retrievalSpan = trace.startObservation("hybrid_retrieval", {
-            input: {
-                collectionName: book.collectionName,
-                queryLength: query.length,
-                lexicalLimit: 20,
-                vectorLimit: 20,
-                finalLimit: 5,
-            },
-        });
-        let searchResults: Awaited<
-            ReturnType<typeof hybridBookSearchService.search>
-        >;
-        try {
-            searchResults = await hybridBookSearchService.search(
-                book.collectionName,
-                query,
-                {},
-                {
-                    trace: retrievalSpan,
-                    capture: getLangfuseCaptureConfig(),
-                }
-            );
-        } catch (error) {
-            recordObservationError(
-                retrievalSpan,
-                error,
-                "Hybrid retrieval failed"
-            );
-            throw error;
-        } finally {
-            retrievalSpan.end();
-        }
-        const documents = searchResults.map((result) => result.content);
-        const duration = Date.now() - start;
-        log.info("Book context retrieved", {
-            resourceId,
-            collectionName: book.collectionName,
-            retrievedChunkCount: documents.length,
-            durationMs: duration,
-        });
-
-        if (!documents.length) {
-            log.warn("No relevant chunks retrieved", {
-                resourceId,
-                collectionName: book.collectionName,
-            });
-            return { messages, status: "ready", sources: null };
-        }
-
-        const sources = buildContextSources(searchResults);
-        const promptSpan = trace.startObservation("build_rag_prompt", {
-            input: {
-                retrievedChunkCount: documents.length,
-                baseMessageCount: messages.length,
-            },
-        });
-        const context = documents.join("\n\n---\n\n");
-        log.debug("Constructed context for LLM", {
-            resourceId,
-            contextLength: context.length,
-        });
-        promptSpan.update({
-            output: {
-                contextLength: context.length,
-                messageCount: messages.length + 1,
-                selectedChunks: summarizeRetrievedChunks(searchResults),
-            },
-        });
-        promptSpan.end();
-        return {
-            status: "ready",
-            sources,
-            messages: [
-                {
-                    role: "system" as const,
-                    content: buildBookContextSystemPrompt(
-                        context,
-                        highlightContext
-                    ),
-                },
-                ...messages,
-            ],
-        };
-    } catch (error) {
-        log.error("Error retrieving book context", {
-            resourceId,
-            collectionName: book.collectionName,
-            error: error instanceof Error ? error.message : String(error),
-        });
-        return { messages, status: "ready", sources: null };
-    }
 };
 
 const writeChatStatusAndEnd = (
@@ -356,17 +119,11 @@ const streamAssistantResponse = async ({
         },
     });
 
-    let accumulatedResponse = "";
-    let streamCompleted = false;
-    let finishReason: string | null = null;
-    let usage: unknown;
-
     try {
-        const textStream = await oaiService.generateStreamResponse(
+        const generated = await generateBookAnswer({
             messages,
-            undefined,
-            {
-                model,
+            model,
+            options: {
                 ...(traceOpenAI
                     ? {
                           langfuse: {
@@ -385,64 +142,41 @@ const streamAssistantResponse = async ({
                           },
                       }
                     : {}),
-            }
-        );
-
-        for await (const chunk of textStream) {
-            if (res.writableEnded) break;
-            const choice = chunk.choices[0];
-            if (choice?.finish_reason) {
-                finishReason = choice.finish_reason;
-            }
-            if (choice?.finish_reason === "stop") {
-                streamCompleted = true;
-            }
-            if ("usage" in chunk && chunk.usage) {
-                usage = chunk.usage;
-            }
-            const content = choice?.delta?.content || "";
-            accumulatedResponse += content;
-            res.write(`data: ${JSON.stringify({ content })}\n\n`);
-        }
-
-        openAiSpan.update({
-            output: {
-                outputLength: accumulatedResponse.length,
-                finishReason,
-                streamCompleted,
-                usage,
+            },
+            onContent(content) {
+                if (!res.writableEnded) {
+                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                }
             },
         });
+
+        openAiSpan.update({
+            ...(generated.transportWarning
+                ? {
+                      level: "WARNING",
+                      statusMessage:
+                          "Premature close after completed chat stream",
+                  }
+                : {}),
+            output: {
+                outputLength: generated.answer.length,
+                finishReason: generated.finishReason,
+                streamCompleted: generated.streamCompleted,
+                usage: generated.usage,
+                transportWarning: generated.transportWarning,
+            },
+        });
+        return generated.answer;
     } catch (streamError) {
-        if (!streamCompleted || !isPrematureCloseError(streamError)) {
-            recordObservationError(
-                openAiSpan,
-                streamError,
-                "OpenAI chat stream failed"
-            );
-            throw streamError;
-        }
-
-        openAiSpan.update({
-            level: "WARNING",
-            statusMessage: "Premature close after completed chat stream",
-            output: {
-                outputLength: accumulatedResponse.length,
-                finishReason,
-                streamCompleted,
-                transportWarning: getErrorDetail(streamError),
-                usage,
-            },
-        });
-        log.warn("Ignoring premature close after completed chat stream", {
-            conversationId,
-            error: getErrorDetail(streamError),
-        });
+        recordObservationError(
+            openAiSpan,
+            streamError,
+            "OpenAI chat stream failed"
+        );
+        throw streamError;
     } finally {
         openAiSpan.end();
     }
-
-    return accumulatedResponse;
 };
 
 const saveAssistantMessage = async (
@@ -512,15 +246,24 @@ const runChatCompletion = async ({
     trace: TraceObservation;
 }) => {
     const retrievalQuery = buildRetrievalQuery(query, highlightContext);
-    const ragResult = await buildRagMessages(
-        resourceType,
-        resourceId,
-        userId,
-        messages,
-        retrievalQuery,
-        highlightContext,
-        trace
-    );
+    const ragResult =
+        resourceType === "book"
+            ? await retrieveBookContext({
+                  bookId: resourceId,
+                  userId,
+                  messages,
+                  query: retrievalQuery,
+                  highlightContext,
+                  trace,
+              })
+            : {
+                  messages: addHighlightContextMessage(
+                      messages,
+                      highlightContext
+                  ),
+                  status: "ready" as const,
+                  sources: null,
+              };
     if (ragResult.status === "processing") {
         trace.setTraceIO({ output: { status: "processing" } });
         writeChatStatusAndEnd(res, {

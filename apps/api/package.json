@@ -3,6 +3,12 @@
     "version": "1.0.0",
     "private": true,
     "main": "build/index.js",
+    "exports": {
+        "./rag": {
+            "types": "./build/rag.d.ts",
+            "default": "./build/rag.js"
+        }
+    },
     "scripts": {
         "predev": "pnpm --filter @reader/jobs --filter @reader/processing --filter @reader/providers build",
         "prebuild": "pnpm --filter @reader/jobs --filter @reader/processing --filter @reader/providers build",
