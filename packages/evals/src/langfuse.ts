@@ -53,7 +53,7 @@ export const syncReportToLangfuse = async (
         await ignoreAlreadyExists(() =>
             client.api!.datasets!.create!({
                 name: datasetName,
-                description: "Reader synthetic RAG golden dataset",
+                description: "Reader live real-book RAG golden dataset",
                 metadata: {
                     source: "packages/evals",
                     runId: report.runId,
@@ -67,7 +67,9 @@ export const syncReportToLangfuse = async (
     }
 
     if (!client.dataset?.createItem) {
-        throw new Error("Installed Langfuse client does not support dataset items");
+        throw new Error(
+            "Installed Langfuse client does not support dataset items"
+        );
     }
 
     for (const testCase of cases) {
@@ -77,18 +79,18 @@ export const syncReportToLangfuse = async (
                 input: {
                     id: testCase.id,
                     question: testCase.question,
-                    chunks: testCase.chunks,
+                    fixtureSha256: report.fixture.sha256,
                 },
                 expectedOutput: {
                     answer: testCase.expectedAnswer,
-                    chunkIds: testCase.expectedChunkIds,
+                    evidenceText: testCase.expectedEvidenceText,
+                    chapterTitle: testCase.expectedChapterTitle,
                     noAnswerExpected: Boolean(testCase.noAnswerExpected),
                 },
                 metadata: {
                     source: "packages/evals",
                     runId: report.runId,
                 },
-                sourceTraceId: testCase.sourceTraceId,
             })
         );
     }
@@ -126,24 +128,20 @@ export const syncReportToLangfuse = async (
     };
 
     for (const result of report.answers?.cases ?? []) {
-        const testCase = cases.find((candidate) => candidate.id === result.id);
         await createScore(
             result.id,
             "rag_eval_groundedness",
-            result.scores.groundedness,
-            testCase?.sourceTraceId
+            result.scores.groundedness
         );
         await createScore(
             result.id,
             "rag_eval_citation_coverage",
-            result.scores.citationCoverage,
-            testCase?.sourceTraceId
+            result.scores.citationCoverage
         );
         await createScore(
             result.id,
             "rag_eval_hallucination_rate",
-            result.scores.hallucinationRate,
-            testCase?.sourceTraceId
+            result.scores.hallucinationRate
         );
     }
 

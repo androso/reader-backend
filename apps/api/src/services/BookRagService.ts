@@ -84,6 +84,7 @@ export const retrieveBookContext = async ({
     query,
     highlightContext = null,
     trace = getNoopTraceObservation(),
+    strict = false,
 }: {
     bookId: string;
     userId: string;
@@ -91,6 +92,7 @@ export const retrieveBookContext = async ({
     query: string;
     highlightContext?: HighlightContext | null;
     trace?: TraceObservation;
+    strict?: boolean;
 }): Promise<BookContextResult> => {
     const loadBookSpan = trace.startObservation("load_book", {
         input: { resourceType: "book", resourceId: bookId },
@@ -211,7 +213,8 @@ export const retrieveBookContext = async ({
             collectionName: book.collectionName,
             error: error instanceof Error ? error.message : String(error),
         });
-        throw error;
+        if (strict) throw error;
+        return { messages, status: "ready", sources: null };
     }
 };
 

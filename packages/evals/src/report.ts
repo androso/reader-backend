@@ -21,6 +21,12 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         "",
         `- Run: ${report.runId}`,
         `- Created: ${report.createdAt}`,
+        `- Fixture: ${report.fixture.title} by ${report.fixture.author}`,
+        `- Fixture SHA-256: ${report.fixture.sha256}`,
+        `- Source revision: ${report.fixture.sourceRevision}`,
+        `- Collection: ${report.ingestion.collectionName}`,
+        `- Extracted/stored chunks: ${report.ingestion.extractedChunkCount}/${report.ingestion.storedChunkCount}`,
+        `- Answer model: ${report.answerModel}`,
         `- Judge model: ${report.judgeModel}`,
     ];
 
@@ -35,10 +41,11 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
             `- Recall@k: ${percent(summary.recallAtK)}`,
             `- MRR: ${summary.mrr.toFixed(3)}`,
             `- Source hit rate: ${percent(summary.sourceHitRate)}`,
-            `- No-answer accuracy: ${percent(summary.noAnswerAccuracy)}`,
+            `- Vector source hit rate: ${percent(summary.vectorSourceHitRate)}`,
+            `- Vector MRR: ${summary.vectorMrr.toFixed(3)}`,
+            `- Vector/database ID alignment: ${percent(summary.vectorIdAlignmentRate)}`,
             `- Chunk/window hit rate: ${percent(summary.chunkWindowHitRate)}`,
-            `- Chapter accuracy: ${percent(summary.chapterAccuracy)}`,
-            `- Page accuracy: ${percent(summary.pageAccuracy)}`
+            `- Chapter accuracy: ${percent(summary.chapterAccuracy)}`
         );
     }
 

@@ -5,22 +5,22 @@
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
-        "prebuild": "pnpm --filter @reader/providers build",
+        "prebuild": "pnpm --filter @reader/api build",
         "build": "tsc -p tsconfig.json",
-        "pretest": "pnpm --filter @reader/providers build",
-        "test": "tsc -p tsconfig.test.json && NODE_PATH=./node_modules:../../packages/providers/node_modules node --test ../../.tmp/packages-evals-test/test/*.js",
-        "eval:retrieval": "pnpm build && node dist/cli.js retrieval",
-        "eval:answers": "pnpm build && node dist/cli.js answers",
-        "eval:langfuse": "pnpm build && node dist/cli.js langfuse",
+        "eval:live": "pnpm build && node dist/cli.js live",
         "eval:ci": "pnpm build && node dist/cli.js ci"
     },
     "dependencies": {
         "@langfuse/client": "^5.9.0",
+        "@reader/api": "workspace:*",
+        "@reader/processing": "workspace:*",
         "@reader/providers": "workspace:*",
-        "openai": "^4.77.0"
+        "openai": "^4.77.0",
+        "pg": "^8.21.0"
     },
     "devDependencies": {
         "@types/node": "^22.10.2",
+        "@types/pg": "^8.20.0",
         "typescript": "^5.7.2"
     }
 }

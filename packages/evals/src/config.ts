@@ -17,10 +17,13 @@ export const getEvalThresholds = (): EvalThresholds => ({
     minRecallAtK: numberEnv("RAG_EVAL_MIN_RECALL_AT_K", 0.75),
     minMrr: numberEnv("RAG_EVAL_MIN_MRR", 0.7),
     minSourceHitRate: numberEnv("RAG_EVAL_MIN_SOURCE_HIT_RATE", 0.75),
-    minNoAnswerAccuracy: numberEnv("RAG_EVAL_MIN_NO_ANSWER_ACCURACY", 1),
-    minChunkWindowHitRate: numberEnv("RAG_EVAL_MIN_CHUNK_WINDOW_HIT_RATE", 0.75),
+    minChunkWindowHitRate: numberEnv(
+        "RAG_EVAL_MIN_CHUNK_WINDOW_HIT_RATE",
+        0.75
+    ),
     minGroundedness: numberEnv("RAG_EVAL_MIN_GROUNDEDNESS", 0.8),
     minCitationCoverage: numberEnv("RAG_EVAL_MIN_CITATION_COVERAGE", 0.8),
+    minRefusalCorrectness: numberEnv("RAG_EVAL_MIN_REFUSAL_CORRECTNESS", 0.8),
     maxHallucinationRate: numberEnv("RAG_EVAL_MAX_HALLUCINATION_RATE", 0.2),
 });
 

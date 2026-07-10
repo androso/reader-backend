@@ -1,43 +1,37 @@
-import type {
-    BookSearchChunk,
-    BookSearchChunkMetadata,
-    RankedSearchResult,
-} from "@reader/providers";
+import type { MessageContextSource } from "@reader/api/rag";
 
 export interface RagEvalCase {
     id: string;
     question: string;
-    collectionName: string;
-    chunks: BookSearchChunk[];
-    vectorResults?: Array<{
-        id: string;
-        content: string;
-        rank: number;
-        distance?: number;
-    }>;
-    expectedChunkIds: string[];
-    expectedCitationChunkIds?: string[];
-    expectedAnswer?: string;
-    candidateAnswer?: string;
-    noAnswerExpected?: boolean;
+    expectedAnswer: string;
+    expectedEvidenceText?: string;
     expectedChapterTitle?: string;
-    expectedPageNumber?: number;
-    sourceTraceId?: string;
+    noAnswerExpected?: boolean;
+}
+
+export interface PreparedEvalCase extends RagEvalCase {
+    expectedChunkId?: string;
+    candidateAnswer: string;
+    sources: MessageContextSource[];
+    vectorResultIds: string[];
+    vectorIdsAligned: boolean;
 }
 
 export interface RetrievalCaseResult {
     id: string;
     question: string;
-    results: RankedSearchResult[];
-    expectedChunkIds: string[];
+    results: MessageContextSource[];
+    expectedChunkId?: string;
+    expectedChapterTitle?: string;
     noAnswerExpected: boolean;
     recallAtK: number;
     reciprocalRank: number;
     sourceHit: boolean;
-    noAnswerCorrect: boolean;
+    vectorSourceHit: boolean;
+    vectorReciprocalRank: number;
+    vectorIdsAligned: boolean;
     chunkWindowHit: boolean;
     chapterCorrect: boolean | null;
-    pageCorrect: boolean | null;
     passed: boolean;
 }
 
@@ -53,7 +47,7 @@ export interface AnswerCaseResult {
     id: string;
     question: string;
     answer: string;
-    expectedAnswer?: string;
+    expectedAnswer: string;
     scores: JudgeScores;
     passed: boolean;
 }
@@ -62,10 +56,10 @@ export interface EvalThresholds {
     minRecallAtK: number;
     minMrr: number;
     minSourceHitRate: number;
-    minNoAnswerAccuracy: number;
     minChunkWindowHitRate: number;
     minGroundedness: number;
     minCitationCoverage: number;
+    minRefusalCorrectness: number;
     maxHallucinationRate: number;
 }
 
@@ -74,10 +68,11 @@ export interface RetrievalSummary {
     recallAtK: number;
     mrr: number;
     sourceHitRate: number;
-    noAnswerAccuracy: number;
+    vectorSourceHitRate: number;
+    vectorMrr: number;
+    vectorIdAlignmentRate: number;
     chunkWindowHitRate: number;
     chapterAccuracy: number | null;
-    pageAccuracy: number | null;
     passed: boolean;
 }
 
@@ -90,19 +85,35 @@ export interface AnswerSummary {
     passed: boolean;
 }
 
+export interface RagEvalFixture {
+    title: string;
+    author: string;
+    sourceUrl: string;
+    sourceRevision: string;
+    sha256: string;
+    sizeBytes: number;
+}
+
+export interface RagEvalIngestion {
+    collectionName: string;
+    extractedChunkCount: number;
+    storedChunkCount: number;
+}
+
 export interface RagEvalReport {
     runId: string;
     createdAt: string;
+    answerModel: string;
     judgeModel: string;
     thresholds: EvalThresholds;
-    retrieval?: {
+    fixture: RagEvalFixture;
+    ingestion: RagEvalIngestion;
+    retrieval: {
         summary: RetrievalSummary;
         cases: RetrievalCaseResult[];
     };
-    answers?: {
+    answers: {
         summary: AnswerSummary;
         cases: AnswerCaseResult[];
     };
 }
-
-export type ChunkMetadata = BookSearchChunkMetadata;
