@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { createLogger } from "@reader/providers";
 import { db } from "../db";
 import {
@@ -26,6 +26,12 @@ import {
 } from "../services/HighlightContext";
 import { Router, Request, Response } from "express";
 import { hybridBookSearchService } from "../services/HybridBookSearchService";
+import {
+    appendSubmittedUserMessage,
+    buildUserMessageInsert,
+    getSubmittedUserMessage,
+    toChatHistory,
+} from "../services/ChatServerHistory";
 import {
     getLangfuseCaptureConfig,
     getNoopTraceObservation,
@@ -71,6 +77,21 @@ const touchConversation = async (conversationId: string) => {
         .update(Conversations)
         .set({ lastMessageAt: new Date() })
         .where(eq(Conversations.id, conversationId));
+};
+
+const loadConversationHistory = async (
+    conversationId: string
+): Promise<ChatMessage[]> => {
+    const rows = await db
+        .select({
+            role: Messages.role,
+            content: Messages.content,
+        })
+        .from(Messages)
+        .where(eq(Messages.conversationId, conversationId))
+        .orderBy(asc(Messages.createdAt));
+
+    return toChatHistory(rows);
 };
 
 const getErrorDetail = (error: unknown) => {
@@ -627,10 +648,11 @@ router.post(
         }
 
         try {
-            const { message, messages, model } = req.body;
-            if (!message || !Array.isArray(messages)) {
+            const { model } = req.body;
+            const message = getSubmittedUserMessage(req.body);
+            if (!message) {
                 res.status(400).send({
-                    error: "Message and messages array are required",
+                    error: "Message is required",
                 });
                 return;
             }
@@ -663,11 +685,10 @@ router.post(
                 `data: ${JSON.stringify({ type: "conversation_id", conversationId: conversation.id })}\n\n`
             );
 
-            await db.insert(Messages).values({
-                conversationId: conversation.id,
-                role: "user",
-                content: message,
-            });
+            const messages = appendSubmittedUserMessage([], message);
+            await db
+                .insert(Messages)
+                .values(buildUserMessageInsert(conversation.id, message));
             await touchConversation(conversation.id);
 
             await runBookChatTraceIfNeeded(
@@ -767,10 +788,11 @@ router.post(
                 return;
             }
 
-            const { messages, model } = req.body;
-            if (!Array.isArray(messages) || messages.length === 0) {
+            const { model } = req.body;
+            const message = getSubmittedUserMessage(req.body);
+            if (!message) {
                 res.status(400).send({
-                    error: "Messages array is required",
+                    error: "Message is required",
                 });
                 return;
             }
@@ -803,12 +825,13 @@ router.post(
             res.setHeader("Cache-Control", "no-cache");
             res.setHeader("Connection", "keep-alive");
 
-            const lastMessage = messages[messages.length - 1];
-            await db.insert(Messages).values({
-                conversationId,
-                role: lastMessage.role,
-                content: lastMessage.content,
-            });
+            const messages = appendSubmittedUserMessage(
+                await loadConversationHistory(conversationId),
+                message
+            );
+            await db
+                .insert(Messages)
+                .values(buildUserMessageInsert(conversationId, message));
             await touchConversation(conversationId);
 
             await runBookChatTraceIfNeeded(
@@ -819,7 +842,7 @@ router.post(
                     userId: req.user.id,
                     routeName: "append_message",
                     messageCount: messages.length,
-                    queryLength: lastMessage.content.length,
+                    queryLength: message.length,
                     hasHighlightContext: Boolean(highlightContext),
                 },
                 (trace) =>
@@ -829,7 +852,7 @@ router.post(
                         conversationId,
                         userId: req.user.id,
                         messages,
-                        query: lastMessage.content,
+                        query: message,
                         res,
                         routeName: "append_message",
                         model: chatModel,
