@@ -4,6 +4,7 @@ import multer from "multer";
 import {
     createLogger,
     deleteFile,
+    getFile,
     uploadFile,
     vectorStore,
 } from "@reader/providers";
@@ -16,17 +17,8 @@ import { PDFUtils } from "../utils/pdfUtils";
 import { bookSearchChunkStore } from "../services/BookSearchChunkStore";
 import { hybridBookSearchService } from "../services/HybridBookSearchService";
 import { handleBookProcessingEnqueue } from "../services/BookProcessingEnqueueService";
-import {
-    createDbBookFileRepository,
-    createObjectBookFileStorage,
-    getOwnedBookFile,
-} from "../services/BookFileAccessService";
 
 const log = createLogger("books");
-const bookFileAccessDependencies = {
-    repository: createDbBookFileRepository(),
-    storage: createObjectBookFileStorage(),
-};
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -415,22 +407,18 @@ router.get("/:id/status", authenticate, async (req, res) => {
  */
 
 router.get("/:id", authenticate, async (req, res) => {
-    const bookId = req.params.id;
+    const id = req.params.id;
 
     try {
-        const result = await getOwnedBookFile(
-            bookId,
-            req.user.id,
-            bookFileAccessDependencies
-        );
-
-        if (result.status === "not_found") {
-            res.status(404).json({ error: "Book was not found" });
-            return;
+        const fileBuffer = await getFile(id);
+        if (id.startsWith("pdf-")) {
+            res.type("application/pdf");
+        } else if (id.startsWith("epub-")) {
+            res.type("application/epub+zip");
+        } else {
+            res.type("application/octet-stream");
         }
-
-        res.type(result.contentType);
-        res.send(result.fileBuffer);
+        res.send(fileBuffer);
     } catch (er) {
         console.error("Error fetching file", er);
         res.status(500).json({ error: "Internal server error" });

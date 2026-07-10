@@ -20,7 +20,20 @@ function formatRelativeDate(date: Date | string): string {
     if (diffDays < 14) return "Added last week";
     if (diffDays < 30) return `Added ${Math.floor(diffDays / 7)} weeks ago`;
     if (diffDays < 60) return "Added last month";
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ];
     return `Added ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
@@ -75,7 +88,10 @@ function Home() {
             const token = localStorage.getItem("token");
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/api/books/${itemId}`,
-                { headers: { Authorization: `Bearer ${token}` }, method: "DELETE" }
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    method: "DELETE",
+                }
             );
             if (!response.ok) throw new Error("Failed deleting file");
             return response;
@@ -93,7 +109,11 @@ function Home() {
         const file = e.target.files?.[0];
         if (!file) return;
         const validExtensions = [".epub", ".pdf"];
-        if (!validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+        if (
+            !validExtensions.some((ext) =>
+                file.name.toLowerCase().endsWith(ext)
+            )
+        ) {
             toast.error("Please upload an EPUB or PDF file");
             return;
         }
@@ -104,7 +124,8 @@ function Home() {
 
     const allBooks: Book[] = booksData?.books ?? [];
     const sortedBooks = [...allBooks].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     const recentBook = sortedBooks[0] ?? null;
     const filteredBooks =
@@ -113,7 +134,9 @@ function Home() {
             : sortedBooks.filter((b) => b.fileType === filter);
 
     const handleBookClick = (book: Book) => {
-        router.push(`/read/${book.id}?type=${book.fileType ?? ""}`);
+        router.push(
+            `/read/${book.fileKey}?bookId=${book.id}&type=${book.fileType ?? ""}`
+        );
     };
 
     const navLinkClass = (active: boolean) =>
@@ -152,7 +175,9 @@ function Home() {
                             >
                                 <span
                                     className="material-symbols-outlined"
-                                    style={{ fontVariationSettings: "'FILL' 1" }}
+                                    style={{
+                                        fontVariationSettings: "'FILL' 1",
+                                    }}
                                 >
                                     library_books
                                 </span>
@@ -188,7 +213,9 @@ function Home() {
                 {/* Header */}
                 <header className="px-10 py-8 flex items-center justify-between sticky top-0 z-10 bg-background/80 backdrop-blur-md">
                     <div>
-                        <h2 className="text-3xl font-bold text-on-background">Library</h2>
+                        <h2 className="text-3xl font-bold text-on-background">
+                            Library
+                        </h2>
                         <p className="text-sm font-semibold text-on-surface-variant mt-1">
                             Your academic repository.
                         </p>
@@ -206,7 +233,9 @@ function Home() {
                             disabled={isUploading}
                             className="glass-panel text-sm font-semibold text-on-surface px-6 py-2.5 rounded-full flex items-center gap-2 hover:bg-surface-container transition-colors disabled:opacity-60"
                         >
-                            <span className="material-symbols-outlined text-lg">upload</span>
+                            <span className="material-symbols-outlined text-lg">
+                                upload
+                            </span>
                             {isUploading ? "Uploading..." : "Upload File"}
                         </button>
                         <button
@@ -259,7 +288,9 @@ function Home() {
                                                 >
                                                     calendar_today
                                                 </span>
-                                                {formatRelativeDate(recentBook.createdAt)}
+                                                {formatRelativeDate(
+                                                    recentBook.createdAt
+                                                )}
                                             </span>
                                         </div>
                                     </div>
@@ -278,8 +309,8 @@ function Home() {
                                 {filter === "all"
                                     ? "All Documents"
                                     : filter === "epub"
-                                    ? "Epubs"
-                                    : "PDFs"}
+                                      ? "Epubs"
+                                      : "PDFs"}
                             </h3>
                             <div className="flex items-center gap-2">
                                 <button
@@ -327,12 +358,15 @@ function Home() {
                                                 <div className="flex justify-between items-start mb-3 gap-2">
                                                     <span
                                                         className={`px-2.5 py-1 rounded text-xs font-semibold tracking-wide uppercase ${
-                                                            book.fileType === "epub"
+                                                            book.fileType ===
+                                                            "epub"
                                                                 ? "bg-primary/10 text-primary"
                                                                 : "bg-secondary/10 text-secondary"
                                                         }`}
                                                     >
-                                                        .{book.fileType ?? "epub"}
+                                                        .
+                                                        {book.fileType ??
+                                                            "epub"}
                                                     </span>
                                                     <button
                                                         className="text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity hover:text-error"
@@ -359,7 +393,9 @@ function Home() {
                                                     calendar_today
                                                 </span>
                                                 <span className="text-xs font-semibold">
-                                                    {formatRelativeDate(book.createdAt)}
+                                                    {formatRelativeDate(
+                                                        book.createdAt
+                                                    )}
                                                 </span>
                                             </div>
                                         </div>
