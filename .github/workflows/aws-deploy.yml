@@ -1,85 +1,150 @@
 name: Deploy Reader Platform to AWS
 
 on:
-  pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+    pull_request:
+        branches:
+            - main
+    push:
+        branches:
+            - main
+    workflow_dispatch:
 
 permissions:
-  contents: read
-  id-token: write
+    contents: read
+    id-token: write
 
 env:
-  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  PROJECT_NAME: reader
-  IMAGE_TAG: ${{ github.sha }}
-  NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+    AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+    PROJECT_NAME: reader
+    IMAGE_TAG: ${{ github.sha }}
+    NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
 
 jobs:
-  quality:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    quality:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.11.1
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.11.1
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+            - run: pnpm install --frozen-lockfile
 
-      - run: pnpm test
+            - run: pnpm test
 
-      - run: pnpm eval:ci
+            - run: pnpm build
+
+    rag-quality:
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        runs-on: ubuntu-latest
+        services:
+            postgres:
+                image: postgres:16
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: reader_eval
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd "pg_isready -U postgres -d reader_eval"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+            chroma:
+                image: chromadb/chroma:1.0.15
+                ports:
+                    - 8000:8000
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-          LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
-          RAG_EVAL_JUDGE_MODEL: ${{ vars.RAG_EVAL_JUDGE_MODEL || 'gpt-5.4-mini-2026-03-17' }}
-          RAG_EVAL_JUDGE_MAX_CASES: ${{ vars.RAG_EVAL_JUDGE_MAX_CASES || '25' }}
+            DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reader_eval
+            CHROMA_URL: http://localhost:8000
+            STORAGE_DRIVER: local
+            LOCAL_STORAGE_DIR: .local-storage
+            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+            OPENAI_EMBEDDING_MODEL: ${{ vars.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002' }}
+            LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+            LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+            LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
+            RAG_EVAL_JUDGE_MODEL: ${{ vars.RAG_EVAL_JUDGE_MODEL || 'gpt-5.4-mini-2026-03-17' }}
+            RAG_EVAL_JUDGE_MAX_CASES: ${{ vars.RAG_EVAL_JUDGE_MAX_CASES || '25' }}
+        steps:
+            - uses: actions/checkout@v4
 
-      - run: pnpm build
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.11.1
 
-  deploy:
-    needs: quality
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.11.1
+            - run: pnpm install --frozen-lockfile
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+            - name: Wait for Chroma
+              run: |
+                  for attempt in {1..30}; do
+                    if curl --fail --silent http://localhost:8000/api/v2/heartbeat; then
+                      exit 0
+                    fi
+                    sleep 2
+                  done
+                  echo "Chroma did not become ready" >&2
+                  exit 1
 
-      - run: pnpm install --frozen-lockfile
+            - name: Run database migrations
+              run: pnpm db:migrate
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+            - name: Run live Reader RAG quality gate
+              run: pnpm eval:ci
 
-      - name: Load deployment values from CloudFormation
-        run: ./scripts/export-cloudformation-env.sh >> "$GITHUB_ENV"
+            - name: Upload RAG eval report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: reader-rag-eval-report
+                  path: packages/evals/reports/latest.*
+                  if-no-files-found: ignore
 
-      - name: Build and push images
-        run: ./scripts/deploy-images.sh
+    deploy:
+        needs:
+            - quality
+            - rag-quality
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Run database migrations in ECS
-        run: ./scripts/run-ecs-migrations.sh
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.11.1
 
-      - name: Redeploy ECS services
-        run: ./scripts/force-deploy-ecs-services.sh
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+
+            - run: pnpm install --frozen-lockfile
+
+            - uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Load deployment values from CloudFormation
+              run: ./scripts/export-cloudformation-env.sh >> "$GITHUB_ENV"
+
+            - name: Build and push images
+              run: ./scripts/deploy-images.sh
+
+            - name: Run database migrations in ECS
+              run: ./scripts/run-ecs-migrations.sh
+
+            - name: Redeploy ECS services
+              run: ./scripts/force-deploy-ecs-services.sh
