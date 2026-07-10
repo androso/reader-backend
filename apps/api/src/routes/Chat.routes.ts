@@ -42,6 +42,7 @@ import {
 } from "../observability/langfuse";
 import {
     authorizeChatResource,
+    createAuthorizedChatConversation,
     isSupportedChatResourceType,
 } from "../services/ChatResourceAuthorization";
 
@@ -60,6 +61,29 @@ const chatResourceRepository = {
             .where(eq(Books.id, resourceId));
 
         return book ?? null;
+    },
+    createConversation: async ({
+        userId,
+        title,
+        resourceType,
+        resourceId,
+    }: {
+        userId: string;
+        title: string;
+        resourceType: "book";
+        resourceId: string;
+    }) => {
+        const [conversation] = await db
+            .insert(Conversations)
+            .values({
+                userId,
+                title,
+                resourceType,
+                resourceId,
+            })
+            .returning({ id: Conversations.id });
+
+        return conversation;
     },
 };
 
@@ -704,27 +728,23 @@ router.post(
                 });
                 return;
             }
-            const authorization = await authorizeRequestResource({
+            const creation = await createAuthorizedChatConversation({
                 resourceType: req.params.resourceType,
                 resourceId: req.params.id,
                 userId: req.user.id,
-                res,
+                title: message.substring(0, 50) + "...",
+                repository: chatResourceRepository,
             });
-            if (!authorization) return;
+            if (!creation.ok) {
+                res.status(creation.status).send({ error: creation.error });
+                return;
+            }
 
             res.setHeader("Content-Type", "text/event-stream");
             res.setHeader("Cache-Control", "no-cache");
             res.setHeader("Connection", "keep-alive");
 
-            const [conversation] = await db
-                .insert(Conversations)
-                .values({
-                    userId: req.user.id,
-                    title: message.substring(0, 50) + "...",
-                    resourceType: authorization.resourceType,
-                    resourceId: req.params.id,
-                })
-                .returning();
+            const conversation = creation.conversation;
 
             res.write(
                 `data: ${JSON.stringify({ type: "conversation_id", conversationId: conversation.id })}\n\n`

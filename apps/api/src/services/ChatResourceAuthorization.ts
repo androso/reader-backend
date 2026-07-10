@@ -6,6 +6,16 @@ export type ChatResourceAuthorizationRepository = {
     ) => Promise<{ id: string; userId: string } | null>;
 };
 
+export type CreateChatConversationRepository =
+    ChatResourceAuthorizationRepository & {
+        createConversation: (input: {
+            userId: string;
+            title: string;
+            resourceType: SupportedChatResourceType;
+            resourceId: string;
+        }) => Promise<{ id: string }>;
+    };
+
 export type ChatResourceAuthorizationFailure = {
     ok: false;
     status: 400 | 403 | 404;
@@ -14,6 +24,14 @@ export type ChatResourceAuthorizationFailure = {
 
 export type ChatResourceAuthorizationResult =
     | { ok: true; resourceType: SupportedChatResourceType }
+    | ChatResourceAuthorizationFailure;
+
+export type CreateAuthorizedChatConversationResult =
+    | {
+          ok: true;
+          resourceType: SupportedChatResourceType;
+          conversation: { id: string };
+      }
     | ChatResourceAuthorizationFailure;
 
 export const isSupportedChatResourceType = (
@@ -57,4 +75,39 @@ export const authorizeChatResource = async ({
     }
 
     return { ok: true, resourceType };
+};
+
+export const createAuthorizedChatConversation = async ({
+    resourceType,
+    resourceId,
+    userId,
+    title,
+    repository,
+}: {
+    resourceType: string;
+    resourceId: string;
+    userId: string;
+    title: string;
+    repository: CreateChatConversationRepository;
+}): Promise<CreateAuthorizedChatConversationResult> => {
+    const authorization = await authorizeChatResource({
+        resourceType,
+        resourceId,
+        userId,
+        repository,
+    });
+    if (!authorization.ok) return authorization;
+
+    const conversation = await repository.createConversation({
+        userId,
+        title,
+        resourceType: authorization.resourceType,
+        resourceId,
+    });
+
+    return {
+        ok: true,
+        resourceType: authorization.resourceType,
+        conversation,
+    };
 };
