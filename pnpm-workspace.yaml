@@ -1,13 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
-allowBuilds:
-  '@scarf/scarf': set this to true or false
-  core-js: set this to true or false
-  es5-ext: set this to true or false
-  esbuild: set this to true or false
-  msgpackr-extract: set this to true or false
-  protobufjs: set this to true or false
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
-  zipfile: set this to true or false
+onlyBuiltDependencies:
+  - esbuild
+  - protobufjs
+  - sharp
+  - unrs-resolver
+  - zipfile
