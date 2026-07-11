@@ -1,5 +1,10 @@
+import crypto from "node:crypto";
 import type { RagEvalCase, RagEvalReport } from "./types";
 import { getLangfuseDatasetName } from "./config";
+
+type LangfuseIngestionResponse = {
+    errors?: Array<{ id: string; message?: string }>;
+};
 
 type LangfuseClientLike = {
     api?: {
@@ -9,12 +14,22 @@ type LangfuseClientLike = {
         scores?: {
             create?: (input: unknown) => Promise<unknown>;
         };
+        ingestion?: {
+            batch?: (input: unknown) => Promise<LangfuseIngestionResponse>;
+        };
     };
     dataset?: {
         create?: (name: string) => Promise<unknown>;
         createItem?: (input: unknown) => Promise<unknown>;
     };
 };
+
+const createTraceId = (runId: string, caseId: string) =>
+    crypto
+        .createHash("sha256")
+        .update(`${runId}:${caseId}`)
+        .digest("hex")
+        .slice(0, 32);
 
 export const createLangfuseClient = async (): Promise<LangfuseClientLike> => {
     const module = await import("@langfuse/client");
@@ -95,14 +110,49 @@ export const syncReportToLangfuse = async (
         );
     }
 
-    if (!client.api?.scores?.create) {
+    if (!client.api?.scores?.create || !client.api.ingestion?.batch) {
         return {
             datasetName,
             syncedItems: cases.length,
             syncedScores: 0,
             warning:
-                "Installed Langfuse client does not expose score creation; dataset items were synced.",
+                "Installed Langfuse client does not expose trace ingestion and score creation; dataset items were synced.",
         };
+    }
+
+    const answerCases = report.answers?.cases ?? [];
+    const traceIds = new Map(
+        answerCases.map((result) => [
+            result.id,
+            createTraceId(report.runId, result.id),
+        ])
+    );
+    const ingestion = await client.api.ingestion.batch({
+        batch: answerCases.map((result) => ({
+            type: "trace-create",
+            id: crypto.randomUUID(),
+            timestamp: report.createdAt,
+            body: {
+                id: traceIds.get(result.id),
+                timestamp: report.createdAt,
+                name: "reader-rag-eval",
+                input: result.question,
+                output: result.answer,
+                metadata: {
+                    runId: report.runId,
+                    caseId: result.id,
+                    source: "packages/evals",
+                },
+                tags: ["reader-rag-eval"],
+            },
+        })),
+    });
+    if (ingestion.errors?.length) {
+        throw new Error(
+            `Langfuse trace ingestion failed: ${ingestion.errors
+                .map((error) => error.message || error.id)
+                .join(", ")}`
+        );
     }
 
     let syncedScores = 0;
@@ -127,21 +177,25 @@ export const syncReportToLangfuse = async (
         syncedScores += 1;
     };
 
-    for (const result of report.answers?.cases ?? []) {
+    for (const result of answerCases) {
+        const traceId = traceIds.get(result.id);
         await createScore(
             result.id,
             "rag_eval_groundedness",
-            result.scores.groundedness
+            result.scores.groundedness,
+            traceId
         );
         await createScore(
             result.id,
             "rag_eval_citation_coverage",
-            result.scores.citationCoverage
+            result.scores.citationCoverage,
+            traceId
         );
         await createScore(
             result.id,
             "rag_eval_hallucination_rate",
-            result.scores.hallucinationRate
+            result.scores.hallucinationRate,
+            traceId
         );
     }
 
