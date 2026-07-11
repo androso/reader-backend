@@ -125,13 +125,12 @@ export const runAnswerEval = async (
 
     for (const testCase of selectedCases) {
         const scores = await judge.score(testCase, model);
-        const passed =
-            scores.groundedness >= thresholds.minGroundedness &&
-            scores.citationCoverage >= thresholds.minCitationCoverage &&
-            (!testCase.noAnswerExpected ||
-                scores.refusalCorrectness >=
-                    thresholds.minRefusalCorrectness) &&
-            scores.hallucinationRate <= thresholds.maxHallucinationRate;
+        const passed = testCase.noAnswerExpected
+            ? scores.refusalCorrectness >= thresholds.minRefusalCorrectness &&
+              scores.hallucinationRate <= thresholds.maxHallucinationRate
+            : scores.groundedness >= thresholds.minGroundedness &&
+              scores.citationCoverage >= thresholds.minCitationCoverage &&
+              scores.hallucinationRate <= thresholds.maxHallucinationRate;
         caseResults.push({
             id: testCase.id,
             question: testCase.question,
@@ -147,14 +146,21 @@ export const runAnswerEval = async (
             (testCase) => testCase.id === result.id && testCase.noAnswerExpected
         )
     );
+    const answerableCases = caseResults.filter(
+        (result) => !refusalCases.some((refusal) => refusal.id === result.id)
+    );
     const summary: AnswerSummary = {
         caseCount: caseResults.length,
-        groundedness: mean(
-            caseResults.map((result) => result.scores.groundedness)
-        ),
-        citationCoverage: mean(
-            caseResults.map((result) => result.scores.citationCoverage)
-        ),
+        groundedness: answerableCases.length
+            ? mean(answerableCases.map((result) => result.scores.groundedness))
+            : 1,
+        citationCoverage: answerableCases.length
+            ? mean(
+                  answerableCases.map(
+                      (result) => result.scores.citationCoverage
+                  )
+              )
+            : 1,
         refusalCorrectness: refusalCases.length
             ? mean(
                   refusalCases.map((result) => result.scores.refusalCorrectness)

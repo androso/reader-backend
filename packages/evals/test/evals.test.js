@@ -7,6 +7,7 @@ const test = require("node:test");
 const { getEvalThresholds } = require("../dist/config");
 const { loadGoldenDataset } = require("../dist/dataset");
 const { scoreRetrievalEval } = require("../dist/retrieval");
+const { runAnswerEval } = require("../dist/answerJudge");
 
 const thresholds = {
     minRecallAtK: 0.75,
@@ -52,6 +53,38 @@ test("thresholds reject values outside the unit interval", () => {
         if (previous === undefined) delete process.env.RAG_EVAL_MIN_RECALL_AT_K;
         else process.env.RAG_EVAL_MIN_RECALL_AT_K = previous;
     }
+});
+
+test("correct refusals do not require supporting citations", async () => {
+    const result = await runAnswerEval(
+        [
+            {
+                id: "negative",
+                question: "unsupported",
+                expectedAnswer: "not provided",
+                noAnswerExpected: true,
+                candidateAnswer: "The book does not say.",
+                sources: [],
+                vectorResultIds: [],
+                vectorIdsAligned: true,
+            },
+        ],
+        thresholds,
+        {
+            async score() {
+                return {
+                    groundedness: 1,
+                    citationCoverage: 0,
+                    refusalCorrectness: 1,
+                    hallucinationRate: 0,
+                    rationale: "Correct refusal",
+                };
+            },
+        }
+    );
+
+    assert.equal(result.cases[0].passed, true);
+    assert.equal(result.summary.passed, true);
 });
 
 test("dataset validation rejects duplicate IDs", async () => {
