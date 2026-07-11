@@ -63,6 +63,7 @@ export interface LangfuseOpenAITraceOptions {
 
 export interface GenerateStreamResponseOptions {
     model?: OpenAIChatModel;
+    temperature?: number;
     langfuse?: LangfuseOpenAITraceOptions;
 }
 
@@ -90,23 +91,30 @@ export const createOpenAIClientOptions = (): NonNullable<
 export const buildChatCompletionRequest = (
     userMessages: ChatMessage[],
     systemPrompt = "You are a helpful assistant.",
-    model: OpenAIChatModel = OPENAI_CHAT_MODEL
-): ChatCompletionCreateParamsStreaming => ({
-    model: model as ChatCompletionCreateParamsStreaming["model"],
-    messages: [
-        {
-            role: getInstructionRole(model),
-            content: systemPrompt,
-            name: "system",
-        } as ChatCompletionMessageParam,
-        ...(userMessages as ChatCompletionMessageParam[]),
-    ],
-    ...getModelRequestParameters(model),
-    stream: true,
-    stream_options: {
-        include_usage: true,
-    },
-});
+    model: OpenAIChatModel = OPENAI_CHAT_MODEL,
+    temperature?: number
+): ChatCompletionCreateParamsStreaming => {
+    const modelParameters = getModelRequestParameters(model);
+    if (temperature !== undefined && !usesMaxCompletionTokens(model)) {
+        modelParameters.temperature = temperature;
+    }
+    return {
+        model: model as ChatCompletionCreateParamsStreaming["model"],
+        messages: [
+            {
+                role: getInstructionRole(model),
+                content: systemPrompt,
+                name: "system",
+            } as ChatCompletionMessageParam,
+            ...(userMessages as ChatCompletionMessageParam[]),
+        ],
+        ...modelParameters,
+        stream: true,
+        stream_options: {
+            include_usage: true,
+        },
+    };
+};
 
 export class OpenAIService {
     private client: OpenAI;
@@ -140,7 +148,8 @@ export class OpenAIService {
             buildChatCompletionRequest(
                 userMessages,
                 systemPrompt,
-                options?.model
+                options?.model,
+                options?.temperature
             )
         );
         return response;

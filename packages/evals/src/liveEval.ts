@@ -1,9 +1,11 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import OpenAI from "openai";
 import { Pool } from "pg";
 import {
     OPENAI_CHAT_MODEL,
+    OpenAIService,
     bookSearchChunkStore,
     generateBookAnswer,
     retrieveBookContext,
@@ -26,6 +28,13 @@ const FIXTURE_SHA256 =
 const FIXTURE_SOURCE_REVISION = "dfe3e6099b7633b729bec1ce65a66997c515c845";
 const FIXTURE_SOURCE_URL =
     "https://github.com/standardebooks/lewis-carroll_alices-adventures-in-wonderland_john-tenniel";
+const evalAnswerService = new OpenAIService(
+    new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+        maxRetries: 2,
+        timeout: 30_000,
+    })
+);
 
 type StoredChunk = {
     id: string;
@@ -228,6 +237,8 @@ export const runLiveRagEval = async (
             const generated = await generateBookAnswer({
                 messages: rag.messages,
                 model: OPENAI_CHAT_MODEL,
+                options: { temperature: 0 },
+                service: evalAnswerService,
             });
             if (!generated.answer.trim()) {
                 throw new Error(

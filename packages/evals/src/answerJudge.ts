@@ -69,7 +69,13 @@ export interface JudgeClient {
 export class OpenAIJudgeClient implements JudgeClient {
     private readonly client: OpenAI;
 
-    constructor(client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })) {
+    constructor(
+        client = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+            maxRetries: 2,
+            timeout: 30_000,
+        })
+    ) {
         this.client = client;
     }
 
