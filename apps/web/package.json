@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "tsc -p tsconfig.test.json && node --test ../../.tmp/apps-web-test/test/*.js",
     "test:epub": "pnpm --filter @reader/epub test"
   },
   "dependencies": {
