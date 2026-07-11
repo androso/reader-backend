@@ -38,11 +38,11 @@ export const loadGoldenDataset = async (
             }
             if (
                 !testCase.noAnswerExpected &&
-                !testCase.expectedEvidenceText &&
-                !testCase.expectedChapterTitle
+                (typeof testCase.expectedEvidenceText !== "string" ||
+                    !testCase.expectedEvidenceText.trim())
             ) {
                 throw new Error(
-                    `Answerable dataset case ${testCase.id} requires expected evidence or chapter`
+                    `Answerable dataset case ${testCase.id} requires expectedEvidenceText`
                 );
             }
             return testCase as RagEvalCase;

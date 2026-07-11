@@ -369,6 +369,9 @@ importers:
       '@reader/providers':
         specifier: workspace:*
         version: link:../providers
+      dotenv:
+        specifier: 16.4.7
+        version: 16.4.7
       openai:
         specifier: ^4.77.0
         version: 4.77.0(zod@3.25.76)

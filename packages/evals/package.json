@@ -8,14 +8,15 @@
         "prebuild": "pnpm --filter @reader/api build",
         "build": "tsc -p tsconfig.json",
         "test": "pnpm build && node --test test/*.test.js",
-        "eval:live": "pnpm build && node dist/cli.js live",
-        "eval:ci": "pnpm build && node dist/cli.js ci"
+        "eval:live": "pnpm build && DOTENV_CONFIG_PATH=../../.env node -r dotenv/config dist/cli.js live",
+        "eval:ci": "pnpm build && DOTENV_CONFIG_PATH=../../.env node -r dotenv/config dist/cli.js ci"
     },
     "dependencies": {
         "@langfuse/client": "^5.9.0",
         "@reader/api": "workspace:*",
         "@reader/processing": "workspace:*",
         "@reader/providers": "workspace:*",
+        "dotenv": "16.4.7",
         "openai": "^4.77.0",
         "pg": "^8.21.0"
     },
