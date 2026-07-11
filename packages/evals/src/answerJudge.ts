@@ -108,7 +108,13 @@ export const runAnswerEval = async (
     judge: JudgeClient = new OpenAIJudgeClient()
 ) => {
     const model = getJudgeModel();
-    const selectedCases = cases.slice(0, getJudgeMaxCases());
+    const maxCases = getJudgeMaxCases();
+    if (cases.length > maxCases) {
+        throw new Error(
+            `RAG eval has ${cases.length} cases but RAG_EVAL_JUDGE_MAX_CASES is ${maxCases}; refusing to silently skip cases`
+        );
+    }
+    const selectedCases = cases;
     const caseResults: AnswerCaseResult[] = [];
 
     for (const testCase of selectedCases) {

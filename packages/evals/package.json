@@ -7,6 +7,7 @@
     "scripts": {
         "prebuild": "pnpm --filter @reader/api build",
         "build": "tsc -p tsconfig.json",
+        "test": "pnpm build && node --test test/*.test.js",
         "eval:live": "pnpm build && node dist/cli.js live",
         "eval:ci": "pnpm build && node dist/cli.js ci"
     },

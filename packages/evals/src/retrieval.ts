@@ -21,11 +21,11 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
     const expectedRank = testCase.expectedChunkId
         ? resultIds.indexOf(testCase.expectedChunkId) + 1
         : 0;
-    const sourceHit = noAnswerExpected ? true : expectedRank > 0;
+    const sourceHit = !noAnswerExpected && expectedRank > 0;
     const vectorExpectedRank = testCase.expectedChunkId
         ? testCase.vectorResultIds.indexOf(testCase.expectedChunkId) + 1
         : 0;
-    const vectorSourceHit = noAnswerExpected ? true : vectorExpectedRank > 0;
+    const vectorSourceHit = !noAnswerExpected && vectorExpectedRank > 0;
     const vectorReciprocalRank =
         vectorExpectedRank > 0 ? 1 / vectorExpectedRank : 0;
     const recallAtK = sourceHit ? 1 : 0;
@@ -34,7 +34,7 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
         ? parseChunkIndex(testCase.expectedChunkId)
         : null;
     const chunkWindowHit = noAnswerExpected
-        ? true
+        ? false
         : expectedChunkIndex !== null &&
           testCase.sources.some(
               (source) => Math.abs(source.chunkIndex - expectedChunkIndex) <= 1
@@ -46,13 +46,13 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
                   testCase.expectedChapterTitle
           )
         : null;
-    const passed =
-        noAnswerExpected ||
-        (sourceHit &&
-            vectorSourceHit &&
-            testCase.vectorIdsAligned &&
-            chunkWindowHit &&
-            chapterCorrect !== false);
+    const passed = noAnswerExpected
+        ? testCase.vectorIdsAligned
+        : sourceHit &&
+          vectorSourceHit &&
+          testCase.vectorIdsAligned &&
+          chunkWindowHit &&
+          chapterCorrect !== false;
 
     return {
         id: testCase.id,

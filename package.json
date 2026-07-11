@@ -6,7 +6,7 @@
     "scripts": {
         "dev": "pnpm --parallel --filter @reader/api --filter @reader/web --filter @reader/worker dev",
         "build": "pnpm --filter @reader/epub --filter @reader/providers --filter @reader/processing --filter @reader/jobs --filter @reader/api --filter @reader/worker build",
-        "test": "pnpm --filter @reader/epub test && pnpm --filter @reader/processing test && pnpm --filter @reader/api test && pnpm --filter @reader/worker test",
+        "test": "pnpm --filter @reader/epub test && pnpm --filter @reader/processing test && pnpm --filter @reader/api test && pnpm --filter @reader/worker test && pnpm --filter @reader/evals test",
         "api:dev": "pnpm --filter @reader/api dev",
         "api:build": "pnpm --filter @reader/api build",
         "worker:dev": "pnpm --filter @reader/worker dev",
