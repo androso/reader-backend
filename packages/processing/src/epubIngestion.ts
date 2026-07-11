@@ -5,6 +5,7 @@ import {
     processEpubBuffer,
 } from "@reader/epub/dist/server";
 import { TextChunker } from "./chunkText";
+import type { ProcessedTextChunk } from "./bookProcessing";
 
 export const createEpubCollectionName = async (fileBuffer: Buffer) => {
     const [content] = await processEpubBuffer(fileBuffer);
@@ -23,13 +24,22 @@ export const extractEpubChunks = async (
     chunker = new TextChunker()
 ) => {
     const { chapters } = await extractEpubTextBlocks(fileBuffer);
-    const chunks: string[] = [];
+    const chunks: ProcessedTextChunk[] = [];
 
-    for (const chapter of chapters) {
-        for (const block of chapter.textBlocks) {
+    for (const [chapterIndex, chapter] of chapters.entries()) {
+        for (const [blockIndex, block] of chapter.textBlocks.entries()) {
             const text =
                 new JSDOM(block.content).window.document.body.textContent || "";
-            chunks.push(...chunker.chunkText(text));
+            chunks.push(
+                ...chunker.chunkText(text).map((content) => ({
+                    content,
+                    metadata: {
+                        chapterTitle: chapter.id || chapter.hrefId,
+                        chapterIndex,
+                        blockIndex,
+                    },
+                }))
+            );
         }
     }
 

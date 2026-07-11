@@ -55,6 +55,17 @@ test("newer chat models use compatible request parameters", () => {
     }
 });
 
+test("chat stream request accepts deterministic temperature", () => {
+    const request = buildChatCompletionRequest(
+        messages,
+        undefined,
+        OPENAI_CHAT_MODEL,
+        0
+    );
+
+    assert.equal(request.temperature, 0);
+});
+
 test("OpenAI client options preserve transport hardening", () => {
     const options = createOpenAIClientOptions();
 

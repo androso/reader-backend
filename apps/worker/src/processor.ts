@@ -12,7 +12,7 @@ export type ProcessUploadedBook = (
 
 const loadProcessUploadedBook = (): ProcessUploadedBook => {
     log.debug("Loading processUploadedBook from built API module");
-    const module = require("@reader/api/build/services/BookProcessingService");
+    const module = require("@reader/api/book-processing");
     log.debug("Loaded processUploadedBook");
     return module.processUploadedBook as ProcessUploadedBook;
 };

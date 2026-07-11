@@ -10,6 +10,7 @@ import {
     uniqueIndex,
     jsonb,
 } from "drizzle-orm/pg-core";
+import type { BookSearchChunkMetadata } from "@reader/providers";
 
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
 export const resourceTypeEnum = pgEnum("resource_type", ["book", "article"]);
@@ -49,6 +50,7 @@ export const BookSearchChunks = pgTable(
         collectionName: text("collection_name").notNull(),
         chunkIndex: integer("chunk_index").notNull(),
         content: text("content").notNull(),
+        metadata: jsonb("metadata").$type<BookSearchChunkMetadata | null>(),
         createdAt: timestamp("created_at").defaultNow().notNull(),
     },
     (table) => [
@@ -77,6 +79,7 @@ export type MessageContextSource = {
     score: number;
     bestRank: number;
     excerpt: string;
+    metadata?: BookSearchChunkMetadata | null;
 };
 
 export const Messages = pgTable("messages", {

@@ -26,6 +26,10 @@ const chunks: BookSearchChunk[] = [
         collectionName: "book_test",
         chunkIndex: 2,
         content: "A quiet library held maps of every kingdom.",
+        metadata: {
+            chapterTitle: "Maps",
+            chapterIndex: 3,
+        },
     },
 ];
 
@@ -112,6 +116,23 @@ test("falls back to semantic results when MiniSearch chunks are missing", async 
         results.map((result) => result.id),
         ["book_test_1"]
     );
+});
+
+test("hydrates metadata for semantic-only results", async () => {
+    const { service } = createService([
+        {
+            id: "book_test_2",
+            content: chunks[2].content,
+            rank: 1,
+        },
+    ]);
+
+    const results = await service.search("book_test", "cartography", {
+        finalLimit: 1,
+    });
+
+    assert.equal(results[0].id, "book_test_2");
+    assert.deepEqual(results[0].metadata, chunks[2].metadata);
 });
 
 test("reuses the cached MiniSearch index for the same collection", async () => {

@@ -355,6 +355,40 @@ importers:
         specifier: ^5.7.2
         version: 5.7.2
 
+  packages/evals:
+    dependencies:
+      '@langfuse/client':
+        specifier: ^5.9.0
+        version: 5.9.1(@opentelemetry/api@1.9.0)
+      '@reader/api':
+        specifier: workspace:*
+        version: link:../../apps/api
+      '@reader/processing':
+        specifier: workspace:*
+        version: link:../processing
+      '@reader/providers':
+        specifier: workspace:*
+        version: link:../providers
+      dotenv:
+        specifier: 16.4.7
+        version: 16.4.7
+      openai:
+        specifier: ^4.77.0
+        version: 4.77.0(zod@3.25.76)
+      pg:
+        specifier: ^8.21.0
+        version: 8.21.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.10.2
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.7.2
+
   packages/jobs:
     dependencies:
       bullmq:
@@ -407,6 +441,9 @@ importers:
       chromadb:
         specifier: ^1.9.4
         version: 1.9.4(openai@4.77.0(zod@3.25.76))
+      minisearch:
+        specifier: ^7.1.2
+        version: 7.2.0
       openai:
         specifier: ^4.77.0
         version: 4.77.0(zod@3.25.76)
@@ -1108,8 +1145,18 @@ packages:
   '@jsdevtools/ono@7.1.3':
     resolution: {integrity: sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg==}
 
+  '@langfuse/client@5.9.1':
+    resolution: {integrity: sha512-v9lb9GXc7ujmY2k97830MfIg+m1LQWkQNzXP+u2F3KwHVaEvD8zy4v1gLhbTkvemTggAx/tR+tv8BC9CeojTrA==}
+    peerDependencies:
+      '@opentelemetry/api': ^1.9.0
+
   '@langfuse/core@5.9.0':
     resolution: {integrity: sha512-b7sUIq+2h8muI293CQhxD+ACwdRwDoL3kn0r4ui2CHKEq6ohZt8gKGf0xzbuIDXU3OFqAhIMVzjwNU/b6jARbA==}
+    peerDependencies:
+      '@opentelemetry/api': ^1.9.0
+
+  '@langfuse/core@5.9.1':
+    resolution: {integrity: sha512-KvyAskAO+2ixJwr9wy148ttR/Zn3oapvOJ2Br4Xcp6zhDpjSIIGB4jW/jkp53/KU9MyEHj0RSFPK/yKoxLC4KA==}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
 
@@ -1127,6 +1174,12 @@ packages:
 
   '@langfuse/tracing@5.9.0':
     resolution: {integrity: sha512-3nPKqafrBdVa0QrIKCvrMJ1GlFaqhoknlUaU6tlWLprVbO8NXyNOvB3rRdlrMafOBCdJfGAeu+TRLcCHx0tAhw==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@opentelemetry/api': ^1.9.0
+
+  '@langfuse/tracing@5.9.1':
+    resolution: {integrity: sha512-tJRyVAv1JkuOPh4Uz5eWUNH8U4jcJVtK2F5QNy5cZUzXCSrXobCSHusPbxY6VFZcLcFgtpDtSaxL7ev1tV2JNQ==}
     engines: {node: '>=20'}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
@@ -4255,6 +4308,10 @@ packages:
     engines: {node: '>= 6.0.0'}
     deprecated: Multer 1.x is impacted by a number of vulnerabilities, which have been patched in 2.x. You should upgrade to the latest 2.x version.
 
+  mustache@4.2.0:
+    resolution: {integrity: sha512-71ippSywq5Yb7/tVYyGbkBggbU8H3u5Rz56fH60jGFgr8uHwxs+aSKeqmluIVzM0m0kB7xQjKS6qPfd0b2ZoqQ==}
+    hasBin: true
+
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
 
@@ -6450,7 +6507,18 @@ snapshots:
 
   '@jsdevtools/ono@7.1.3': {}
 
+  '@langfuse/client@5.9.1(@opentelemetry/api@1.9.0)':
+    dependencies:
+      '@langfuse/core': 5.9.1(@opentelemetry/api@1.9.0)
+      '@langfuse/tracing': 5.9.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/api': 1.9.0
+      mustache: 4.2.0
+
   '@langfuse/core@5.9.0(@opentelemetry/api@1.9.0)':
+    dependencies:
+      '@opentelemetry/api': 1.9.0
+
+  '@langfuse/core@5.9.1(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
 
@@ -6472,6 +6540,11 @@ snapshots:
   '@langfuse/tracing@5.9.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@langfuse/core': 5.9.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/api': 1.9.0
+
+  '@langfuse/tracing@5.9.1(@opentelemetry/api@1.9.0)':
+    dependencies:
+      '@langfuse/core': 5.9.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/api': 1.9.0
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
@@ -10135,6 +10208,8 @@ snapshots:
       object-assign: 4.1.1
       type-is: 1.6.18
       xtend: 4.0.2
+
+  mustache@4.2.0: {}
 
   mz@2.7.0:
     dependencies:

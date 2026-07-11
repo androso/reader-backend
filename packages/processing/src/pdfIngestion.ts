@@ -1,23 +1,31 @@
 import crypto from "crypto";
 import PDFParser from "pdf2json";
 import { TextChunker } from "./chunkText";
+import type { ProcessedTextChunk } from "./bookProcessing";
 
 export const extractPdfChunks = async (
     fileBuffer: Buffer,
     chunker = new TextChunker()
-): Promise<string[]> =>
+): Promise<ProcessedTextChunk[]> =>
     new Promise((resolve, reject) => {
         const parser = new PDFParser();
-        const allChunks: string[] = [];
+        const allChunks: ProcessedTextChunk[] = [];
         const cleanup = () => parser.removeAllListeners();
 
         parser.on("pdfParser_dataReady", (pdfData) => {
             try {
-                for (const page of pdfData.Pages) {
+                for (const [pageIndex, page] of pdfData.Pages.entries()) {
                     const textPage = page.Texts.map((text) =>
                         decodeURIComponent(text.R[0].T)
                     ).join(" ");
-                    allChunks.push(...chunker.chunkText(textPage));
+                    allChunks.push(
+                        ...chunker.chunkText(textPage).map((content) => ({
+                            content,
+                            metadata: {
+                                pageNumber: pageIndex + 1,
+                            },
+                        }))
+                    );
                 }
                 cleanup();
                 resolve(allChunks);

@@ -1,20 +1,26 @@
 import { eq } from "drizzle-orm";
-import type { SearchIndexStore } from "@reader/processing";
-import { createLogger } from "@reader/providers";
+import type { SearchIndexStore, TextChunk } from "@reader/processing";
+import {
+    createLogger,
+    type BookSearchChunk,
+    type BookSearchChunkMetadata,
+} from "@reader/providers";
 import { db } from "../db";
 import { BookSearchChunks } from "../db/schema";
 
 const log = createLogger("BookSearchChunkStore");
 
-export interface BookSearchChunk {
-    id: string;
-    collectionName: string;
-    chunkIndex: number;
-    content: string;
-}
+export type { BookSearchChunk };
 
 export const createChunkId = (collectionName: string, chunkIndex: number) =>
     `${collectionName}_${chunkIndex}`;
+
+const normalizeChunk = (
+    chunk: TextChunk
+): { content: string; metadata?: BookSearchChunkMetadata | null } =>
+    typeof chunk === "string"
+        ? { content: chunk, metadata: null }
+        : { content: chunk.content, metadata: chunk.metadata };
 
 export const bookSearchChunkStore: SearchIndexStore & {
     getCollectionChunks(collectionName: string): Promise<BookSearchChunk[]>;
@@ -36,12 +42,16 @@ export const bookSearchChunkStore: SearchIndexStore & {
         }
 
         await db.insert(BookSearchChunks).values(
-            chunks.map((content, chunkIndex) => ({
-                id: createChunkId(collectionName, chunkIndex),
-                collectionName,
-                chunkIndex,
-                content,
-            }))
+            chunks.map((chunk, chunkIndex) => {
+                const normalized = normalizeChunk(chunk);
+                return {
+                    id: createChunkId(collectionName, chunkIndex),
+                    collectionName,
+                    chunkIndex,
+                    content: normalized.content,
+                    metadata: normalized.metadata,
+                };
+            })
         );
         log.info("Inserted collection chunks", {
             collectionName,
