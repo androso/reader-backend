@@ -1,6 +1,7 @@
 import { Request, Response, Router } from "express";
 const router = Router();
 import multer from "multer";
+import { randomUUID } from "node:crypto";
 import {
     createLogger,
     deleteFile,
@@ -12,11 +13,10 @@ import { authenticate } from "../middleware/auth";
 import { db } from "../db";
 import { Books, type SelectBook } from "../db/schema";
 import { eq, sql } from "drizzle-orm";
-import { createHash, extractMetadata } from "../utils/bookUtils";
-import { PDFUtils } from "../utils/pdfUtils";
 import { bookSearchChunkStore } from "../services/BookSearchChunkStore";
 import { hybridBookSearchService } from "../services/HybridBookSearchService";
 import { handleBookProcessingEnqueue } from "../services/BookProcessingEnqueueService";
+import { createOriginalUploadKey } from "../utils/uploadKeys";
 
 const log = createLogger("books");
 
@@ -213,7 +213,6 @@ router.post("/", authenticate, upload.single("file"), async (req, res) => {
             res.status(400).json({ error: "No file uploaded" });
             return;
         }
-        let fileName;
         const mimeType = req.file.mimetype;
         const fileBuffer = req.file.buffer;
         // Validate file type
@@ -227,40 +226,25 @@ router.post("/", authenticate, upload.single("file"), async (req, res) => {
             });
             return;
         }
-        if (mimeType === "application/pdf") {
-            log.info("Extracting PDF metadata for upload", {
-                userId: req.user.id,
-                fileName: req.file.originalname,
-            });
-            const pdfUtils = new PDFUtils();
-            const hash = await pdfUtils.pdfMetadata(fileBuffer);
-            if (!hash) throw new Error("Could not generate hash for PDF");
-            fileName = `pdf-${hash.slice(0, 12)}`;
-        } else {
-            log.info("Extracting EPUB metadata for upload", {
-                userId: req.user.id,
-                fileName: req.file.originalname,
-            });
-            const metadata = await extractMetadata(fileBuffer);
-            if (!metadata) throw new Error("Could not extract EPUB metadata");
-            fileName = `epub-${createHash(metadata).slice(0, 12)}`;
-        }
+        const bookId = randomUUID();
+        const fileKey = createOriginalUploadKey(req.user.id, bookId);
 
         log.info("Uploading file to storage", {
             userId: req.user.id,
-            fileName,
+            fileKey,
             mimeType,
         });
-        await uploadFile(fileName, fileBuffer);
-        log.info("File uploaded to storage", { userId: req.user.id, fileName });
+        await uploadFile(fileKey, fileBuffer);
+        log.info("File uploaded to storage", { userId: req.user.id, fileKey });
         const fileType = mimeType === "application/pdf" ? "pdf" : "epub";
 
         const [book] = await db
             .insert(Books)
             .values({
+                id: bookId,
                 title: req.file.originalname,
                 userId: req.user.id,
-                fileKey: fileName,
+                fileKey,
                 fileType,
                 processingStatus: "processing",
                 processingError: null,
@@ -269,7 +253,7 @@ router.post("/", authenticate, upload.single("file"), async (req, res) => {
         log.info("Book record created", {
             bookId: book.id,
             userId: req.user.id,
-            fileKey: fileName,
+            fileKey,
             fileType,
         });
 
@@ -300,7 +284,7 @@ router.post("/", authenticate, upload.single("file"), async (req, res) => {
         log.info("Book upload accepted", {
             bookId: book.id,
             durationMs: duration,
-            fileName,
+            fileKey,
         });
         res.status(202).json({
             message: "File upload accepted for processing",

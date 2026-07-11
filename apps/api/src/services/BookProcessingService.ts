@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
     processBookForSearch,
     type BookFileType,
@@ -34,10 +34,6 @@ export interface BookProcessingRepository {
         bookId: string,
         userId: string
     ): Promise<BookProcessingRecord | null>;
-    findReadyDuplicate(
-        fileKey: string,
-        excludeBookId: string
-    ): Promise<{ collectionName: string | null } | null>;
     markReady(bookId: string, collectionName: string): Promise<void>;
     markFailed(bookId: string, error: string): Promise<void>;
 }
@@ -70,30 +66,6 @@ const bookProcessingRepository: BookProcessingRepository = {
             });
         }
         return book ?? null;
-    },
-
-    async findReadyDuplicate(fileKey, excludeBookId) {
-        log.debug("Looking for ready duplicate", { fileKey, excludeBookId });
-        const [duplicate] = await db
-            .select({ collectionName: Books.collectionName })
-            .from(Books)
-            .where(
-                and(
-                    eq(Books.fileKey, fileKey),
-                    ne(Books.id, excludeBookId),
-                    eq(Books.processingStatus, "ready")
-                )
-            );
-        if (duplicate?.collectionName) {
-            log.info("Ready duplicate found", {
-                fileKey,
-                excludeBookId,
-                collectionName: duplicate.collectionName,
-            });
-        } else {
-            log.debug("No ready duplicate found", { fileKey, excludeBookId });
-        }
-        return duplicate?.collectionName ? duplicate : null;
     },
 
     async markReady(bookId, collectionName) {
@@ -151,21 +123,15 @@ export const handleProcessUploadedBook = async (
             );
         }
 
-        const duplicate = await repository.findReadyDuplicate(
-            payload.fileKey,
-            payload.bookId
-        );
         log.info("Processing book", {
             bookId: payload.bookId,
-            hasReadyDuplicate: Boolean(duplicate?.collectionName),
-            existingCollectionName: duplicate?.collectionName ?? null,
+            fileKey: payload.fileKey,
         });
 
         const result = await processBook({
+            bookId: payload.bookId,
             fileKey: payload.fileKey,
             fileType: payload.fileType,
-            existingReadyCollectionName: duplicate?.collectionName ?? null,
-            hasReadyBookForCollection: Boolean(duplicate?.collectionName),
         });
 
         await repository.markReady(payload.bookId, result.collectionName);
