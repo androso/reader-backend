@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Request, Response, Router } from "express";
 const router = Router();
 import multer from "multer";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@reader/providers";
 import { authenticate } from "../middleware/auth";
 import { db } from "../db";
-import { Books } from "../db/schema";
+import { Books, type SelectBook } from "../db/schema";
 import { eq, sql } from "drizzle-orm";
 import { createHash, extractMetadata } from "../utils/bookUtils";
 import { PDFUtils } from "../utils/pdfUtils";
@@ -26,6 +26,61 @@ const upload = multer({
         fileSize: 80 * 1024 * 1024, // 80 mb
     },
 });
+
+type BookFileRecord = Pick<
+    SelectBook,
+    "id" | "userId" | "fileKey" | "fileType"
+>;
+
+type BookFileDependencies = {
+    findBookById(bookId: string): Promise<BookFileRecord | undefined>;
+    getFile(fileKey: string): Promise<Buffer>;
+};
+
+const bookFileDependencies: BookFileDependencies = {
+    async findBookById(bookId) {
+        const [book] = await db
+            .select()
+            .from(Books)
+            .where(eq(Books.id, bookId));
+        return book;
+    },
+    getFile,
+};
+
+const getBookFileContentType = (book: BookFileRecord) => {
+    if (book.fileType === "pdf") return "application/pdf";
+    if (book.fileType === "epub") return "application/epub+zip";
+    return "application/octet-stream";
+};
+
+export const handleGetBookFile = async (
+    req: Request,
+    res: Response,
+    dependencies: BookFileDependencies = bookFileDependencies
+) => {
+    const bookId = req.params.id;
+
+    try {
+        const book = await dependencies.findBookById(bookId);
+        if (!book) {
+            res.status(404).json({ error: "Book was not found" });
+            return;
+        }
+
+        if (book.userId !== req.user.id) {
+            res.status(403).json({ error: "Not authorized" });
+            return;
+        }
+
+        const fileBuffer = await dependencies.getFile(book.fileKey);
+        res.type(getBookFileContentType(book));
+        res.send(fileBuffer);
+    } catch (er) {
+        console.error("Error fetching file", er);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
 
 /**
  * @swagger
@@ -406,23 +461,8 @@ router.get("/:id/status", authenticate, async (req, res) => {
  *                   example: "Internal server error"
  */
 
-router.get("/:id", authenticate, async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const fileBuffer = await getFile(id);
-        if (id.startsWith("pdf-")) {
-            res.type("application/pdf");
-        } else if (id.startsWith("epub-")) {
-            res.type("application/epub+zip");
-        } else {
-            res.type("application/octet-stream");
-        }
-        res.send(fileBuffer);
-    } catch (er) {
-        console.error("Error fetching file", er);
-        res.status(500).json({ error: "Internal server error" });
-    }
+router.get("/:id", authenticate, (req, res) => {
+    void handleGetBookFile(req, res);
 });
 // working
 router.delete("/:id", authenticate, async (req, res) => {
