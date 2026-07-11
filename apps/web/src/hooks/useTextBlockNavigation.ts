@@ -1,5 +1,6 @@
 import { TextBlock } from "@/types/EpubReader";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { getTextBlockNavigationTarget } from "@/lib/readerNavigationBounds";
 
 export const useTextBlockNavigation = (
     flatTextBlocks: TextBlock[],
@@ -77,7 +78,18 @@ export const useTextBlockNavigation = (
     };
 
     useEffect(() => {
-        if (!activeTextBlockId && flatTextBlocks.length > 0 && bookId) {
+        if (flatTextBlocks.length === 0) {
+            setActiveTextBlockId(null);
+            setIsLoading(false);
+            return;
+        }
+
+        if (!bookId) {
+            setIsLoading(false);
+            return;
+        }
+
+        if (!activeTextBlockId) {
             const initializeProgress = async () => {
                 try {
                     const storedId = await fetchProgress(bookId);
@@ -191,20 +203,13 @@ export const useTextBlockNavigation = (
                 e.preventDefault();
                 setIsManualScroll(true);
 
-                const currTextBlockIndex = flatTextBlocks.findIndex(
-                    (block) => block.id === activeTextBlockId
+                const targetBlock = getTextBlockNavigationTarget(
+                    flatTextBlocks,
+                    activeTextBlockId,
+                    e.key
                 );
 
-                const newIndex =
-                    e.key === "ArrowDown"
-                        ? Math.min(
-                              currTextBlockIndex + 1,
-                              flatTextBlocks.length
-                          )
-                        : Math.max(currTextBlockIndex - 1, 0);
-
-                if (newIndex !== currTextBlockIndex) {
-                    const targetBlock = flatTextBlocks[newIndex];
+                if (targetBlock) {
                     setActiveTextBlockId(targetBlock.id);
                     saveProgress(targetBlock.id);
                     document.getElementById(targetBlock.id)?.scrollIntoView({

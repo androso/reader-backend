@@ -9,6 +9,7 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import Chapter from "./Chapter";
 import type { Chapter as EpubChapter } from "@/hooks/useChapterLoader";
 import { findChapterByHref } from "@/lib/epubNavigation";
+import { getNextChapter, isLastChapter } from "@/lib/readerNavigationBounds";
 
 interface EpubReaderProps {
     url: string;
@@ -147,14 +148,19 @@ const EpubReader = memo(
                                 <Chapter
                                     activeTextblockId={activeTextBlockId}
                                     chapter={activeChapter}
-                                    isLastChapter={false}
+                                    isLastChapter={isLastChapter(
+                                        chapters,
+                                        activeChapter
+                                    )}
                                     onNextChapter={() => {
-                                        const nextChapter = chapters.findIndex(
-                                            (ch) => ch.id === activeChapter.id
+                                        const nextChapter = getNextChapter(
+                                            chapters,
+                                            activeChapter
                                         );
-                                        setActiveChapter(
-                                            chapters[nextChapter + 1]
-                                        );
+                                        if (!nextChapter) return;
+
+                                        setActiveChapter(nextChapter);
+                                        setActiveHref(nextChapter.hrefId);
                                         setTimeout(() => {
                                             contentRef.current?.scrollIntoView({
                                                 behavior: "smooth",
