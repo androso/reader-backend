@@ -10,7 +10,10 @@ import {
     generateBookAnswer,
     retrieveBookContext,
 } from "@reader/api/rag";
-import { processBookForSearch } from "@reader/processing";
+import {
+    createBookCollectionName,
+    processBookForSearch,
+} from "@reader/processing";
 import { storageProvider, vectorStore } from "@reader/providers";
 import type {
     PreparedEvalCase,
@@ -175,6 +178,7 @@ export const runLiveRagEval = async (
             ["Alice's Adventures in Wonderland", userId, fileKey]
         );
         bookId = bookResult.rows[0].id;
+        collectionName = createBookCollectionName(bookId);
 
         const processed = await processBookForSearch(
             {
@@ -188,7 +192,11 @@ export const runLiveRagEval = async (
                 searchIndexStore: bookSearchChunkStore,
             }
         );
-        collectionName = processed.collectionName;
+        if (processed.collectionName !== collectionName) {
+            throw new Error(
+                `Unexpected collection name: expected ${collectionName}, received ${processed.collectionName}`
+            );
+        }
         await pool.query(
             `UPDATE books
              SET collection_name = $2, processing_status = 'ready'
