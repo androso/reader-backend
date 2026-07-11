@@ -7,12 +7,19 @@
         "./rag": {
             "types": "./src/rag.ts",
             "default": "./build/rag.js"
+        },
+        "./book-processing": {
+            "types": "./src/book-processing.ts",
+            "default": "./build/book-processing.js"
         }
     },
     "typesVersions": {
         "*": {
             "rag": [
                 "src/rag.ts"
+            ],
+            "book-processing": [
+                "src/book-processing.ts"
             ]
         }
     },
