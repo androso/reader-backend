@@ -198,9 +198,7 @@ export default function Reader() {
         }
     };
 
-    const handleResizePointerCancel = (
-        event: PointerEvent<HTMLDivElement>
-    ) => {
+    const handleResizePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
         isResizingChatPaneRef.current = false;
         setIsResizingChatPane(false);
 
@@ -297,6 +295,7 @@ export default function Reader() {
             ) : (
                 <EpubReader
                     url={bookUrl}
+                    bookId={bookId}
                     onAddHighlightContext={(text) =>
                         setHighlightContext({
                             sourceType: "epub",
@@ -329,7 +328,7 @@ export default function Reader() {
                         {isPdf ? (
                             <PdfReader url={bookUrl} />
                         ) : (
-                            <EpubReader url={bookUrl} />
+                            <EpubReader url={bookUrl} bookId={bookId} />
                         )}
                         <ChatInterface isMobile={true} bookId={bookId ?? ""} />
                     </div>
