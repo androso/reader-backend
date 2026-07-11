@@ -49,7 +49,7 @@ export default function Reader() {
     const readerShellRef = useRef<HTMLDivElement>(null);
     const isResizingChatPaneRef = useRef(false);
     const isPdf = fileType === "pdf";
-    const bookUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/books/${bookId}`;
+    const bookUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/books/${bookId ?? ""}`;
 
     const getShellSizing = useCallback(() => {
         const shell = readerShellRef.current;
@@ -295,6 +295,7 @@ export default function Reader() {
             ) : (
                 <EpubReader
                     url={bookUrl}
+                    bookId={bookId}
                     onAddHighlightContext={(text) =>
                         setHighlightContext({
                             sourceType: "epub",
@@ -327,7 +328,7 @@ export default function Reader() {
                         {isPdf ? (
                             <PdfReader url={bookUrl} />
                         ) : (
-                            <EpubReader url={bookUrl} />
+                            <EpubReader url={bookUrl} bookId={bookId} />
                         )}
                         <ChatInterface isMobile={true} bookId={bookId ?? ""} />
                     </div>

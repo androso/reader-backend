@@ -134,9 +134,7 @@ function Home() {
             : sortedBooks.filter((b) => b.fileType === filter);
 
     const handleBookClick = (book: Book) => {
-        router.push(
-            `/read/${book.id}?bookId=${book.id}&type=${book.fileType ?? ""}`
-        );
+        router.push(`/read/${book.id}?type=${book.fileType ?? ""}`);
     };
 
     const navLinkClass = (active: boolean) =>
