@@ -7,6 +7,7 @@ import {
     OPENAI_CHAT_MODEL,
     OpenAIService,
     bookSearchChunkStore,
+    closeDatabasePool,
     generateBookAnswer,
     retrieveBookContext,
 } from "@reader/api/rag";
@@ -120,6 +121,8 @@ const cleanup = async ({
             },
         ],
         ["fixture object", () => storageProvider.deleteFile(fileKey)],
+        ["API database pool", closeDatabasePool],
+        ["eval database pool", () => pool.end()],
     ];
 
     for (const [label, operation] of operations) {
@@ -129,7 +132,6 @@ const cleanup = async ({
             console.warn(`Could not clean up ${label}:`, error);
         }
     }
-    await pool.end();
 };
 
 export const runLiveRagEval = async (
