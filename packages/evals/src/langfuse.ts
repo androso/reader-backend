@@ -31,6 +31,13 @@ const createTraceId = (runId: string, caseId: string) =>
         .digest("hex")
         .slice(0, 32);
 
+const createDatasetItemId = (datasetName: string, caseId: string) =>
+    `reader-rag-${crypto
+        .createHash("sha256")
+        .update(`${datasetName}:${caseId}`)
+        .digest("hex")
+        .slice(0, 32)}`;
+
 export const createLangfuseClient = async (): Promise<LangfuseClientLike> => {
     const module = await import("@langfuse/client");
     const LangfuseClient = (module as any).LangfuseClient;
@@ -90,6 +97,7 @@ export const syncReportToLangfuse = async (
     for (const testCase of cases) {
         await ignoreAlreadyExists(() =>
             client.dataset!.createItem!({
+                id: createDatasetItemId(datasetName, testCase.id),
                 datasetName,
                 input: {
                     id: testCase.id,
