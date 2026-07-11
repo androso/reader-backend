@@ -10,6 +10,7 @@ export interface RagEvalCase {
 }
 
 export interface PreparedEvalCase extends RagEvalCase {
+    answerModel: string;
     expectedChunkId?: string;
     candidateAnswer: string;
     sources: MessageContextSource[];
@@ -48,6 +49,7 @@ export interface AnswerCaseResult {
     question: string;
     answer: string;
     expectedAnswer: string;
+    answerModel: string;
     scores: JudgeScores;
     passed: boolean;
 }
@@ -103,7 +105,7 @@ export interface RagEvalIngestion {
 export interface RagEvalReport {
     runId: string;
     createdAt: string;
-    answerModel: string;
+    answerModels: string[];
     judgeModel: string;
     thresholds: EvalThresholds;
     fixture: RagEvalFixture;

@@ -34,10 +34,10 @@ const run = async () => {
     const thresholds = getEvalThresholds();
     const cases = await loadGoldenDataset();
     const live = await runLiveRagEval(cases);
-    const retrieval = scoreRetrievalEval(live.cases, thresholds);
+    const retrieval = scoreRetrievalEval(live.retrievalCases, thresholds);
     const answers = await runAnswerEval(live.cases, thresholds);
     const report = createReport({
-        answerModel: live.answerModel,
+        answerModels: live.answerModels,
         judgeModel: getJudgeModel(),
         thresholds,
         fixture: live.fixture,

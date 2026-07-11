@@ -28,6 +28,7 @@ test("negative retrieval cases are not reported as source hits", () => {
                 question: "unsupported",
                 expectedAnswer: "not provided",
                 noAnswerExpected: true,
+                answerModel: "gpt-4o-mini",
                 candidateAnswer: "not provided",
                 sources: [
                     { id: "chunk_1", chunkIndex: 1, content: "irrelevant" },
@@ -63,6 +64,7 @@ test("correct refusals do not require supporting citations", async () => {
                 question: "unsupported",
                 expectedAnswer: "not provided",
                 noAnswerExpected: true,
+                answerModel: "gpt-4o-mini",
                 candidateAnswer: "The book does not say.",
                 sources: [],
                 vectorResultIds: [],
@@ -84,6 +86,7 @@ test("correct refusals do not require supporting citations", async () => {
     );
 
     assert.equal(result.cases[0].passed, true);
+    assert.equal(result.cases[0].answerModel, "gpt-4o-mini");
     assert.equal(result.summary.passed, true);
 });
 

@@ -9,6 +9,7 @@ export { closeDatabasePool } from "./db";
 export type { MessageContextSource } from "./db/schema";
 export {
     OPENAI_CHAT_MODEL,
+    OPENAI_CHAT_MODELS,
     OpenAIService,
     type ChatMessage,
     type OpenAIChatModel,

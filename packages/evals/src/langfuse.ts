@@ -129,11 +129,13 @@ export const syncReportToLangfuse = async (
     }
 
     const answerCases = report.answers?.cases ?? [];
+    const traceKey = (caseId: string, answerModel: string) =>
+        `${caseId}:${answerModel}`;
     const traceIds = new Map(
-        answerCases.map((result) => [
-            result.id,
-            createTraceId(report.runId, result.id),
-        ])
+        answerCases.map((result) => {
+            const key = traceKey(result.id, result.answerModel);
+            return [key, createTraceId(report.runId, key)];
+        })
     );
     const ingestion = await client.api.ingestion.batch({
         batch: answerCases.map((result) => ({
@@ -141,7 +143,7 @@ export const syncReportToLangfuse = async (
             id: crypto.randomUUID(),
             timestamp: report.createdAt,
             body: {
-                id: traceIds.get(result.id),
+                id: traceIds.get(traceKey(result.id, result.answerModel)),
                 timestamp: report.createdAt,
                 name: "reader-rag-eval",
                 input: result.question,
@@ -149,6 +151,7 @@ export const syncReportToLangfuse = async (
                 metadata: {
                     runId: report.runId,
                     caseId: result.id,
+                    answerModel: result.answerModel,
                     source: "packages/evals",
                 },
                 tags: ["reader-rag-eval"],
@@ -166,6 +169,7 @@ export const syncReportToLangfuse = async (
     let syncedScores = 0;
     const createScore = async (
         caseId: string,
+        answerModel: string,
         name: string,
         value: number,
         traceId?: string
@@ -175,10 +179,11 @@ export const syncReportToLangfuse = async (
             name,
             value,
             traceId,
-            comment: `Reader RAG eval ${report.runId} case ${caseId}`,
+            comment: `Reader RAG eval ${report.runId} case ${caseId} model ${answerModel}`,
             metadata: {
                 runId: report.runId,
                 caseId,
+                answerModel,
                 source: "packages/evals",
             },
         });
@@ -186,27 +191,33 @@ export const syncReportToLangfuse = async (
     };
 
     for (const result of answerCases) {
-        const traceId = traceIds.get(result.id);
+        const traceId = traceIds.get(
+            traceKey(result.id, result.answerModel)
+        );
         await createScore(
             result.id,
+            result.answerModel,
             "rag_eval_groundedness",
             result.scores.groundedness,
             traceId
         );
         await createScore(
             result.id,
+            result.answerModel,
             "rag_eval_citation_coverage",
             result.scores.citationCoverage,
             traceId
         );
         await createScore(
             result.id,
+            result.answerModel,
             "rag_eval_hallucination_rate",
             result.scores.hallucinationRate,
             traceId
         );
         await createScore(
             result.id,
+            result.answerModel,
             "rag_eval_refusal_correctness",
             result.scores.refusalCorrectness,
             traceId
@@ -218,24 +229,28 @@ export const syncReportToLangfuse = async (
         if (!retrieval) continue;
         await createScore(
             result.id,
+            result.answerModel,
             "rag_eval_recall_at_k",
             retrieval.recallAtK,
             traceId
         );
         await createScore(
             result.id,
+            result.answerModel,
             "rag_eval_reciprocal_rank",
             retrieval.reciprocalRank,
             traceId
         );
         await createScore(
             result.id,
+            result.answerModel,
             "rag_eval_vector_reciprocal_rank",
             retrieval.vectorReciprocalRank,
             traceId
         );
         await createScore(
             result.id,
+            result.answerModel,
             "rag_eval_vector_id_alignment",
             retrieval.vectorIdsAligned ? 1 : 0,
             traceId
@@ -243,6 +258,7 @@ export const syncReportToLangfuse = async (
         if (retrieval.chapterCorrect !== null) {
             await createScore(
                 result.id,
+                result.answerModel,
                 "rag_eval_chapter_accuracy",
                 retrieval.chapterCorrect ? 1 : 0,
                 traceId

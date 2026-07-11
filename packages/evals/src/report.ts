@@ -26,7 +26,7 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         `- Source revision: ${report.fixture.sourceRevision}`,
         `- Collection: ${report.ingestion.collectionName}`,
         `- Extracted/stored chunks: ${report.ingestion.extractedChunkCount}/${report.ingestion.storedChunkCount}`,
-        `- Answer model: ${report.answerModel}`,
+        `- Answer models: ${report.answerModels.join(", ")}`,
         `- Judge model: ${report.judgeModel}`,
     ];
 

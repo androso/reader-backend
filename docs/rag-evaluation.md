@@ -30,7 +30,9 @@ work exists, the supported rollout policy is:
 ## Gate behavior
 
 - Standard tests and builds run before the paid live RAG gate.
-- Answer generation uses temperature zero with bounded retries and timeouts.
+- Answer generation runs the full dataset against every chat model exposed by
+  Reader's UI, using temperature zero where the model supports it and bounded
+  retries and timeouts.
 - Every dataset case is judged; the command fails instead of silently applying
   a first-N truncation.
 - Langfuse publication is best-effort observability and cannot change the local

@@ -4,7 +4,7 @@ import path from "node:path";
 import OpenAI from "openai";
 import { Pool } from "pg";
 import {
-    OPENAI_CHAT_MODEL,
+    OPENAI_CHAT_MODELS,
     OpenAIService,
     bookSearchChunkStore,
     closeDatabasePool,
@@ -138,9 +138,10 @@ export const runLiveRagEval = async (
     cases: RagEvalCase[]
 ): Promise<{
     cases: PreparedEvalCase[];
+    retrievalCases: PreparedEvalCase[];
     fixture: RagEvalFixture;
     ingestion: RagEvalIngestion;
-    answerModel: string;
+    answerModels: string[];
 }> => {
     if (!process.env.DATABASE_URL) {
         throw new Error("DATABASE_URL is required for live RAG evals");
@@ -244,33 +245,39 @@ export const runLiveRagEval = async (
                 testCase.question,
                 20
             );
-            const generated = await generateBookAnswer({
-                messages: rag.messages,
-                model: OPENAI_CHAT_MODEL,
-                options: { temperature: 0 },
-                service: evalAnswerService,
-            });
-            if (!generated.answer.trim()) {
-                throw new Error(
-                    `Reader generated an empty answer for ${testCase.id}`
-                );
-            }
+            for (const answerModel of OPENAI_CHAT_MODELS) {
+                const generated = await generateBookAnswer({
+                    messages: rag.messages,
+                    model: answerModel,
+                    options: { temperature: 0 },
+                    service: evalAnswerService,
+                });
+                if (!generated.answer.trim()) {
+                    throw new Error(
+                        `Reader generated an empty answer for ${testCase.id} using ${answerModel}`
+                    );
+                }
 
-            preparedCases.push({
-                ...testCase,
-                expectedChunkId: expectedChunk?.id,
-                candidateAnswer: generated.answer,
-                sources: rag.sources,
-                vectorResultIds: vectorResults.map((result) => result.id),
-                vectorIdsAligned: vectorResults.every((result) =>
-                    storedIds.has(result.id)
-                ),
-            });
+                preparedCases.push({
+                    ...testCase,
+                    answerModel,
+                    expectedChunkId: expectedChunk?.id,
+                    candidateAnswer: generated.answer,
+                    sources: rag.sources,
+                    vectorResultIds: vectorResults.map((result) => result.id),
+                    vectorIdsAligned: vectorResults.every((result) =>
+                        storedIds.has(result.id)
+                    ),
+                });
+            }
         }
 
         return {
             cases: preparedCases,
-            answerModel: OPENAI_CHAT_MODEL,
+            retrievalCases: preparedCases.filter(
+                (testCase) => testCase.answerModel === OPENAI_CHAT_MODELS[0]
+            ),
+            answerModels: [...OPENAI_CHAT_MODELS],
             fixture: {
                 title: "Alice's Adventures in Wonderland",
                 author: "Lewis Carroll",
