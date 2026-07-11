@@ -205,6 +205,49 @@ export const syncReportToLangfuse = async (
             result.scores.hallucinationRate,
             traceId
         );
+        await createScore(
+            result.id,
+            "rag_eval_refusal_correctness",
+            result.scores.refusalCorrectness,
+            traceId
+        );
+
+        const retrieval = report.retrieval.cases.find(
+            (candidate) => candidate.id === result.id
+        );
+        if (!retrieval) continue;
+        await createScore(
+            result.id,
+            "rag_eval_recall_at_k",
+            retrieval.recallAtK,
+            traceId
+        );
+        await createScore(
+            result.id,
+            "rag_eval_reciprocal_rank",
+            retrieval.reciprocalRank,
+            traceId
+        );
+        await createScore(
+            result.id,
+            "rag_eval_vector_reciprocal_rank",
+            retrieval.vectorReciprocalRank,
+            traceId
+        );
+        await createScore(
+            result.id,
+            "rag_eval_vector_id_alignment",
+            retrieval.vectorIdsAligned ? 1 : 0,
+            traceId
+        );
+        if (retrieval.chapterCorrect !== null) {
+            await createScore(
+                result.id,
+                "rag_eval_chapter_accuracy",
+                retrieval.chapterCorrect ? 1 : 0,
+                traceId
+            );
+        }
     }
 
     return { datasetName, syncedItems: cases.length, syncedScores };

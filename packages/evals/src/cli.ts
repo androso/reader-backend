@@ -48,8 +48,16 @@ const run = async () => {
     await persistAndPrint(report);
 
     if (hasLangfuseConfig()) {
-        const result = await syncReportToLangfuse(report, cases);
-        console.log(JSON.stringify(result, null, 2));
+        try {
+            const result = await syncReportToLangfuse(report, cases);
+            console.log(JSON.stringify(result, null, 2));
+        } catch (error) {
+            console.warn(
+                `Langfuse sync failed without changing the quality result: ${
+                    error instanceof Error ? error.message : String(error)
+                }`
+            );
+        }
     } else {
         console.log("Skipping Langfuse sync: LANGFUSE_* secrets are absent.");
     }
