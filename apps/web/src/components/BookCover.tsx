@@ -116,7 +116,7 @@ export default function BookCover({
             try {
                 const token = localStorage.getItem("token");
                 const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/books/${book.fileKey}`,
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/books/${book.id}`,
                     {
                         headers: {
                             Authorization: `Bearer ${token}`,
@@ -147,7 +147,7 @@ export default function BookCover({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [book.fileKey, book.fileType, book.id]);
+    }, [book.fileType, book.id]);
 
     return (
         <div

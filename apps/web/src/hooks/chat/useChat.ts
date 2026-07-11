@@ -227,8 +227,6 @@ export const useChat = (bookId: string) => {
                     },
                     body: JSON.stringify({
                         message: userMessage.content,
-                        role: "user",
-                        messages: [...chatState.messages, userMessage],
                         model,
                         ...(highlightContext ? { highlightContext } : {}),
                     }),
@@ -258,8 +256,7 @@ export const useChat = (bookId: string) => {
                         ...prev,
                         currentConversation: {
                             id: conversationId,
-                            title:
-                                userMessage.content.substring(0, 50) + "...",
+                            title: userMessage.content.substring(0, 50) + "...",
                             createdAt: new Date().toISOString().split("T")[0],
                             messages: prev.messages,
                             lastMessageAt: new Date().toISOString(),

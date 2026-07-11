@@ -9,6 +9,7 @@
         "test": "tsc -p tsconfig.test.json && NODE_PATH=../../apps/api/node_modules:./node_modules node --test ../../.tmp/packages-epub-test/test/epub-fixtures.test.js"
     },
     "dependencies": {
+        "dompurify": "^3.4.11",
         "jsdom": "^25.0.1",
         "jszip": "^3.10.1"
     },

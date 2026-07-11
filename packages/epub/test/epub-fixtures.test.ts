@@ -3,7 +3,10 @@ import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { buildTextBlocksFromDocument } from "../src/chapterProcessing";
+import {
+    buildTextBlocksFromDocument,
+    sanitizeEpubHtml,
+} from "../src/chapterProcessing";
 import { processEpubFile } from "../src/processing";
 import {
     findManifestEntryByHref,
@@ -175,4 +178,53 @@ test("nested chapter containers split into readable text blocks", async () => {
     assert.ok(textBlocks.length >= 100);
     assert.ok(textBlocks.length > directBodyChildren * 20);
     assert.ok(longestBlockLength < 1500);
+});
+
+test("EPUB HTML sanitizer removes active content and unsafe protocols", () => {
+    const doc = new JSDOM(`
+        <body>
+            <p onclick="alert(1)">
+                Hello <strong>reader</strong>
+                <a href="javascript:alert(1)">bad link</a>
+                <img src="x" onerror="alert(1)" />
+                <img src="javascript:alert(1)" alt="bad image" />
+                <svg><a href="javascript:alert(1)"><text>XSS</text></a></svg>
+                <math><mtext>XSS</mtext></math>
+                <iframe src="https://example.test"></iframe>
+            </p>
+        </body>
+    `).window.document;
+
+    const sanitized = sanitizeEpubHtml(doc.body.innerHTML, doc);
+
+    assert.match(sanitized, /<strong>reader<\/strong>/);
+    assert.match(sanitized, /<a>bad link<\/a>/);
+    assert.match(sanitized, /<img src="x">/);
+    assert.match(sanitized, /<img alt="bad image">/);
+    assert.doesNotMatch(sanitized, /onclick|onerror|javascript:/i);
+    assert.doesNotMatch(sanitized, /<script|<svg|<math|<iframe/i);
+    assert.doesNotMatch(sanitized, /XSS/);
+});
+
+test("text blocks store sanitized content while preserving normal formatting", () => {
+    const doc = new JSDOM(`
+        <body>
+            <p id="intro" class="chapter">
+                Keep <em>emphasis</em>, <strong>strength</strong>, and
+                <a href="#note-1">safe notes</a>.
+                <span style="position:fixed" onmouseover="alert(1)">Styled text</span>
+            </p>
+            <p><a href="javascript:alert(1)">unsafe note</a></p>
+        </body>
+    `).window.document;
+
+    const textBlocks = buildTextBlocksFromDocument(doc, "chapter-1");
+
+    assert.equal(textBlocks.length, 2);
+    assert.match(textBlocks[0].content, /<em>emphasis<\/em>/);
+    assert.match(textBlocks[0].content, /<strong>strength<\/strong>/);
+    assert.match(textBlocks[0].content, /href="#note-1"/);
+    assert.match(textBlocks[0].content, /class="chapter"/);
+    assert.doesNotMatch(textBlocks[0].content, /style=|onmouseover/i);
+    assert.equal(textBlocks[1].content, "<p><a>unsafe note</a></p>");
 });

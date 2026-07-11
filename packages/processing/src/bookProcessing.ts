@@ -1,17 +1,16 @@
 import type { StorageProvider, VectorStoreProvider } from "@reader/providers";
 import { storageProvider, vectorStore, createLogger } from "@reader/providers";
-import { createEpubCollectionName, extractEpubChunks } from "./epubIngestion";
-import { createPdfCollectionName, extractPdfChunks } from "./pdfIngestion";
+import { extractEpubChunks } from "./epubIngestion";
+import { extractPdfChunks } from "./pdfIngestion";
 
 const log = createLogger("bookProcessing");
 
 export type BookFileType = "epub" | "pdf";
 
 export interface ProcessBookInput {
+    bookId: string;
     fileKey: string;
     fileType: BookFileType;
-    existingReadyCollectionName?: string | null;
-    hasReadyBookForCollection?: boolean;
 }
 
 export interface ProcessBookDependencies {
@@ -51,6 +50,9 @@ export interface ProcessBookResult {
     reusedCollection: boolean;
 }
 
+export const createBookCollectionName = (bookId: string) =>
+    `book_${bookId.replace(/-/g, "_")}`;
+
 export const processBookForSearch = async (
     input: ProcessBookInput,
     dependencies: ProcessBookDependencies = {
@@ -60,72 +62,52 @@ export const processBookForSearch = async (
 ): Promise<ProcessBookResult> => {
     const start = Date.now();
     log.info("Starting book processing", {
+        bookId: input.bookId,
         fileKey: input.fileKey,
         fileType: input.fileType,
-        hasExistingReadyCollection: Boolean(input.existingReadyCollectionName),
-        hasReadyBookForCollection: Boolean(input.hasReadyBookForCollection),
     });
 
-    if (input.existingReadyCollectionName) {
-        log.info("Reusing existing ready collection", {
-            fileKey: input.fileKey,
-            collectionName: input.existingReadyCollectionName,
-        });
-        return {
-            collectionName: input.existingReadyCollectionName,
-            chunks: 0,
-            reusedCollection: true,
-        };
-    }
-
     log.info("Fetching file from storage", {
+        bookId: input.bookId,
         fileKey: input.fileKey,
         fileType: input.fileType,
     });
     const fileBuffer = await dependencies.storage.getFile(input.fileKey);
     log.info("File fetched from storage", {
+        bookId: input.bookId,
         fileKey: input.fileKey,
         fileSizeBytes: fileBuffer.length,
         fileType: input.fileType,
     });
 
-    const epubCollectionName =
-        dependencies.createEpubCollectionName ?? createEpubCollectionName;
     const epubChunks = dependencies.extractEpubChunks ?? extractEpubChunks;
-    const pdfCollectionName =
-        dependencies.createPdfCollectionName ?? createPdfCollectionName;
     const pdfChunks = dependencies.extractPdfChunks ?? extractPdfChunks;
 
-    log.info("Generating collection name", {
+    log.info("Generating book-scoped collection name", {
+        bookId: input.bookId,
         fileKey: input.fileKey,
         fileType: input.fileType,
     });
-    const collectionName =
-        input.fileType === "pdf"
-            ? await pdfCollectionName(fileBuffer)
-            : await epubCollectionName(fileBuffer);
+    const collectionName = createBookCollectionName(input.bookId);
     log.info("Collection name generated", {
+        bookId: input.bookId,
         fileKey: input.fileKey,
         collectionName,
     });
 
-    if (!input.hasReadyBookForCollection) {
-        log.info("Resetting collection before ingestion", {
-            collectionName,
-            fileKey: input.fileKey,
-        });
-        await dependencies.vectorStore.resetCollection(collectionName);
-        await dependencies.searchIndexStore?.replaceCollectionChunks(
-            collectionName,
-            []
-        );
-    } else {
-        log.info("Skipping collection reset: ready book already exists", {
-            collectionName,
-        });
-    }
+    log.info("Resetting collection before ingestion", {
+        collectionName,
+        bookId: input.bookId,
+        fileKey: input.fileKey,
+    });
+    await dependencies.vectorStore.resetCollection(collectionName);
+    await dependencies.searchIndexStore?.replaceCollectionChunks(
+        collectionName,
+        []
+    );
 
     log.info("Extracting text chunks", {
+        bookId: input.bookId,
         fileKey: input.fileKey,
         fileType: input.fileType,
         collectionName,
@@ -139,6 +121,7 @@ export const processBookForSearch = async (
     );
 
     log.info("Text chunks extracted", {
+        bookId: input.bookId,
         fileKey: input.fileKey,
         collectionName,
         chunkCount: chunks.length,
@@ -148,6 +131,7 @@ export const processBookForSearch = async (
 
     if (!documents.length) {
         log.error("No valid text chunks extracted", {
+            bookId: input.bookId,
             fileKey: input.fileKey,
             fileType: input.fileType,
         });
@@ -175,6 +159,7 @@ export const processBookForSearch = async (
 
     const duration = Date.now() - start;
     log.info("Book processing complete", {
+        bookId: input.bookId,
         fileKey: input.fileKey,
         collectionName,
         chunkCount: chunks.length,

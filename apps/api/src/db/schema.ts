@@ -7,7 +7,6 @@ import {
     integer,
     primaryKey,
     foreignKey,
-    ForeignKey,
     uniqueIndex,
     jsonb,
 } from "drizzle-orm/pg-core";
@@ -100,7 +99,7 @@ export const Progress = pgTable(
     "progress",
     {
         userId: uuid("user_id").notNull(),
-        bookId: text("book_id").notNull(),
+        bookId: uuid("book_id").notNull(),
         progressPosition: text("progress_position").notNull(),
         progressChapter: text("progress_chapter").notNull(),
         lastReadAt: timestamp("last_read_at", { withTimezone: true })
@@ -114,19 +113,20 @@ export const Progress = pgTable(
             .notNull(),
     },
     (table) => [
-        {
-            pk: primaryKey({ columns: [table.userId, table.bookId] }),
-            bookRef: foreignKey({
-                columns: [table.bookId],
-                foreignColumns: [Books.id],
-                name: "progress_book_id_books_id_fk",
-            }).onDelete("cascade"),
-            userRef: foreignKey({
-                columns: [table.userId],
-                foreignColumns: [Users.id],
-                name: "progress_user_id_users_id_fk",
-            }),
-        },
+        primaryKey({
+            columns: [table.userId, table.bookId],
+            name: "progress_user_id_book_id_pk",
+        }),
+        foreignKey({
+            columns: [table.bookId],
+            foreignColumns: [Books.id],
+            name: "progress_book_id_books_id_fk",
+        }).onDelete("cascade"),
+        foreignKey({
+            columns: [table.userId],
+            foreignColumns: [Users.id],
+            name: "progress_user_id_users_id_fk",
+        }).onDelete("cascade"),
     ]
 );
 

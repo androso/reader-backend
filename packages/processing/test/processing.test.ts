@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { StorageProvider, VectorStoreProvider } from "@reader/providers";
-import { processBookForSearch, TextChunker } from "../src";
+import {
+    createBookCollectionName,
+    processBookForSearch,
+    TextChunker,
+} from "../src";
 
 const createMockStorage = (file = Buffer.from("book")): StorageProvider => ({
     uploadFile: async () => undefined,
@@ -65,31 +69,31 @@ test("processes EPUB with mocked storage and vector store", async () => {
 
     const result = await processBookForSearch(
         {
+            bookId: "11111111-1111-1111-1111-111111111111",
             fileKey: "epub-key",
             fileType: "epub",
-            hasReadyBookForCollection: false,
         },
         {
             storage: createMockStorage(),
             vectorStore: vector.provider,
             searchIndexStore: searchIndex.provider,
-            createEpubCollectionName: async () => "book_test",
             extractEpubChunks: async () => ["one", "two"],
         }
     );
 
+    const collectionName = "book_11111111_1111_1111_1111_111111111111";
     assert.deepEqual(result, {
-        collectionName: "book_test",
+        collectionName,
         chunks: 2,
         reusedCollection: false,
     });
-    assert.deepEqual(vector.calls.resetCollection, ["book_test"]);
+    assert.deepEqual(vector.calls.resetCollection, [collectionName]);
     assert.deepEqual(vector.calls.addDocuments, [
-        { collectionName: "book_test", documents: ["one", "two"] },
+        { collectionName, documents: ["one", "two"] },
     ]);
     assert.deepEqual(searchIndex.calls.replaceCollectionChunks, [
-        { collectionName: "book_test", chunks: [] },
-        { collectionName: "book_test", chunks: ["one", "two"] },
+        { collectionName, chunks: [] },
+        { collectionName, chunks: ["one", "two"] },
     ]);
 });
 
@@ -98,54 +102,66 @@ test("processes PDF with mocked storage and vector store", async () => {
 
     const result = await processBookForSearch(
         {
+            bookId: "22222222-2222-2222-2222-222222222222",
             fileKey: "pdf-key",
             fileType: "pdf",
-            hasReadyBookForCollection: true,
         },
         {
             storage: createMockStorage(),
             vectorStore: vector.provider,
-            createPdfCollectionName: async () => "pdf_test",
             extractPdfChunks: async () => ["pdf text"],
         }
     );
 
-    assert.equal(result.collectionName, "pdf_test");
+    assert.equal(
+        result.collectionName,
+        "book_22222222_2222_2222_2222_222222222222"
+    );
     assert.equal(result.chunks, 1);
-    assert.deepEqual(vector.calls.resetCollection, []);
+    assert.deepEqual(vector.calls.resetCollection, [
+        "book_22222222_2222_2222_2222_222222222222",
+    ]);
 });
 
-test("reuses an existing ready collection without reading storage", async () => {
-    let readCount = 0;
+test("different book ids with same metadata use different collections", async () => {
     const vector = createMockVectorStore();
-    const searchIndex = createMockSearchIndexStore();
 
-    const result = await processBookForSearch(
+    const first = await processBookForSearch(
         {
-            fileKey: "epub-key",
+            bookId: "33333333-3333-3333-3333-333333333333",
+            fileKey:
+                "users/user-a/books/33333333-3333-3333-3333-333333333333/original",
             fileType: "epub",
-            existingReadyCollectionName: "book_existing",
         },
         {
-            storage: {
-                ...createMockStorage(),
-                getFile: async () => {
-                    readCount += 1;
-                    return Buffer.from("unexpected");
-                },
-            },
+            storage: createMockStorage(Buffer.from("same metadata")),
             vectorStore: vector.provider,
-            searchIndexStore: searchIndex.provider,
+            extractEpubChunks: async () => ["one"],
+        }
+    );
+    const second = await processBookForSearch(
+        {
+            bookId: "44444444-4444-4444-4444-444444444444",
+            fileKey:
+                "users/user-b/books/44444444-4444-4444-4444-444444444444/original",
+            fileType: "epub",
+        },
+        {
+            storage: createMockStorage(Buffer.from("same metadata")),
+            vectorStore: vector.provider,
+            extractEpubChunks: async () => ["one"],
         }
     );
 
-    assert.equal(readCount, 0);
-    assert.deepEqual(result, {
-        collectionName: "book_existing",
-        chunks: 0,
-        reusedCollection: true,
-    });
-    assert.deepEqual(searchIndex.calls.replaceCollectionChunks, []);
+    assert.notEqual(first.collectionName, second.collectionName);
+    assert.equal(
+        first.collectionName,
+        "book_33333333_3333_3333_3333_333333333333"
+    );
+    assert.equal(
+        second.collectionName,
+        "book_44444444_4444_4444_4444_444444444444"
+    );
 });
 
 test("fails when processing extracts no chunks", async () => {
@@ -154,17 +170,24 @@ test("fails when processing extracts no chunks", async () => {
     await assert.rejects(
         processBookForSearch(
             {
+                bookId: "55555555-5555-5555-5555-555555555555",
                 fileKey: "epub-key",
                 fileType: "epub",
             },
             {
                 storage: createMockStorage(),
                 vectorStore: vector.provider,
-                createEpubCollectionName: async () => "book_empty",
                 extractEpubChunks: async () => [],
             }
         ),
         /No valid text chunks extracted/
+    );
+});
+
+test("book collection names are derived only from book id", () => {
+    assert.equal(
+        createBookCollectionName("66666666-6666-6666-6666-666666666666"),
+        "book_66666666_6666_6666_6666_666666666666"
     );
 });
 

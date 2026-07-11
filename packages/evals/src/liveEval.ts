@@ -8,10 +8,7 @@ import {
     generateBookAnswer,
     retrieveBookContext,
 } from "@reader/api/rag";
-import {
-    createEpubCollectionName,
-    processBookForSearch,
-} from "@reader/processing";
+import { processBookForSearch } from "@reader/processing";
 import { storageProvider, vectorStore } from "@reader/providers";
 import type {
     PreparedEvalCase,
@@ -68,7 +65,7 @@ const cleanup = async ({
     pool: Pool;
     userId?: string;
     bookId?: string;
-    collectionName: string;
+    collectionName?: string;
     fileKey: string;
 }) => {
     const operations: Array<[string, () => Promise<unknown>]> = [
@@ -94,11 +91,21 @@ const cleanup = async ({
         ],
         [
             "search chunks",
-            () => bookSearchChunkStore.deleteCollectionChunks(collectionName),
+            async () => {
+                if (collectionName) {
+                    await bookSearchChunkStore.deleteCollectionChunks(
+                        collectionName
+                    );
+                }
+            },
         ],
         [
             "Chroma collection",
-            () => vectorStore.deleteCollection(collectionName),
+            async () => {
+                if (collectionName) {
+                    await vectorStore.deleteCollection(collectionName);
+                }
+            },
         ],
         ["fixture object", () => storageProvider.deleteFile(fileKey)],
     ];
@@ -136,27 +143,48 @@ export const runLiveRagEval = async (
     }
 
     const runToken = crypto.randomUUID().replace(/-/g, "");
-    const baseCollectionName = await createEpubCollectionName(fixtureBuffer);
-    const collectionName = `${baseCollectionName}_${runToken}`;
     const fileKey = `rag-evals/${runToken}/alice-in-wonderland.epub`;
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     let userId: string | undefined;
     let bookId: string | undefined;
+    let collectionName: string | undefined;
 
     try {
         await storageProvider.uploadFile(fileKey, fixtureBuffer);
+        const userResult = await pool.query<{ id: string }>(
+            `INSERT INTO users (email, name)
+             VALUES ($1, $2)
+             RETURNING id`,
+            [`rag-eval-${runToken}@reader.invalid`, "Reader RAG Eval"]
+        );
+        userId = userResult.rows[0].id;
+        const bookResult = await pool.query<{ id: string }>(
+            `INSERT INTO books
+                (title, user_id, file_key, file_type, processing_status)
+             VALUES ($1, $2, $3, 'epub', 'processing')
+             RETURNING id`,
+            ["Alice's Adventures in Wonderland", userId, fileKey]
+        );
+        bookId = bookResult.rows[0].id;
+
         const processed = await processBookForSearch(
             {
+                bookId,
                 fileKey,
                 fileType: "epub",
-                hasReadyBookForCollection: false,
             },
             {
                 storage: storageProvider,
                 vectorStore,
                 searchIndexStore: bookSearchChunkStore,
-                createEpubCollectionName: async () => collectionName,
             }
+        );
+        collectionName = processed.collectionName;
+        await pool.query(
+            `UPDATE books
+             SET collection_name = $2, processing_status = 'ready'
+             WHERE id = $1`,
+            [bookId, collectionName]
         );
 
         const storedResult = await pool.query<StoredChunk>(
@@ -172,27 +200,6 @@ export const runLiveRagEval = async (
             );
         }
         const storedIds = new Set(storedResult.rows.map((chunk) => chunk.id));
-
-        const userResult = await pool.query<{ id: string }>(
-            `INSERT INTO users (email, name)
-             VALUES ($1, $2)
-             RETURNING id`,
-            [`rag-eval-${runToken}@reader.invalid`, "Reader RAG Eval"]
-        );
-        userId = userResult.rows[0].id;
-        const bookResult = await pool.query<{ id: string }>(
-            `INSERT INTO books
-                (title, user_id, file_key, file_type, collection_name, processing_status)
-             VALUES ($1, $2, $3, 'epub', $4, 'ready')
-             RETURNING id`,
-            [
-                "Alice's Adventures in Wonderland",
-                userId,
-                fileKey,
-                collectionName,
-            ]
-        );
-        bookId = bookResult.rows[0].id;
 
         const preparedCases: PreparedEvalCase[] = [];
         for (const testCase of cases) {
