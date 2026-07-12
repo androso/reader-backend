@@ -114,10 +114,12 @@ const installDbMock = ({
         values(values: ProgressMutationValues) {
             calls.insertedValues = values;
             return {
-                returning: async () =>
-                    table === Progress
-                        ? [{ id: "inserted-progress", ...values }]
-                        : [],
+                onConflictDoUpdate: () => ({
+                    returning: async () =>
+                        table === Progress
+                            ? [{ id: "inserted-progress", ...values }]
+                            : [],
+                }),
             };
         },
     });

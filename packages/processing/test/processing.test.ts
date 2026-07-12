@@ -63,6 +63,15 @@ const createMockSearchIndexStore = () => {
     };
 };
 
+test("preserves a short trailing chunk", () => {
+    const chunks = new TextChunker({
+        targetChunkSize: 20,
+        maxChunkSize: 40,
+        minChunkSize: 10,
+    }).chunkText("This is a sufficiently long sentence. Tiny.");
+    assert.equal(chunks.join(" ").includes("Tiny."), true);
+});
+
 test("processes EPUB with mocked storage and vector store", async () => {
     const vector = createMockVectorStore();
     const searchIndex = createMockSearchIndexStore();

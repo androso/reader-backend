@@ -16,7 +16,7 @@ export const extractPdfChunks = async (
             try {
                 for (const [pageIndex, page] of pdfData.Pages.entries()) {
                     const textPage = page.Texts.map((text) =>
-                        decodeURIComponent(text.R[0].T)
+                        text.R.map((run) => decodeURIComponent(run.T)).join("")
                     ).join(" ");
                     allChunks.push(
                         ...chunker.chunkText(textPage).map((content) => ({

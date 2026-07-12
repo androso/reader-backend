@@ -59,7 +59,7 @@ export const useEpubJsProcessor = (url: string) => {
         setStatus("loading");
         setChaptersLoading(true);
         let book = ePub(bookUrl, {
-            requestCredentials: true,
+            requestCredentials: true as unknown as object,
         });
 
         await book.loaded.navigation;

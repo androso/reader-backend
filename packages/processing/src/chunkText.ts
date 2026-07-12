@@ -41,7 +41,16 @@ export class TextChunker {
             chunks.push(...this.splitOversized(current));
         }
 
-        return chunks.filter((chunk) => chunk.length >= this.minChunkSize);
+        const nonEmpty = chunks.filter(Boolean);
+        if (
+            nonEmpty.length > 1 &&
+            nonEmpty[nonEmpty.length - 1].length < this.minChunkSize
+        ) {
+            const tail = nonEmpty.pop()!;
+            nonEmpty[nonEmpty.length - 1] =
+                `${nonEmpty[nonEmpty.length - 1]} ${tail}`.trim();
+        }
+        return nonEmpty;
     }
 
     private splitOversized(text: string): string[] {

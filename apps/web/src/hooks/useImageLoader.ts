@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
 
 interface ImageResource {
@@ -10,6 +10,15 @@ export const useImageLoader = (zipData: JSZip | null, basePath: string) => {
     const [imageResources, setImageResources] = useState<
         Record<string, ImageResource>
     >({});
+    const objectUrls = useRef(new Set<string>());
+
+    useEffect(() => {
+        setImageResources({});
+        return () => {
+            for (const url of objectUrls.current) URL.revokeObjectURL(url);
+            objectUrls.current.clear();
+        };
+    }, [zipData]);
 
     const createImageDataUrl = async (imagePath: string): Promise<string> => {
         if (!zipData) return "";
@@ -30,6 +39,7 @@ export const useImageLoader = (zipData: JSZip | null, basePath: string) => {
 
         const blob = new Blob([arrayBuffer], { type: mimeType });
         const url = URL.createObjectURL(blob);
+        objectUrls.current.add(url);
         if (!url) {
             console.log("no url found!!!");
         }

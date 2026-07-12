@@ -76,45 +76,25 @@ router.post(
                 return;
             }
 
-            const existingProgress = await db
-                .select()
-                .from(Progress)
-                .where(
-                    and(
-                        eq(Progress.userId, user_id),
-                        eq(Progress.bookId, book.id)
-                    )
-                );
-
-            let progress;
-            if (existingProgress.length > 0) {
-                [progress] = await db
-                    .update(Progress)
-                    .set({
+            const [progress] = await db
+                .insert(Progress)
+                .values({
+                    userId: user_id,
+                    bookId: book.id,
+                    progressPosition: progress_block,
+                    progressChapter: progress_chapter,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                })
+                .onConflictDoUpdate({
+                    target: [Progress.userId, Progress.bookId],
+                    set: {
                         progressPosition: progress_block,
                         progressChapter: progress_chapter,
                         updatedAt: new Date(),
-                    })
-                    .where(
-                        and(
-                            eq(Progress.userId, user_id),
-                            eq(Progress.bookId, book.id)
-                        )
-                    )
-                    .returning();
-            } else {
-                [progress] = await db
-                    .insert(Progress)
-                    .values({
-                        userId: user_id,
-                        bookId: book.id,
-                        progressPosition: progress_block,
-                        progressChapter: progress_chapter,
-                        createdAt: new Date(),
-                        updatedAt: new Date(),
-                    })
-                    .returning();
-            }
+                    },
+                })
+                .returning();
             res.status(201).json({ message: "Progress saved", data: progress });
         } catch (error) {
             console.error("Progress can't be tracked", error);

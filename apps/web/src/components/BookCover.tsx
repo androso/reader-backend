@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
 import type { Book } from "@/types/bookTypes";
 import { resolveRelativePath } from "@/lib/utils";
@@ -102,9 +102,27 @@ export default function BookCover({
     iconClassName = "text-4xl",
 }: BookCoverProps) {
     const [coverUrl, setCoverUrl] = useState<string | null>(null);
+    const [isVisible, setIsVisible] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (book.fileType !== "epub") {
+        const element = containerRef.current;
+        if (!element) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setIsVisible(true);
+                    observer.disconnect();
+                }
+            },
+            { rootMargin: "200px" }
+        );
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        if (book.fileType !== "epub" || !isVisible) {
             setCoverUrl(null);
             return;
         }
@@ -144,10 +162,11 @@ export default function BookCover({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [book.fileType, book.id]);
+    }, [book.fileType, book.id, isVisible]);
 
     return (
         <div
+            ref={containerRef}
             className={`relative flex items-center justify-center overflow-hidden bg-surface-container shadow-sm ${className}`}
         >
             {coverUrl ? (

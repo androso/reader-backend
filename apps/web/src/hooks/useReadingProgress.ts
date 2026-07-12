@@ -8,7 +8,6 @@ export const useReadingProgress = (
         const saved = localStorage.getItem(`book-progress-${bookId}`);
         return saved ? parseFloat(saved) : 0;
     });
-    const parentElement = contentRef.current?.parentElement;
 
     const calculateProgress = useCallback(() => {
         if (!contentRef || !contentRef.current) return;
@@ -26,30 +25,32 @@ export const useReadingProgress = (
     }, [contentRef, bookId]);
 
     useEffect(() => {
-        if (!contentRef || !contentRef.current) return;
+        if (!contentRef.current) return;
         const element = contentRef.current.parentElement;
-        if (!element || element.scrollHeight == element.clientHeight) return;
+        if (!element) return;
 
         const savedProgress = localStorage.getItem(`book-progress-${bookId}`);
-        // console.log({savedProgress})
-        if (savedProgress) {
-            const progressValue = parseFloat(savedProgress);
+        let restored = false;
+        const restore = () => {
+            if (!savedProgress || restored) return;
             const scrollHeight = element.scrollHeight;
             const clientHeight = element.clientHeight;
             const contentHeight = scrollHeight - clientHeight;
-            const scrollPosition = (progressValue / 100) * contentHeight;
-            // console.log({scrollHeight, clientHeight, contentHeight, progressValue})
-            setTimeout(() => {
-                element.scrollTop = scrollPosition;
-            }, 0);
-        }
-    }, [
-        bookId,
-        contentRef,
-        contentRef.current,
-        parentElement?.clientHeight,
-        parentElement?.scrollHeight,
-    ]);
+            if (contentHeight <= 0) return;
+            const progressValue = Math.min(
+                Math.max(Number.parseFloat(savedProgress), 0),
+                100
+            );
+            element.scrollTop = (progressValue / 100) * contentHeight;
+            restored = true;
+        };
+        const observer = new ResizeObserver(() =>
+            requestAnimationFrame(restore)
+        );
+        observer.observe(element);
+        restore();
+        return () => observer.disconnect();
+    }, [bookId, contentRef]);
 
     useEffect(() => {
         if (!contentRef || !contentRef.current) return;
@@ -66,7 +67,7 @@ export const useReadingProgress = (
         return () => {
             element.removeEventListener("scroll", handleScroll);
         };
-    }, [contentRef.current, calculateProgress]);
+    }, [contentRef, calculateProgress]);
 
     return progress;
 };
