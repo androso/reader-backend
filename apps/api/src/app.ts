@@ -9,6 +9,7 @@ import tracker from "./routes/Tracker.routes";
 import cors from "cors";
 import { logger } from "./middleware/logger";
 import { enforceTrustedOrigin } from "./middleware/csrf";
+import { authRateLimit } from "./middleware/rateLimit";
 dotenv.config();
 
 const app = express();
@@ -56,7 +57,7 @@ app.get("/", (req, res) => {
 app.use("/health", healthRoutes);
 
 // auth routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authRateLimit, authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/books", bookRoutes);
 app.use("/api", chatRoutes);

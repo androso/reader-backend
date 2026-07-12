@@ -20,6 +20,7 @@ import { createOriginalUploadKey } from "../utils/uploadKeys";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { createBookCollectionName } from "@reader/processing";
 import { validateBookUpload } from "../utils/validateBookUpload";
+import { uploadRateLimit } from "../middleware/rateLimit";
 
 const log = createLogger("books");
 
@@ -205,110 +206,121 @@ export const handleGetBookFile = async (
  *                   type: string
  *                   example: "File size exceeds 80MB limit"
  */
-router.post("/", authenticate, upload.single("file"), async (req, res) => {
-    const requestStart = Date.now();
-    log.info("Book upload request received", {
-        userId: req.user.id,
-        fileName: req.file?.originalname,
-        mimeType: req.file?.mimetype,
-    });
-    try {
-        if (!req.file) {
-            log.warn("Book upload rejected: no file");
-            res.status(400).json({ error: "No file uploaded" });
-            return;
-        }
-        const fileBuffer = req.file.buffer;
-        let fileType: "pdf" | "epub";
-        try {
-            fileType = await validateBookUpload(fileBuffer);
-        } catch (error) {
-            log.warn("Book upload rejected: unsupported file type", {
-                mimeType: req.file.mimetype,
-                userId: req.user.id,
-                error: error instanceof Error ? error.message : String(error),
-            });
-            res.status(400).json({
-                error: "Invalid PDF or EPUB file",
-            });
-            return;
-        }
-        const mimeType =
-            fileType === "pdf" ? "application/pdf" : "application/epub+zip";
-        const bookId = randomUUID();
-        const fileKey = createOriginalUploadKey(req.user.id, bookId);
-
-        log.info("Uploading file to storage", {
+router.post(
+    "/",
+    authenticate,
+    uploadRateLimit,
+    upload.single("file"),
+    async (req, res) => {
+        const requestStart = Date.now();
+        log.info("Book upload request received", {
             userId: req.user.id,
-            fileKey,
-            mimeType,
+            fileName: req.file?.originalname,
+            mimeType: req.file?.mimetype,
         });
-        await uploadFile(fileKey, fileBuffer);
-        log.info("File uploaded to storage", { userId: req.user.id, fileKey });
-        const [book] = await db
-            .insert(Books)
-            .values({
-                id: bookId,
-                title: req.file.originalname,
+        try {
+            if (!req.file) {
+                log.warn("Book upload rejected: no file");
+                res.status(400).json({ error: "No file uploaded" });
+                return;
+            }
+            const fileBuffer = req.file.buffer;
+            let fileType: "pdf" | "epub";
+            try {
+                fileType = await validateBookUpload(fileBuffer);
+            } catch (error) {
+                log.warn("Book upload rejected: unsupported file type", {
+                    mimeType: req.file.mimetype,
+                    userId: req.user.id,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                });
+                res.status(400).json({
+                    error: "Invalid PDF or EPUB file",
+                });
+                return;
+            }
+            const mimeType =
+                fileType === "pdf" ? "application/pdf" : "application/epub+zip";
+            const bookId = randomUUID();
+            const fileKey = createOriginalUploadKey(req.user.id, bookId);
+
+            log.info("Uploading file to storage", {
+                userId: req.user.id,
+                fileKey,
+                mimeType,
+            });
+            await uploadFile(fileKey, fileBuffer);
+            log.info("File uploaded to storage", {
+                userId: req.user.id,
+                fileKey,
+            });
+            const [book] = await db
+                .insert(Books)
+                .values({
+                    id: bookId,
+                    title: req.file.originalname,
+                    userId: req.user.id,
+                    fileKey,
+                    fileType,
+                    processingStatus: "processing",
+                    processingError: null,
+                })
+                .returning();
+            log.info("Book record created", {
+                bookId: book.id,
                 userId: req.user.id,
                 fileKey,
                 fileType,
-                processingStatus: "processing",
-                processingError: null,
-            })
-            .returning();
-        log.info("Book record created", {
-            bookId: book.id,
-            userId: req.user.id,
-            fileKey,
-            fileType,
-        });
+            });
 
-        try {
-            await handleBookProcessingEnqueue({
+            try {
+                await handleBookProcessingEnqueue({
+                    bookId: book.id,
+                    userId: book.userId,
+                    fileKey: book.fileKey,
+                    fileType,
+                });
+            } catch (error) {
+                log.error("Book processing enqueue failed", {
+                    bookId: book.id,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                });
+                res.status(503).json({
+                    error: "Book processing queue is unavailable",
+                });
+                return;
+            }
+
+            const [queuedBook] = await db
+                .select()
+                .from(Books)
+                .where(eq(Books.id, book.id));
+
+            const duration = Date.now() - requestStart;
+            log.info("Book upload accepted", {
                 bookId: book.id,
-                userId: book.userId,
-                fileKey: book.fileKey,
-                fileType,
+                durationMs: duration,
+                fileKey,
             });
-        } catch (error) {
-            log.error("Book processing enqueue failed", {
-                bookId: book.id,
-                error: error instanceof Error ? error.message : String(error),
+            res.status(202).json({
+                message: "File upload accepted for processing",
+                book: queuedBook ?? book,
+                processStatus: "processing",
+                fileType: mimeType,
             });
-            res.status(503).json({
-                error: "Book processing queue is unavailable",
+        } catch (e) {
+            const duration = Date.now() - requestStart;
+            log.error("Book upload failed", {
+                userId: req.user.id,
+                durationMs: duration,
+                error: e instanceof Error ? e.message : String(e),
             });
-            return;
+            res.status(500).json({ error: "Upload failed" });
         }
-
-        const [queuedBook] = await db
-            .select()
-            .from(Books)
-            .where(eq(Books.id, book.id));
-
-        const duration = Date.now() - requestStart;
-        log.info("Book upload accepted", {
-            bookId: book.id,
-            durationMs: duration,
-            fileKey,
-        });
-        res.status(202).json({
-            message: "File upload accepted for processing",
-            book: queuedBook ?? book,
-            processStatus: "processing",
-            fileType: mimeType,
-        });
-    } catch (e) {
-        const duration = Date.now() - requestStart;
-        log.error("Book upload failed", {
-            userId: req.user.id,
-            durationMs: duration,
-            error: e instanceof Error ? e.message : String(e),
-        });
-        res.status(500).json({ error: "Upload failed" });
     }
-});
+);
 
 /**
  * @swagger

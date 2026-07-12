@@ -59,6 +59,7 @@
         "epub": "^1.2.1",
         "express": "^4.21.2",
         "google-auth-library": "^9.15.0",
+        "ioredis": "^5.0.0",
         "jsdom": "^25.0.1",
         "jsonwebtoken": "^9.0.2",
         "jszip": "^3.10.1",

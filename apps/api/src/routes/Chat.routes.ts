@@ -23,6 +23,7 @@ import {
     type HighlightContext,
 } from "../services/HighlightContext";
 import { Router, Request, Response } from "express";
+import { chatRateLimit } from "../middleware/rateLimit";
 import {
     appendSubmittedUserMessage,
     buildUserMessageInsert,
@@ -486,6 +487,7 @@ const runBookChatTraceIfNeeded = <T>(
 router.post(
     "/:resourceType/:id/conversations",
     authenticate,
+    chatRateLimit,
     async (req: Request, res) => {
         try {
             const { model } = req.body;
@@ -620,6 +622,7 @@ router.get(
 router.post(
     "/:resourceType/:rid/conversations/:cid/messages",
     authenticate,
+    chatRateLimit,
     async (req, res) => {
         try {
             const {
