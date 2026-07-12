@@ -13,9 +13,13 @@
     },
     "dependencies": {
         "@langfuse/client": "^5.9.0",
+        "@langfuse/otel": "^5.9.0",
+        "@langfuse/tracing": "^5.9.0",
         "@reader/api": "workspace:*",
         "@reader/processing": "workspace:*",
         "@reader/providers": "workspace:*",
+        "@opentelemetry/sdk-node": "^0.219.0",
+        "@opentelemetry/sdk-trace-base": "^2.8.0",
         "dotenv": "16.4.7",
         "openai": "^4.77.0",
         "pg": "^8.21.0"

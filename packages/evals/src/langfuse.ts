@@ -2,34 +2,72 @@ import crypto from "node:crypto";
 import type { RagEvalCase, RagEvalReport } from "./types";
 import { getLangfuseDatasetName } from "./config";
 
-type LangfuseIngestionResponse = {
-    errors?: Array<{ id: string; message?: string }>;
-};
-
 type LangfuseClientLike = {
     api?: {
         datasets?: {
             create?: (input: unknown) => Promise<unknown>;
-        };
-        scores?: {
-            create?: (input: unknown) => Promise<unknown>;
-        };
-        ingestion?: {
-            batch?: (input: unknown) => Promise<LangfuseIngestionResponse>;
         };
     };
     dataset?: {
         create?: (name: string) => Promise<unknown>;
         createItem?: (input: unknown) => Promise<unknown>;
     };
+    score?: {
+        create?: (input: unknown) => void;
+    };
+    flush?: () => Promise<void>;
 };
 
-const createTraceId = (runId: string, caseId: string) =>
-    crypto
-        .createHash("sha256")
-        .update(`${runId}:${caseId}`)
-        .digest("hex")
-        .slice(0, 32);
+type LangfuseObservationLike = {
+    traceId: string;
+    update: (attributes: Record<string, unknown>) => unknown;
+    end: () => void;
+};
+
+type LangfuseTracingRuntime = {
+    startObservation: (input: {
+        name: string;
+        input: string;
+        metadata: Record<string, string>;
+    }) => LangfuseObservationLike;
+    shutdown: () => Promise<void>;
+};
+
+const createLangfuseTracingRuntime =
+    async (): Promise<LangfuseTracingRuntime> => {
+        const [{ LangfuseSpanProcessor }, { startObservation }, { NodeSDK }] =
+            await Promise.all([
+                import("@langfuse/otel"),
+                import("@langfuse/tracing"),
+                import("@opentelemetry/sdk-node"),
+            ]);
+        const sdk = new NodeSDK({
+            serviceName: "reader-rag-evals",
+            spanProcessors: [
+                new LangfuseSpanProcessor({
+                    publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+                    secretKey: process.env.LANGFUSE_SECRET_KEY,
+                    baseUrl: process.env.LANGFUSE_BASE_URL || undefined,
+                    environment: process.env.NODE_ENV || "ci",
+                }),
+            ],
+        });
+        sdk.start();
+
+        return {
+            startObservation: ({ name, input, metadata }) => {
+                const observation = startObservation(
+                    name,
+                    { input, metadata },
+                    { asType: "chain" }
+                );
+                return observation;
+            },
+            shutdown: async () => {
+                await sdk.shutdown();
+            },
+        };
+    };
 
 const createDatasetItemId = (datasetName: string, caseId: string) =>
     `reader-rag-${crypto
@@ -66,7 +104,8 @@ const ignoreAlreadyExists = async (operation: () => Promise<unknown>) => {
 export const syncReportToLangfuse = async (
     report: RagEvalReport,
     cases: RagEvalCase[],
-    clientPromise = createLangfuseClient()
+    clientPromise = createLangfuseClient(),
+    tracingRuntimePromise?: Promise<LangfuseTracingRuntime>
 ) => {
     const client = await clientPromise;
     const datasetName = getLangfuseDatasetName();
@@ -118,151 +157,150 @@ export const syncReportToLangfuse = async (
         );
     }
 
-    if (!client.api?.scores?.create || !client.api.ingestion?.batch) {
-        return {
-            datasetName,
-            syncedItems: cases.length,
-            syncedScores: 0,
-            warning:
-                "Installed Langfuse client does not expose trace ingestion and score creation; dataset items were synced.",
-        };
-    }
-
     const answerCases = report.answers?.cases ?? [];
     const traceKey = (caseId: string, answerModel: string) =>
         `${caseId}:${answerModel}`;
-    const traceIds = new Map(
-        answerCases.map((result) => {
-            const key = traceKey(result.id, result.answerModel);
-            return [key, createTraceId(report.runId, key)];
-        })
-    );
-    const ingestion = await client.api.ingestion.batch({
-        batch: answerCases.map((result) => ({
-            type: "trace-create",
-            id: crypto.randomUUID(),
-            timestamp: report.createdAt,
-            body: {
-                id: traceIds.get(traceKey(result.id, result.answerModel)),
-                timestamp: report.createdAt,
+    let tracingRuntime: LangfuseTracingRuntime | undefined;
+    const observations = new Map<string, LangfuseObservationLike>();
+    let syncedScores = 0;
+
+    try {
+        tracingRuntime = await (tracingRuntimePromise ??
+            createLangfuseTracingRuntime());
+        if (!client.score?.create) {
+            throw new Error(
+                "Installed Langfuse client does not support scores"
+            );
+        }
+        const createScoreEvent = client.score.create.bind(client.score);
+        for (const result of answerCases) {
+            const observation = tracingRuntime.startObservation({
                 name: "reader-rag-eval",
                 input: result.question,
-                output: result.answer,
                 metadata: {
                     runId: report.runId,
                     caseId: result.id,
                     answerModel: result.answerModel,
                     source: "packages/evals",
                 },
-                tags: ["reader-rag-eval"],
-            },
-        })),
-    });
-    if (ingestion.errors?.length) {
-        throw new Error(
-            `Langfuse trace ingestion failed: ${ingestion.errors
-                .map((error) => error.message || error.id)
-                .join(", ")}`
-        );
-    }
+            });
+            observation.update({ output: result.answer });
+            observations.set(
+                traceKey(result.id, result.answerModel),
+                observation
+            );
+        }
 
-    let syncedScores = 0;
-    const createScore = async (
-        caseId: string,
-        answerModel: string,
-        name: string,
-        value: number,
-        traceId?: string
-    ) => {
-        if (!traceId) return;
-        await client.api!.scores!.create!({
-            name,
-            value,
-            traceId,
-            comment: `Reader RAG eval ${report.runId} case ${caseId} model ${answerModel}`,
-            metadata: {
-                runId: report.runId,
-                caseId,
-                answerModel,
-                source: "packages/evals",
-            },
-        });
-        syncedScores += 1;
-    };
+        const createScore = async (
+            caseId: string,
+            answerModel: string,
+            name: string,
+            value: number,
+            traceId?: string,
+            dataType: "NUMERIC" | "BOOLEAN" = "NUMERIC"
+        ) => {
+            if (!traceId) return;
+            createScoreEvent({
+                name,
+                value,
+                traceId,
+                dataType,
+                comment: `Reader RAG eval ${report.runId} case ${caseId} model ${answerModel}`,
+                metadata: {
+                    runId: report.runId,
+                    caseId,
+                    answerModel,
+                    source: "packages/evals",
+                },
+            });
+            syncedScores += 1;
+        };
 
-    for (const result of answerCases) {
-        const traceId = traceIds.get(
-            traceKey(result.id, result.answerModel)
-        );
-        await createScore(
-            result.id,
-            result.answerModel,
-            "rag_eval_groundedness",
-            result.scores.groundedness,
-            traceId
-        );
-        await createScore(
-            result.id,
-            result.answerModel,
-            "rag_eval_citation_coverage",
-            result.scores.citationCoverage,
-            traceId
-        );
-        await createScore(
-            result.id,
-            result.answerModel,
-            "rag_eval_hallucination_rate",
-            result.scores.hallucinationRate,
-            traceId
-        );
-        await createScore(
-            result.id,
-            result.answerModel,
-            "rag_eval_refusal_correctness",
-            result.scores.refusalCorrectness,
-            traceId
-        );
-
-        const retrieval = report.retrieval.cases.find(
-            (candidate) => candidate.id === result.id
-        );
-        if (!retrieval) continue;
-        await createScore(
-            result.id,
-            result.answerModel,
-            "rag_eval_recall_at_k",
-            retrieval.recallAtK,
-            traceId
-        );
-        await createScore(
-            result.id,
-            result.answerModel,
-            "rag_eval_reciprocal_rank",
-            retrieval.reciprocalRank,
-            traceId
-        );
-        await createScore(
-            result.id,
-            result.answerModel,
-            "rag_eval_vector_reciprocal_rank",
-            retrieval.vectorReciprocalRank,
-            traceId
-        );
-        await createScore(
-            result.id,
-            result.answerModel,
-            "rag_eval_vector_id_alignment",
-            retrieval.vectorIdsAligned ? 1 : 0,
-            traceId
-        );
-        if (retrieval.chapterCorrect !== null) {
+        for (const result of answerCases) {
+            const traceId = observations.get(
+                traceKey(result.id, result.answerModel)
+            )?.traceId;
             await createScore(
                 result.id,
                 result.answerModel,
-                "rag_eval_chapter_accuracy",
-                retrieval.chapterCorrect ? 1 : 0,
+                "rag_eval_groundedness",
+                result.scores.groundedness,
                 traceId
             );
+            await createScore(
+                result.id,
+                result.answerModel,
+                "rag_eval_citation_coverage",
+                result.scores.citationCoverage,
+                traceId
+            );
+            await createScore(
+                result.id,
+                result.answerModel,
+                "rag_eval_hallucination_rate",
+                result.scores.hallucinationRate,
+                traceId
+            );
+            await createScore(
+                result.id,
+                result.answerModel,
+                "rag_eval_refusal_correctness",
+                result.scores.refusalCorrectness,
+                traceId
+            );
+
+            const retrieval = report.retrieval.cases.find(
+                (candidate) => candidate.id === result.id
+            );
+            if (!retrieval) continue;
+            await createScore(
+                result.id,
+                result.answerModel,
+                "rag_eval_recall_at_k",
+                retrieval.recallAtK,
+                traceId
+            );
+            await createScore(
+                result.id,
+                result.answerModel,
+                "rag_eval_reciprocal_rank",
+                retrieval.reciprocalRank,
+                traceId
+            );
+            await createScore(
+                result.id,
+                result.answerModel,
+                "rag_eval_vector_reciprocal_rank",
+                retrieval.vectorReciprocalRank,
+                traceId
+            );
+            await createScore(
+                result.id,
+                result.answerModel,
+                "rag_eval_vector_id_alignment",
+                retrieval.vectorIdsAligned ? 1 : 0,
+                traceId,
+                "BOOLEAN"
+            );
+            if (retrieval.chapterCorrect !== null) {
+                await createScore(
+                    result.id,
+                    result.answerModel,
+                    "rag_eval_chapter_accuracy",
+                    retrieval.chapterCorrect ? 1 : 0,
+                    traceId,
+                    "BOOLEAN"
+                );
+            }
+        }
+    } finally {
+        for (const observation of observations.values()) observation.end();
+        if (tracingRuntime) {
+            try {
+                await client.flush?.();
+            } finally {
+                await tracingRuntime.shutdown();
+            }
         }
     }
 

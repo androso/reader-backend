@@ -5,7 +5,9 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { getEvalThresholds } = require("../dist/config");
+const { hasLangfuseConfig } = require("../dist/config");
 const { loadGoldenDataset } = require("../dist/dataset");
+const { syncReportToLangfuse } = require("../dist/langfuse");
 const { scoreRetrievalEval } = require("../dist/retrieval");
 const { buildJudgePrompt, runAnswerEval } = require("../dist/answerJudge");
 
@@ -18,6 +20,63 @@ const thresholds = {
     minCitationCoverage: 0.8,
     minRefusalCorrectness: 0.8,
     maxHallucinationRate: 0.2,
+};
+
+const langfuseCase = {
+    id: "case-1",
+    question: "What happened?",
+    expectedAnswer: "Something happened.",
+    expectedEvidenceText: "Something happened.",
+};
+
+const langfuseReport = {
+    runId: "rag-eval-test",
+    createdAt: "2026-07-11T00:00:00.000Z",
+    answerModels: ["answer-model"],
+    judgeModel: "judge-model",
+    thresholds,
+    fixture: {
+        title: "Fixture",
+        author: "Author",
+        sha256: "fixture-sha",
+        sourceRevision: "revision",
+    },
+    ingestion: {
+        collectionName: "collection",
+        extractedChunkCount: 1,
+        storedChunkCount: 1,
+    },
+    retrieval: {
+        summary: {},
+        cases: [
+            {
+                id: "case-1",
+                recallAtK: 1,
+                reciprocalRank: 1,
+                vectorReciprocalRank: 1,
+                vectorIdsAligned: true,
+                chapterCorrect: true,
+            },
+        ],
+    },
+    answers: {
+        summary: {},
+        cases: [
+            {
+                id: "case-1",
+                question: langfuseCase.question,
+                answer: "Something happened.",
+                expectedAnswer: langfuseCase.expectedAnswer,
+                answerModel: "answer-model",
+                scores: {
+                    groundedness: 0.9,
+                    citationCoverage: 0.8,
+                    hallucinationRate: 0.1,
+                    refusalCorrectness: 1,
+                },
+            },
+        ],
+    },
 };
 
 test("negative retrieval cases are not reported as source hits", () => {
@@ -43,6 +102,140 @@ test("negative retrieval cases are not reported as source hits", () => {
     assert.equal(result.cases[0].sourceHit, false);
     assert.equal(result.cases[0].vectorSourceHit, false);
     assert.equal(result.cases[0].chunkWindowHit, false);
+});
+
+test("Langfuse publication links traces and scores and flushes both clients", async () => {
+    const datasetItems = [];
+    const scores = [];
+    const observations = [];
+    const lifecycle = [];
+    const client = {
+        api: {
+            datasets: {
+                async create() {
+                    lifecycle.push("dataset");
+                },
+            },
+        },
+        dataset: {
+            async createItem(item) {
+                datasetItems.push(item);
+            },
+        },
+        score: {
+            create(score) {
+                scores.push(score);
+            },
+        },
+        async flush() {
+            lifecycle.push("flush");
+        },
+    };
+    const tracingRuntime = {
+        startObservation(input) {
+            const observation = {
+                traceId: `trace-${observations.length + 1}`,
+                update(output) {
+                    observation.output = output;
+                },
+                end() {
+                    lifecycle.push(`end:${observation.traceId}`);
+                },
+            };
+            observations.push({ input, observation });
+            return observation;
+        },
+        async shutdown() {
+            lifecycle.push("shutdown");
+        },
+    };
+
+    const result = await syncReportToLangfuse(
+        langfuseReport,
+        [langfuseCase],
+        Promise.resolve(client),
+        Promise.resolve(tracingRuntime)
+    );
+
+    assert.deepEqual(result, {
+        datasetName: "reader/rag-golden",
+        syncedItems: 1,
+        syncedScores: 9,
+    });
+    assert.equal(datasetItems.length, 1);
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0].input.name, "reader-rag-eval");
+    assert.equal(observations[0].input.metadata.caseId, "case-1");
+    assert.ok(scores.length > 0);
+    assert.ok(scores.every((score) => score.traceId === "trace-1"));
+    assert.equal(
+        scores.find((score) => score.name === "rag_eval_groundedness").value,
+        0.9
+    );
+    assert.equal(
+        scores.find((score) => score.name === "rag_eval_vector_id_alignment")
+            .dataType,
+        "BOOLEAN"
+    );
+    assert.deepEqual(lifecycle.slice(-3), ["end:trace-1", "flush", "shutdown"]);
+});
+
+test("Langfuse configuration is skipped when either credential is absent", () => {
+    const previousPublic = process.env.LANGFUSE_PUBLIC_KEY;
+    const previousSecret = process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    try {
+        assert.equal(hasLangfuseConfig(), false);
+    } finally {
+        if (previousPublic === undefined)
+            delete process.env.LANGFUSE_PUBLIC_KEY;
+        else process.env.LANGFUSE_PUBLIC_KEY = previousPublic;
+        if (previousSecret === undefined)
+            delete process.env.LANGFUSE_SECRET_KEY;
+        else process.env.LANGFUSE_SECRET_KEY = previousSecret;
+    }
+});
+
+test("Langfuse publication failures still shut down tracing", async () => {
+    const lifecycle = [];
+    const client = {
+        api: { datasets: { async create() {} } },
+        dataset: { async createItem() {} },
+        score: {
+            create() {
+                throw new Error("score upload failed");
+            },
+        },
+        async flush() {
+            lifecycle.push("flush");
+        },
+    };
+    const tracingRuntime = {
+        startObservation() {
+            return {
+                traceId: "trace-failure",
+                update() {},
+                end() {
+                    lifecycle.push("end");
+                },
+            };
+        },
+        async shutdown() {
+            lifecycle.push("shutdown");
+        },
+    };
+
+    await assert.rejects(
+        syncReportToLangfuse(
+            langfuseReport,
+            [langfuseCase],
+            Promise.resolve(client),
+            Promise.resolve(tracingRuntime)
+        ),
+        /score upload failed/
+    );
+    assert.deepEqual(lifecycle, ["end", "flush", "shutdown"]);
 });
 
 test("thresholds reject values outside the unit interval", () => {
