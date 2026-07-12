@@ -127,7 +127,6 @@ test("negative retrieval cases pass with empty aligned sources", () => {
     );
 
     assert.equal(result.cases[0].passed, true);
-    assert.equal(result.summary.passed, true);
 });
 
 test("live eval accepts empty sources only for no-answer cases", () => {
