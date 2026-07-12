@@ -5,7 +5,8 @@
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
-        "build": "tsc -p tsconfig.json"
+        "build": "tsc -p tsconfig.json",
+        "test": "tsc -p tsconfig.test.json && NODE_PATH=./node_modules node --test ../../.tmp/packages-providers-test/test/vectorStore.test.js"
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.723.0",
