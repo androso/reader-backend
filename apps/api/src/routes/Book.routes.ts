@@ -19,6 +19,7 @@ import { handleBookProcessingEnqueue } from "../services/BookProcessingEnqueueSe
 import { createOriginalUploadKey } from "../utils/uploadKeys";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { createBookCollectionName } from "@reader/processing";
+import { validateBookUpload } from "../utils/validateBookUpload";
 
 const log = createLogger("books");
 
@@ -217,19 +218,23 @@ router.post("/", authenticate, upload.single("file"), async (req, res) => {
             res.status(400).json({ error: "No file uploaded" });
             return;
         }
-        const mimeType = req.file.mimetype;
         const fileBuffer = req.file.buffer;
-        // Validate file type
-        if (!["application/pdf", "application/epub+zip"].includes(mimeType)) {
+        let fileType: "pdf" | "epub";
+        try {
+            fileType = await validateBookUpload(fileBuffer);
+        } catch (error) {
             log.warn("Book upload rejected: unsupported file type", {
-                mimeType,
+                mimeType: req.file.mimetype,
                 userId: req.user.id,
+                error: error instanceof Error ? error.message : String(error),
             });
             res.status(400).json({
-                error: "Unsupported file type. Only PDF and EPUB are supported.",
+                error: "Invalid PDF or EPUB file",
             });
             return;
         }
+        const mimeType =
+            fileType === "pdf" ? "application/pdf" : "application/epub+zip";
         const bookId = randomUUID();
         const fileKey = createOriginalUploadKey(req.user.id, bookId);
 
@@ -240,8 +245,6 @@ router.post("/", authenticate, upload.single("file"), async (req, res) => {
         });
         await uploadFile(fileKey, fileBuffer);
         log.info("File uploaded to storage", { userId: req.user.id, fileKey });
-        const fileType = mimeType === "application/pdf" ? "pdf" : "epub";
-
         const [book] = await db
             .insert(Books)
             .values({
