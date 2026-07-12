@@ -47,7 +47,7 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
           )
         : null;
     const passed = noAnswerExpected
-        ? testCase.vectorIdsAligned
+        ? testCase.vectorIdsAligned && testCase.sources.length === 0
         : sourceHit &&
           vectorSourceHit &&
           testCase.vectorIdsAligned &&

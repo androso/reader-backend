@@ -102,6 +102,7 @@ test("negative retrieval cases are not reported as source hits", () => {
     assert.equal(result.cases[0].sourceHit, false);
     assert.equal(result.cases[0].vectorSourceHit, false);
     assert.equal(result.cases[0].chunkWindowHit, false);
+    assert.equal(result.cases[0].passed, false);
 });
 
 test("Langfuse publication links traces and scores and flushes both clients", async () => {
