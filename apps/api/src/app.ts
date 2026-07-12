@@ -8,6 +8,7 @@ import healthRoutes from "./routes/Health.routes";
 import tracker from "./routes/Tracker.routes";
 import cors from "cors";
 import { logger } from "./middleware/logger";
+import { enforceTrustedOrigin } from "./middleware/csrf";
 dotenv.config();
 
 const app = express();
@@ -46,6 +47,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(logger);
+app.use(enforceTrustedOrigin);
 
 app.get("/", (req, res) => {
     res.send("Hello World");
@@ -59,4 +61,17 @@ app.use("/api/user", userRoutes);
 app.use("/api/books", bookRoutes);
 app.use("/api", chatRoutes);
 app.use("/api", tracker);
+
+app.use(
+    (
+        error: unknown,
+        _req: express.Request,
+        res: express.Response,
+        _next: express.NextFunction
+    ) => {
+        console.error("Unhandled request error", error);
+        if (!res.headersSent)
+            res.status(500).json({ error: "Internal server error" });
+    }
+);
 export default app;

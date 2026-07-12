@@ -15,30 +15,24 @@ if (
     throw new Error("Missing required Google auth environment variables");
 }
 
-const client = new OAuth2Client({
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-});
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export const verifyGoogleToken = async (token: string) => {
     try {
-        const response = await fetch(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            {
-                headers: { Authorization: `Bearer ${token}` },
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error("Failed to verify token");
+        if (!token || !process.env.GOOGLE_CLIENT_ID) {
+            throw new Error("Google ID token or client ID is missing");
         }
-
-        const data = await response.json();
+        const ticket = await client.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        const data = ticket.getPayload();
+        if (!data?.sub || !data.email) throw new Error("Invalid ID token");
 
         return {
             sub: data.sub,
             email: data.email,
-            name: data.name,
+            name: data.name ?? data.email,
             picture: data.picture,
         };
     } catch (e) {

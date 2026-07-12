@@ -20,11 +20,8 @@ const PdfReader: React.FC<PdfReaderProps> = memo(({ url }) => {
                 setError(null);
                 setPdfUrl(null);
 
-                const token = localStorage.getItem("token");
                 const response = await fetch(url, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
+                    credentials: "include",
                 });
 
                 if (!response.ok) {

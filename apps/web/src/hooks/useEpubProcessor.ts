@@ -15,11 +15,8 @@ export const useEpubProcessor = () => {
         try {
             setIsLoading(true);
             setError(null);
-            const token = localStorage.getItem("token");
             const response = await fetch(url, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+                credentials: "include",
             });
             if (!response.ok) {
                 throw new Error(`Failed to fetch EPUB: ${response.statusText}`);
@@ -60,12 +57,9 @@ export const useEpubJsProcessor = (url: string) => {
 
     const processEpubJs = async (bookUrl: string) => {
         setStatus("loading");
-        const token = localStorage.getItem("token");
         setChaptersLoading(true);
         let book = ePub(bookUrl, {
-            requestHeaders: {
-                Authorization: `Bearer ${token}`,
-            },
+            requestCredentials: true,
         });
 
         await book.loaded.navigation;

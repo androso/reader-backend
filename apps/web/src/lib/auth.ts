@@ -12,14 +12,10 @@ export function useUser() {
     return useQuery({
         queryKey: [`${process.env.NEXT_PUBLIC_API_URL}/api/user`],
         queryFn: async () => {
-            const token = localStorage.getItem("token");
-            if (!token) return null;
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/api/user`,
                 {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
+                    credentials: "include",
                 }
             );
             if (!response.ok) {
@@ -34,7 +30,7 @@ export function useUser() {
 
 export function useGoogleSignIn() {
     return useMutation({
-        mutationFn: async (token: string) => {
+        mutationFn: async (idToken: string) => {
             try {
                 const res = await fetch(
                     `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`,
@@ -43,7 +39,8 @@ export function useGoogleSignIn() {
                         headers: {
                             "Content-Type": "application/json",
                         },
-                        body: JSON.stringify({ token }),
+                        credentials: "include",
+                        body: JSON.stringify({ idToken }),
                     }
                 );
 
@@ -52,8 +49,6 @@ export function useGoogleSignIn() {
                 }
 
                 const data = await res.json();
-                localStorage.setItem("token", data.token);
-                localStorage.setItem("user", JSON.stringify(data.user));
                 return data;
             } catch (error) {
                 console.error("Error in Google sign-in mutation:", error);
@@ -80,6 +75,7 @@ export function useDevSignIn() {
                     `${process.env.NEXT_PUBLIC_API_URL}/api/auth/dev`,
                     {
                         method: "POST",
+                        credentials: "include",
                     }
                 );
 
@@ -91,8 +87,6 @@ export function useDevSignIn() {
                 }
 
                 const data = await res.json();
-                localStorage.setItem("token", data.token);
-                localStorage.setItem("user", JSON.stringify(data.user));
                 return data;
             } catch (error) {
                 console.error("Error in dev sign-in mutation:", error);
@@ -114,8 +108,13 @@ export function useDevSignIn() {
     });
 }
 
-export function signOut() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    queryClient.clear();
+export async function signOut() {
+    try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, {
+            method: "POST",
+            credentials: "include",
+        });
+    } finally {
+        queryClient.clear();
+    }
 }

@@ -7,6 +7,8 @@ import {
 import { db } from "../db";
 import { Users } from "../db/schema";
 import { eq } from "drizzle-orm";
+import { asyncHandler } from "../middleware/asyncHandler";
+import { clearAuthCookies, setAuthCookie } from "../utils/authCookie";
 const router: Router = express.Router();
 
 /**
@@ -56,56 +58,69 @@ const router: Router = express.Router();
  *                   example: "Invalid Google OAuth token"
  */
 
-router.post("/google", async (req, res) => {
-    try {
-        const { token } = req.body;
-        const payload = await verifyGoogleToken(token);
-        const [existingUser] = await db
-            .select()
-            .from(Users)
-            .where(eq(Users.googleId, payload.sub));
+router.post(
+    "/google",
+    asyncHandler(async (req, res) => {
+        try {
+            const { idToken } = req.body;
+            const payload = await verifyGoogleToken(idToken);
+            const [existingUser] = await db
+                .select()
+                .from(Users)
+                .where(eq(Users.googleId, payload.sub));
 
-        let user = existingUser;
-        if (!user) {
-            [user] = await db
-                .insert(Users)
-                .values({
-                    googleId: payload.sub,
-                    email: payload.email,
-                    name: payload.name,
-                    // picture: payload.picture
-                })
-                .returning();
-        } else {
-            [user] = await db
-                .update(Users)
-                .set({ updatedAt: new Date() })
-                .where(eq(Users.googleId, payload.sub))
-                .returning();
+            let user = existingUser;
+            if (!user) {
+                [user] = await db
+                    .insert(Users)
+                    .values({
+                        googleId: payload.sub,
+                        email: payload.email,
+                        name: payload.name,
+                        // picture: payload.picture
+                    })
+                    .returning();
+            } else {
+                [user] = await db
+                    .update(Users)
+                    .set({ updatedAt: new Date() })
+                    .where(eq(Users.googleId, payload.sub))
+                    .returning();
+            }
+
+            const jwtToken = generateToken(user);
+            setAuthCookie(res, jwtToken);
+            res.json({ user });
+        } catch (e) {
+            console.error(e);
+            res.status(401).json({ message: "Authentication failed" });
+        }
+    })
+);
+
+router.post(
+    "/dev",
+    asyncHandler(async (_req, res) => {
+        if (process.env.NODE_ENV === "production") {
+            res.status(404).json({ message: "Not found" });
+            return;
         }
 
-        const jwtToken = generateToken(user);
-        res.json({ token: jwtToken, user });
-    } catch (e) {
-        console.error(e);
-        res.status(401).json({ message: "Authentication failed" });
-    }
-});
+        try {
+            const user = await getOrCreateDevUser();
+            const token = generateToken(user);
+            setAuthCookie(res, token);
+            res.json({ user });
+        } catch (error) {
+            console.error("Dev auth failed", error);
+            res.status(500).json({ message: "Dev auth failed" });
+        }
+    })
+);
 
-router.post("/dev", async (_req, res) => {
-    if (process.env.NODE_ENV === "production") {
-        res.status(404).json({ message: "Not found" });
-        return;
-    }
-
-    try {
-        const user = await getOrCreateDevUser();
-        const token = generateToken(user);
-        res.json({ token, user });
-    } catch (error) {
-        console.error("Dev auth failed", error);
-        res.status(500).json({ message: "Dev auth failed" });
-    }
+router.post("/logout", (_req, res) => {
+    clearAuthCookies(res);
+    res.status(204).end();
 });
 
 export default router;

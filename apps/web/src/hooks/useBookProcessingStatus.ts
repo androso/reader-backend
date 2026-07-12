@@ -12,13 +12,10 @@ export const useBookProcessingStatus = (bookId: string) => {
     return useQuery({
         queryKey: ["book-processing-status", bookId],
         queryFn: async (): Promise<BookProcessingStatus> => {
-            const token = localStorage.getItem("token");
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/api/books/${bookId}/status`,
                 {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
+                    credentials: "include",
                 }
             );
 

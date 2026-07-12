@@ -3,8 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useDevSignIn, useGoogleSignIn, useUser } from "@/lib/auth";
-import { useGoogleLogin } from "@react-oauth/google";
-import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { GoogleLogin } from "@react-oauth/google";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useEffect } from "react";
 
@@ -22,16 +21,6 @@ export default function Login() {
         isPending: devPending,
         status: devStatus,
     } = useDevSignIn();
-
-    const login = useGoogleLogin({
-        onSuccess: async (codeResponse) => {
-            await signIn(codeResponse.access_token);
-            router.push("/");
-        },
-        onError: (error) => {
-            console.error("Login Failed:", error);
-        },
-    });
 
     const loginDevUser = async () => {
         await signInDev();
@@ -70,12 +59,16 @@ export default function Login() {
                         {devPending ? "Signing in..." : "Continue as Dev User"}
                     </Button>
                 ) : (
-                    <GoogleSignInButton
-                        onClick={() => {
-                            login();
-                        }}
-                        isLoading={googlePending}
-                    />
+                    <div className="flex justify-center">
+                        <GoogleLogin
+                            onSuccess={async ({ credential }) => {
+                                if (!credential) return;
+                                await signIn(credential);
+                                router.push("/");
+                            }}
+                            onError={() => console.error("Login Failed")}
+                        />
+                    </div>
                 )}
             </Card>
         </div>
