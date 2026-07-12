@@ -22,6 +22,7 @@ import type {
     RagEvalFixture,
     RagEvalIngestion,
 } from "./types";
+import { resolveLiveEvalSources } from "./retrieval";
 
 const FIXTURE_PATH = path.resolve(
     __dirname,
@@ -234,11 +235,7 @@ export const runLiveRagEval = async (
                 query: testCase.question,
                 strict: true,
             });
-            if (rag.status !== "ready" || !rag.sources?.length) {
-                throw new Error(
-                    `Reader did not produce RAG context for ${testCase.id}`
-                );
-            }
+            const sources = resolveLiveEvalSources(testCase, rag);
 
             const vectorResults = await vectorStore.searchDocuments(
                 collectionName,
@@ -263,7 +260,7 @@ export const runLiveRagEval = async (
                     answerModel,
                     expectedChunkId: expectedChunk?.id,
                     candidateAnswer: generated.answer,
-                    sources: rag.sources,
+                    sources,
                     vectorResultIds: vectorResults.map((result) => result.id),
                     vectorIdsAligned: vectorResults.every((result) =>
                         storedIds.has(result.id)

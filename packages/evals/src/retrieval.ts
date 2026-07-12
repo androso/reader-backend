@@ -1,6 +1,8 @@
+import type { BookContextResult } from "@reader/api/rag";
 import type {
     EvalThresholds,
     PreparedEvalCase,
+    RagEvalCase,
     RetrievalCaseResult,
     RetrievalSummary,
 } from "./types";
@@ -9,6 +11,22 @@ const mean = (values: number[]) =>
     values.length
         ? values.reduce((total, value) => total + value, 0) / values.length
         : 0;
+
+export const resolveLiveEvalSources = (
+    testCase: RagEvalCase,
+    rag: BookContextResult
+) => {
+    if (
+        rag.status !== "ready" ||
+        (!testCase.noAnswerExpected && !rag.sources?.length)
+    ) {
+        throw new Error(
+            `Reader did not produce RAG context for ${testCase.id}`
+        );
+    }
+
+    return rag.sources ?? [];
+};
 
 const parseChunkIndex = (id: string) => {
     const parsed = Number(id.slice(id.lastIndexOf("_") + 1));

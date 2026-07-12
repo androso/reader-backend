@@ -8,7 +8,10 @@ const { getEvalThresholds } = require("../dist/config");
 const { hasLangfuseConfig } = require("../dist/config");
 const { loadGoldenDataset } = require("../dist/dataset");
 const { syncReportToLangfuse } = require("../dist/langfuse");
-const { scoreRetrievalEval } = require("../dist/retrieval");
+const {
+    resolveLiveEvalSources,
+    scoreRetrievalEval,
+} = require("../dist/retrieval");
 const { buildJudgePrompt, runAnswerEval } = require("../dist/answerJudge");
 
 const thresholds = {
@@ -103,6 +106,81 @@ test("negative retrieval cases are not reported as source hits", () => {
     assert.equal(result.cases[0].vectorSourceHit, false);
     assert.equal(result.cases[0].chunkWindowHit, false);
     assert.equal(result.cases[0].passed, false);
+});
+
+test("negative retrieval cases pass with empty aligned sources", () => {
+    const result = scoreRetrievalEval(
+        [
+            {
+                id: "negative",
+                question: "unsupported",
+                expectedAnswer: "not provided",
+                noAnswerExpected: true,
+                answerModel: "gpt-4o-mini",
+                candidateAnswer: "not provided",
+                sources: [],
+                vectorResultIds: [],
+                vectorIdsAligned: true,
+            },
+        ],
+        thresholds
+    );
+
+    assert.equal(result.cases[0].passed, true);
+    assert.equal(result.summary.passed, true);
+});
+
+test("live eval accepts empty sources only for no-answer cases", () => {
+    const rag = {
+        messages: [{ role: "user", content: "unsupported" }],
+        status: "ready",
+        sources: null,
+    };
+
+    assert.deepEqual(
+        resolveLiveEvalSources(
+            {
+                id: "negative",
+                question: "unsupported",
+                expectedAnswer: "not provided",
+                noAnswerExpected: true,
+            },
+            rag
+        ),
+        []
+    );
+    assert.throws(
+        () =>
+            resolveLiveEvalSources(
+                {
+                    id: "answerable",
+                    question: "supported",
+                    expectedAnswer: "provided",
+                },
+                rag
+            ),
+        /Reader did not produce RAG context for answerable/
+    );
+});
+
+test("live eval requires ready retrieval for no-answer cases", () => {
+    assert.throws(
+        () =>
+            resolveLiveEvalSources(
+                {
+                    id: "negative",
+                    question: "unsupported",
+                    expectedAnswer: "not provided",
+                    noAnswerExpected: true,
+                },
+                {
+                    messages: [{ role: "user", content: "unsupported" }],
+                    status: "retrieval_unavailable",
+                    sources: null,
+                }
+            ),
+        /Reader did not produce RAG context for negative/
+    );
 });
 
 test("Langfuse publication links traces and scores and flushes both clients", async () => {
