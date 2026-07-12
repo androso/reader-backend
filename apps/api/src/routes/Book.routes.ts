@@ -17,6 +17,8 @@ import { bookSearchChunkStore } from "../services/BookSearchChunkStore";
 import { hybridBookSearchService } from "../services/HybridBookSearchService";
 import { handleBookProcessingEnqueue } from "../services/BookProcessingEnqueueService";
 import { createOriginalUploadKey } from "../utils/uploadKeys";
+import { asyncHandler } from "../middleware/asyncHandler";
+import { createBookCollectionName } from "@reader/processing";
 
 const log = createLogger("books");
 
@@ -74,6 +76,8 @@ export const handleGetBookFile = async (
         }
 
         const fileBuffer = await dependencies.getFile(book.fileKey);
+        res.setHeader("Cache-Control", "private");
+        res.setHeader("X-Content-Type-Options", "nosniff");
         res.type(getBookFileContentType(book));
         res.send(fileBuffer);
     } catch (er) {
@@ -352,16 +356,63 @@ router.post("/", authenticate, upload.single("file"), async (req, res) => {
  *                   type: string
  *                   example: "No token provided"
  */
-router.get("/", authenticate, async (req, res) => {
-    const booksList = await db
-        .select()
-        .from(Books)
-        .where(eq(Books.userId, req.user.id));
+router.get(
+    "/",
+    authenticate,
+    asyncHandler(async (req, res) => {
+        const booksList = await db
+            .select()
+            .from(Books)
+            .where(eq(Books.userId, req.user.id));
 
-    res.json({
-        books: booksList,
-    });
-});
+        res.json({
+            books: booksList,
+        });
+    })
+);
+
+router.post(
+    "/:id/retry",
+    authenticate,
+    asyncHandler(async (req, res) => {
+        const [book] = await db
+            .select()
+            .from(Books)
+            .where(eq(Books.id, req.params.id));
+        if (!book || book.userId !== req.user.id) {
+            res.status(404).json({ error: "Book was not found" });
+            return;
+        }
+        if (
+            !book.fileType ||
+            !["queue_failed", "failed"].includes(book.processingStatus)
+        ) {
+            res.status(409).json({ error: "Book is not retryable" });
+            return;
+        }
+        await db
+            .update(Books)
+            .set({
+                processingStatus: "processing",
+                processingError: null,
+            })
+            .where(eq(Books.id, book.id));
+        try {
+            await handleBookProcessingEnqueue({
+                bookId: book.id,
+                userId: book.userId,
+                fileKey: book.fileKey,
+                fileType: book.fileType,
+            });
+        } catch {
+            res.status(503).json({
+                error: "Book processing queue is unavailable",
+            });
+            return;
+        }
+        res.status(202).json({ bookId: book.id, status: "processing" });
+    })
+);
 
 router.get("/:id/status", authenticate, async (req, res) => {
     try {
@@ -476,35 +527,36 @@ router.delete("/:id", authenticate, async (req, res) => {
             });
             return;
         }
-        await db.delete(Books).where(eq(Books.id, bookId));
-        log.info("Book record deleted", { bookId });
+        await db
+            .update(Books)
+            .set({ processingStatus: "deleting" })
+            .where(eq(Books.id, bookId));
 
         const [remaining] = await db
             .select({ count: sql`count(*)`.mapWith(Number) })
             .from(Books)
             .where(eq(Books.fileKey, book.fileKey));
-        if (remaining.count === 0) {
+        if (remaining.count <= 1) {
             log.info("Deleting orphaned file and collection", {
                 fileKey: book.fileKey,
                 collectionName: book.collectionName,
             });
             await deleteFile(book.fileKey);
-
-            if (book.collectionName) {
-                await vectorStore.deleteCollection(book.collectionName);
-                await bookSearchChunkStore.deleteCollectionChunks(
-                    book.collectionName
-                );
-                hybridBookSearchService.clearCollectionCache(
-                    book.collectionName
-                );
-            }
         } else {
             log.debug("Skipping cleanup, file still referenced", {
                 fileKey: book.fileKey,
                 remainingCount: remaining.count,
             });
         }
+
+        const collectionName =
+            book.collectionName ?? createBookCollectionName(book.id);
+        await vectorStore.deleteCollection(collectionName);
+        await bookSearchChunkStore.deleteCollectionChunks(collectionName);
+        hybridBookSearchService.clearCollectionCache(collectionName);
+
+        await db.delete(Books).where(eq(Books.id, bookId));
+        log.info("Book record deleted after cleanup", { bookId });
 
         log.info("Book delete successful", { bookId });
         res.status(204).send();

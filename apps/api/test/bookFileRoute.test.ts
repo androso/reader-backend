@@ -7,16 +7,19 @@ type TestResponse = {
     statusCode: number;
     body?: unknown;
     contentType?: string;
+    headers: Record<string, string>;
     sent?: unknown;
     status(code: number): TestResponse;
     json(payload: unknown): TestResponse;
     type(contentType: string): TestResponse;
     send(payload: unknown): TestResponse;
+    setHeader(name: string, value: string): TestResponse;
 };
 
 const createResponse = (): TestResponse => {
     const res: TestResponse = {
         statusCode: 200,
+        headers: {},
         status(code: number) {
             this.statusCode = code;
             return this;
@@ -31,6 +34,10 @@ const createResponse = (): TestResponse => {
         },
         send(payload: unknown) {
             this.sent = payload;
+            return this;
+        },
+        setHeader(name: string, value: string) {
+            this.headers[name] = value;
             return this;
         },
     };
@@ -72,6 +79,8 @@ test("fetches an owned book file by the book row's file key", async () => {
     assert.deepEqual(calls, ["epub-storage-key"]);
     assert.equal(res.statusCode, 200);
     assert.equal(res.contentType, "application/epub+zip");
+    assert.equal(res.headers["Cache-Control"], "private");
+    assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
     assert.equal(res.sent, fileBuffer);
 });
 

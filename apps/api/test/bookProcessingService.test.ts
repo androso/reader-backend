@@ -30,6 +30,7 @@ const createRepository = (
         }),
         markReady: async (_, collectionName) => {
             calls.ready.push(collectionName);
+            return true;
         },
         markFailed: async (_, error) => {
             calls.failed.push(error);

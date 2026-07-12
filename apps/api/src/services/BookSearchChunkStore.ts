@@ -31,28 +31,26 @@ export const bookSearchChunkStore: SearchIndexStore & {
             collectionName,
             chunkCount: chunks.length,
         });
-        await db
-            .delete(BookSearchChunks)
-            .where(eq(BookSearchChunks.collectionName, collectionName));
-        log.debug("Deleted existing collection chunks", { collectionName });
+        await db.transaction(async (tx) => {
+            await tx
+                .delete(BookSearchChunks)
+                .where(eq(BookSearchChunks.collectionName, collectionName));
+            log.debug("Deleted existing collection chunks", { collectionName });
 
-        if (!chunks.length) {
-            log.debug("No chunks to insert", { collectionName });
-            return;
-        }
-
-        await db.insert(BookSearchChunks).values(
-            chunks.map((chunk, chunkIndex) => {
-                const normalized = normalizeChunk(chunk);
-                return {
-                    id: createChunkId(collectionName, chunkIndex),
-                    collectionName,
-                    chunkIndex,
-                    content: normalized.content,
-                    metadata: normalized.metadata,
-                };
-            })
-        );
+            if (!chunks.length) return;
+            await tx.insert(BookSearchChunks).values(
+                chunks.map((chunk, chunkIndex) => {
+                    const normalized = normalizeChunk(chunk);
+                    return {
+                        id: createChunkId(collectionName, chunkIndex),
+                        collectionName,
+                        chunkIndex,
+                        content: normalized.content,
+                        metadata: normalized.metadata,
+                    };
+                })
+            );
+        });
         log.info("Inserted collection chunks", {
             collectionName,
             chunkCount: chunks.length,

@@ -34,7 +34,7 @@ export interface BookProcessingRepository {
         bookId: string,
         userId: string
     ): Promise<BookProcessingRecord | null>;
-    markReady(bookId: string, collectionName: string): Promise<void>;
+    markReady(bookId: string, collectionName: string): Promise<boolean>;
     markFailed(bookId: string, error: string): Promise<void>;
 }
 
@@ -70,15 +70,22 @@ const bookProcessingRepository: BookProcessingRepository = {
 
     async markReady(bookId, collectionName) {
         log.info("Marking book as ready", { bookId, collectionName });
-        await db
+        const updated = await db
             .update(Books)
             .set({
                 collectionName,
                 processingStatus: "ready",
                 processingError: null,
             })
-            .where(eq(Books.id, bookId));
+            .where(
+                and(
+                    eq(Books.id, bookId),
+                    eq(Books.processingStatus, "processing")
+                )
+            )
+            .returning({ id: Books.id });
         log.info("Book marked as ready", { bookId, collectionName });
+        return updated.length === 1;
     },
 
     async markFailed(bookId, error) {
@@ -134,7 +141,23 @@ export const handleProcessUploadedBook = async (
             fileType: payload.fileType,
         });
 
-        await repository.markReady(payload.bookId, result.collectionName);
+        const published = await repository.markReady(
+            payload.bookId,
+            result.collectionName
+        );
+        if (!published) {
+            log.warn("Book disappeared before ingestion could publish", {
+                bookId: payload.bookId,
+                collectionName: result.collectionName,
+            });
+            await vectorStore.deleteCollection(result.collectionName);
+            await bookSearchChunkStore.deleteCollectionChunks(
+                result.collectionName
+            );
+            throw new Error(
+                `Book ${payload.bookId} was deleted during processing`
+            );
+        }
         const duration = Date.now() - start;
         log.info("Uploaded book processing succeeded", {
             bookId: payload.bookId,

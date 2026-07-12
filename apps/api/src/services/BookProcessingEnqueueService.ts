@@ -1,6 +1,6 @@
 import type { BookProcessingJobData } from "@reader/jobs";
-import { eq, sql } from "drizzle-orm";
-import { createLogger, deleteFile } from "@reader/providers";
+import { eq } from "drizzle-orm";
+import { createLogger } from "@reader/providers";
 import { db } from "../db";
 import { Books } from "../db/schema";
 import { enqueueUploadedBookForProcessing } from "./BookProcessingQueue";
@@ -9,18 +9,11 @@ const log = createLogger("BookProcessingEnqueueService");
 
 export interface BookProcessingEnqueueRepository {
     markQueueFailed(bookId: string, error: string): Promise<void>;
-    countBooksWithFileKey(fileKey: string): Promise<number>;
-}
-
-export interface BookProcessingEnqueueStorage {
-    deleteFile(fileKey: string): Promise<void>;
 }
 
 export interface BookProcessingEnqueueDependencies {
     enqueue(payload: BookProcessingJobData): Promise<void>;
     repository: BookProcessingEnqueueRepository;
-    storage: BookProcessingEnqueueStorage;
-    onCleanupError?(error: unknown): void;
 }
 
 export class BookProcessingQueueUnavailableError extends Error {
@@ -39,24 +32,11 @@ const bookProcessingEnqueueRepository: BookProcessingEnqueueRepository = {
         await db
             .update(Books)
             .set({
-                processingStatus: "failed",
+                processingStatus: "queue_failed",
                 processingError: `Book processing queue unavailable: ${error}`,
             })
             .where(eq(Books.id, bookId));
         log.error("Book queue marked failed", { bookId, error });
-    },
-
-    async countBooksWithFileKey(fileKey) {
-        log.debug("Counting books with file key", { fileKey });
-        const [remaining] = await db
-            .select({ count: sql`count(*)`.mapWith(Number) })
-            .from(Books)
-            .where(eq(Books.fileKey, fileKey));
-        log.debug("Books with file key counted", {
-            fileKey,
-            count: remaining.count,
-        });
-        return remaining.count;
     },
 };
 
@@ -65,15 +45,6 @@ export const handleBookProcessingEnqueue = async (
     dependencies: BookProcessingEnqueueDependencies = {
         enqueue: enqueueUploadedBookForProcessing,
         repository: bookProcessingEnqueueRepository,
-        storage: {
-            deleteFile: async (fileKey) => {
-                await deleteFile(fileKey);
-            },
-        },
-        onCleanupError: (error) =>
-            log.error("Uploaded file cleanup failed", {
-                error: getErrorMessage(error),
-            }),
     }
 ) => {
     log.info("Enqueuing book for processing", {
@@ -95,27 +66,6 @@ export const handleBookProcessingEnqueue = async (
             payload.bookId,
             errorMessage
         );
-
-        try {
-            const fileReferenceCount =
-                await dependencies.repository.countBooksWithFileKey(
-                    payload.fileKey
-                );
-            if (fileReferenceCount <= 1) {
-                log.info("Deleting orphaned uploaded file", {
-                    fileKey: payload.fileKey,
-                    fileReferenceCount,
-                });
-                await dependencies.storage.deleteFile(payload.fileKey);
-            } else {
-                log.debug("Skipping uploaded file cleanup, references remain", {
-                    fileKey: payload.fileKey,
-                    fileReferenceCount,
-                });
-            }
-        } catch (cleanupError) {
-            dependencies.onCleanupError?.(cleanupError);
-        }
 
         throw new BookProcessingQueueUnavailableError(errorMessage);
     }
