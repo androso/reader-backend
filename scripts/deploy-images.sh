@@ -14,7 +14,6 @@ aws ecr get-login-password --region "$AWS_REGION" \
 for service in api worker web; do
     repository="${PROJECT_NAME}-${service}"
     image_uri="${REGISTRY}/${repository}:${IMAGE_TAG}"
-    latest_uri="${REGISTRY}/${repository}:latest"
 
     aws ecr describe-repositories \
         --region "$AWS_REGION" \
@@ -38,8 +37,6 @@ for service in api worker web; do
     fi
 
     docker tag "${repository}:${IMAGE_TAG}" "$image_uri"
-    docker tag "${repository}:${IMAGE_TAG}" "$latest_uri"
     docker push "$image_uri"
-    docker push "$latest_uri"
     printf '%s\n' "$image_uri"
 done

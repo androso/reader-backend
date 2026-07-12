@@ -22,6 +22,11 @@ COPY . .
 
 RUN pnpm build
 
+RUN groupadd --system reader && useradd --system --gid reader --home /app reader \
+    && chown -R reader:reader /app
+
 ENV NODE_ENV=production
+
+USER reader
 
 CMD ["node", "-r", "dotenv/config", "apps/worker/build/index.js"]

@@ -22,9 +22,14 @@ COPY . .
 
 RUN pnpm build
 
+RUN groupadd --system reader && useradd --system --gid reader --home /app reader \
+    && chown -R reader:reader /app
+
 ENV NODE_ENV=production
 ENV PORT=3000
 
 EXPOSE 3000
+
+USER reader
 
 CMD ["node", "-r", "dotenv/config", "apps/api/build/index.js"]

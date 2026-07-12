@@ -49,6 +49,10 @@ Parameters:
     NoEcho: true
   FrontendUrl:
     Type: String
+  ApiCertificateArn:
+    Type: String
+  WebCertificateArn:
+    Type: String
   ApiDesiredCount:
     Type: Number
     Default: 0
@@ -63,8 +67,8 @@ Parameters:
     MinValue: 0
   ChromaDesiredCount:
     Type: Number
-    Default: 0
-    MinValue: 0
+    Default: 1
+    AllowedValues: [1]
   ChromaImage:
     Type: String
     Default: chromadb/chroma:1.0.15
@@ -129,6 +133,8 @@ Resources:
       TemplateURL: nested/ecs.yaml
       Parameters:
         FrontendUrl: !Ref FrontendUrl
+        ApiCertificateArn: !Ref ApiCertificateArn
+        WebCertificateArn: !Ref WebCertificateArn
         GoogleClientId: !Ref GoogleClientId
         LangfusePublicKey: !Ref LangfusePublicKey
         LangfuseBaseUrl: !Ref LangfuseBaseUrl

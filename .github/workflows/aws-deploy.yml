@@ -144,6 +144,9 @@ jobs:
             - name: Build and push images
               run: ./scripts/deploy-images.sh
 
+            - name: Register immutable task definitions
+              run: ./scripts/register-ecs-task-definitions.sh >> "$GITHUB_ENV"
+
             - name: Run database migrations in ECS
               run: ./scripts/run-ecs-migrations.sh
 

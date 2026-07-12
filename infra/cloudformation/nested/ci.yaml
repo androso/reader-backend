@@ -78,7 +78,6 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-              StringEquals:
                 token.actions.githubusercontent.com:sub: repo:androso/reader-backend:ref:refs/heads/main
       Policies:
         - PolicyName: ReaderGitHubActionsDeployPolicy
