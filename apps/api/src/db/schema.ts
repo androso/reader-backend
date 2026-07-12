@@ -15,6 +15,12 @@ import type { BookSearchChunkMetadata } from "@reader/providers";
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
 export const resourceTypeEnum = pgEnum("resource_type", ["book", "article"]);
 export const fileTypeEnum = pgEnum("file_type", ["epub", "pdf"]);
+export const messageCompletionStatusEnum = pgEnum("message_completion_status", [
+    "complete",
+    "truncated",
+    "cancelled",
+    "failed",
+]);
 
 export const Users = pgTable("users", {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -92,6 +98,8 @@ export const Messages = pgTable("messages", {
     contextSources: jsonb("context_sources").$type<
         MessageContextSource[] | null
     >(),
+    completionStatus: messageCompletionStatusEnum("completion_status"),
+    finishReason: text("finish_reason"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

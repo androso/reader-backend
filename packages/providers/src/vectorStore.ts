@@ -4,6 +4,7 @@ import { createLogger } from "./logger";
 
 const log = createLogger("chroma");
 const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-ada-002";
+const DEFAULT_COLLECTION_CACHE_MAX_ENTRIES = 100;
 
 const precomputedEmbeddingFunction: IEmbeddingFunction = {
     async generate() {
@@ -93,6 +94,11 @@ const isRetryableVectorStoreError = (error: unknown) => {
         "503",
         "504",
     ].some((retryable) => detail.includes(retryable));
+};
+
+const isCollectionNotFoundError = (error: unknown) => {
+    const detail = getErrorDetail(error).toLowerCase();
+    return detail.includes("404") || detail.includes("not found");
 };
 
 const withRetry = async <T>(
@@ -190,6 +196,17 @@ export class ChromaVectorStore implements VectorStoreProvider {
                 this.collections.delete(name);
             }
         }
+        const maxEntries = parsePositiveIntegerEnv(
+            "CHROMA_COLLECTION_CACHE_MAX_ENTRIES",
+            DEFAULT_COLLECTION_CACHE_MAX_ENTRIES
+        );
+        while (this.collections.size > maxEntries) {
+            const oldest = [...this.collections.entries()].sort(
+                (left, right) => left[1].lastAccessed - right[1].lastAccessed
+            )[0];
+            if (!oldest) break;
+            this.collections.delete(oldest[0]);
+        }
     }
 
     async getCollection(name: string) {
@@ -216,6 +233,7 @@ export class ChromaVectorStore implements VectorStoreProvider {
             log.info("Collection loaded from Chroma", { name });
             return collection;
         } catch (error) {
+            if (!isCollectionNotFoundError(error)) throw error;
             log.debug("Collection not found in Chroma", {
                 name,
                 error: getErrorDetail(error),
@@ -253,6 +271,7 @@ export class ChromaVectorStore implements VectorStoreProvider {
             await this.client.deleteCollection({ name });
             log.info("Deleted existing collection for reset", { name });
         } catch (error) {
+            if (!isCollectionNotFoundError(error)) throw error;
             log.debug("No existing collection to delete during reset", {
                 name,
                 error: getErrorDetail(error),

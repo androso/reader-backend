@@ -8,7 +8,7 @@ export const getSubmittedUserMessage = (body: unknown): string | null => {
     if (typeof message !== "string") return null;
 
     const content = message.trim();
-    return content.length > 0 ? content : null;
+    return content.length > 0 && content.length <= 8_000 ? content : null;
 };
 
 export const buildUserMessageInsert = (
@@ -22,11 +22,19 @@ export const buildUserMessageInsert = (
 
 export const toChatHistory = (
     messages: Pick<typeof Messages.$inferSelect, "role" | "content">[]
-): ChatMessage[] =>
-    messages.map((message) => ({
+): ChatMessage[] => {
+    const bounded: typeof messages = [];
+    let characters = 0;
+    for (const message of messages.slice(-30).reverse()) {
+        if (characters + message.content.length > 60_000) break;
+        bounded.push(message);
+        characters += message.content.length;
+    }
+    return bounded.reverse().map((message) => ({
         role: message.role,
         content: message.content,
     }));
+};
 
 export const appendSubmittedUserMessage = (
     history: ChatMessage[],

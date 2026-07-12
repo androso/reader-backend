@@ -188,6 +188,7 @@ const streamAssistantResponse = async ({
     routeName,
     model,
     traceOpenAI,
+    signal,
 }: {
     messages: ChatMessage[];
     res: Response;
@@ -199,6 +200,7 @@ const streamAssistantResponse = async ({
     routeName: string;
     model: OpenAIChatModel;
     traceOpenAI: boolean;
+    signal?: AbortSignal;
 }) => {
     const openAiSpan = trace.startObservation("openai_chat_stream", {
         input: {
@@ -214,6 +216,7 @@ const streamAssistantResponse = async ({
             messages,
             model,
             options: {
+                signal,
                 ...(traceOpenAI
                     ? {
                           langfuse: {
@@ -257,7 +260,7 @@ const streamAssistantResponse = async ({
                 transportWarning: generated.transportWarning,
             },
         });
-        return generated.answer;
+        return generated;
     } catch (streamError) {
         recordObservationError(
             openAiSpan,
@@ -274,7 +277,9 @@ const saveAssistantMessage = async (
     conversationId: string,
     content: string,
     contextSources: MessageContextSource[] | null,
-    trace: TraceObservation
+    trace: TraceObservation,
+    completionStatus: "complete" | "truncated" | "cancelled" | "failed",
+    finishReason: string | null
 ) => {
     const saveSpan = trace.startObservation("save_assistant_message", {
         input: {
@@ -290,6 +295,8 @@ const saveAssistantMessage = async (
             role: "assistant",
             content,
             contextSources,
+            completionStatus,
+            finishReason,
         });
         await touchConversation(conversationId);
         saveSpan.update({
@@ -323,6 +330,7 @@ const runChatCompletion = async ({
     model,
     highlightContext,
     trace,
+    signal,
 }: {
     resourceType: string;
     resourceId: string;
@@ -335,6 +343,7 @@ const runChatCompletion = async ({
     model: OpenAIChatModel;
     highlightContext: HighlightContext | null;
     trace: TraceObservation;
+    signal?: AbortSignal;
 }) => {
     const retrievalQuery = buildRetrievalQuery(query, highlightContext);
     const ragResult =
@@ -363,7 +372,7 @@ const runChatCompletion = async ({
         });
         return;
     }
-    if (ragResult.status === "failed") {
+    if (ragResult.status === "ingestion_failed") {
         trace.setTraceIO({
             output: { status: "failed", error: ragResult.error },
         });
@@ -373,8 +382,20 @@ const runChatCompletion = async ({
         });
         return;
     }
+    if (
+        ragResult.status === "not_found" ||
+        ragResult.status === "retrieval_unavailable"
+    ) {
+        const error =
+            ragResult.status === "not_found"
+                ? "Book was not found."
+                : "Book retrieval is temporarily unavailable.";
+        trace.setTraceIO({ output: { status: ragResult.status, error } });
+        writeChatStatusAndEnd(res, { error, status: ragResult.status });
+        return;
+    }
 
-    const accumulatedResponse = await streamAssistantResponse({
+    const generated = await streamAssistantResponse({
         messages: ragResult.messages,
         res,
         trace,
@@ -385,19 +406,28 @@ const runChatCompletion = async ({
         routeName,
         model,
         traceOpenAI: resourceType === "book",
+        signal,
     });
 
     if (!res.writableEnded) {
+        const completionStatus =
+            generated.finishReason === "stop"
+                ? "complete"
+                : generated.finishReason === "length"
+                  ? "truncated"
+                  : "failed";
         await saveAssistantMessage(
             conversationId,
-            accumulatedResponse,
+            generated.answer,
             ragResult.sources,
-            trace
+            trace,
+            completionStatus,
+            generated.finishReason
         );
         trace.setTraceIO({
             output: {
                 status: "complete",
-                assistantResponseLength: accumulatedResponse.length,
+                assistantResponseLength: generated.answer.length,
                 sourceCount: ragResult.sources?.length ?? 0,
             },
         });
@@ -406,6 +436,9 @@ const runChatCompletion = async ({
                 `data: ${JSON.stringify({ type: "sources", sources: ragResult.sources })}\n\n`
             );
         }
+        res.write(
+            `data: ${JSON.stringify({ type: "terminal", status: completionStatus, finishReason: generated.finishReason })}\n\n`
+        );
         res.write("data: [DONE]\n\n");
         res.end();
     }
@@ -501,6 +534,9 @@ router.post(
                 .values(buildUserMessageInsert(conversation.id, message));
             await touchConversation(conversation.id);
 
+            const abortController = new AbortController();
+            req.once("aborted", () => abortController.abort());
+
             await runBookChatTraceIfNeeded(
                 {
                     resourceType: req.params.resourceType,
@@ -525,6 +561,7 @@ router.post(
                         model: chatModel,
                         highlightContext,
                         trace,
+                        signal: abortController.signal,
                     })
             );
         } catch (e) {
@@ -655,6 +692,9 @@ router.post(
                 .values(buildUserMessageInsert(conversationId, message));
             await touchConversation(conversationId);
 
+            const abortController = new AbortController();
+            req.once("aborted", () => abortController.abort());
+
             await runBookChatTraceIfNeeded(
                 {
                     resourceType,
@@ -679,6 +719,7 @@ router.post(
                         model: chatModel,
                         highlightContext,
                         trace,
+                        signal: abortController.signal,
                     })
             );
         } catch (error) {

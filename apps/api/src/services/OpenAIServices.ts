@@ -65,6 +65,7 @@ export interface GenerateStreamResponseOptions {
     model?: OpenAIChatModel;
     temperature?: number;
     langfuse?: LangfuseOpenAITraceOptions;
+    signal?: AbortSignal;
 }
 
 export const createOpenAIClientOptions = (): NonNullable<
@@ -150,7 +151,8 @@ export class OpenAIService {
                 systemPrompt,
                 options?.model,
                 options?.temperature
-            )
+            ),
+            { signal: options?.signal }
         );
         return response;
     }

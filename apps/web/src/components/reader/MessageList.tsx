@@ -18,6 +18,7 @@ export type Message = {
     role: string;
     content: string;
     contextSources?: ContextSource[] | null;
+    completionStatus?: "complete" | "truncated" | "cancelled" | "failed" | null;
 };
 
 const formatScore = (score: number) =>
@@ -133,6 +134,14 @@ const MessageList = memo(
                                 {isAssistant && sources.length > 0 && (
                                     <MessageSources sources={sources} />
                                 )}
+                                {isAssistant &&
+                                    message.completionStatus ===
+                                        "truncated" && (
+                                        <p className="max-w-[85%] text-xs text-amber-300">
+                                            This response reached the model
+                                            output limit and may be incomplete.
+                                        </p>
+                                    )}
                             </div>
                         );
                     })}

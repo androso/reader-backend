@@ -72,7 +72,12 @@ const buildContextSources = (
 
 export type BookContextResult = {
     messages: ChatMessage[];
-    status: "ready" | "processing" | "failed";
+    status:
+        | "ready"
+        | "not_found"
+        | "processing"
+        | "ingestion_failed"
+        | "retrieval_unavailable";
     sources: MessageContextSource[] | null;
     error?: string | null;
 };
@@ -121,13 +126,13 @@ export const retrieveBookContext = async ({
 
     if (!book) {
         log.warn("Book not found for RAG", { bookId, userId });
-        return { messages, status: "ready", sources: null };
+        return { messages, status: "not_found", sources: null };
     }
 
     if (book.processingStatus === "failed") {
         return {
             messages,
-            status: "failed",
+            status: "ingestion_failed",
             sources: null,
             error: book.processingError,
         };
@@ -214,7 +219,12 @@ export const retrieveBookContext = async ({
             error: error instanceof Error ? error.message : String(error),
         });
         if (strict) throw error;
-        return { messages, status: "ready", sources: null };
+        return {
+            messages,
+            status: "retrieval_unavailable",
+            sources: null,
+            error: "Book retrieval is temporarily unavailable.",
+        };
     }
 };
 

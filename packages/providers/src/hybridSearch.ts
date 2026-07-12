@@ -187,6 +187,15 @@ export class HybridBookSearchService {
             createdAt: Date.now(),
         };
         this.indexes.set(collectionName, next);
+        const maxEntries =
+            Number(process.env.HYBRID_INDEX_CACHE_MAX_ENTRIES) || 100;
+        while (this.indexes.size > maxEntries) {
+            const oldest = [...this.indexes.entries()].sort(
+                (left, right) => left[1].createdAt - right[1].createdAt
+            )[0];
+            if (!oldest) break;
+            this.indexes.delete(oldest[0]);
+        }
         log.info("MiniSearch index built", {
             collectionName,
             chunkCount: chunks.length,
