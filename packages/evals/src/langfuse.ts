@@ -105,7 +105,7 @@ export const syncReportToLangfuse = async (
     report: RagEvalReport,
     cases: RagEvalCase[],
     clientPromise = createLangfuseClient(),
-    tracingRuntimePromise: Promise<LangfuseTracingRuntime> = createLangfuseTracingRuntime()
+    tracingRuntimePromise?: Promise<LangfuseTracingRuntime>
 ) => {
     const client = await clientPromise;
     const datasetName = getLangfuseDatasetName();
@@ -160,54 +160,62 @@ export const syncReportToLangfuse = async (
     const answerCases = report.answers?.cases ?? [];
     const traceKey = (caseId: string, answerModel: string) =>
         `${caseId}:${answerModel}`;
-    const tracingRuntime = await tracingRuntimePromise;
-    if (!client.score?.create) {
-        throw new Error("Installed Langfuse client does not support scores");
-    }
-    const createScoreEvent = client.score.create.bind(client.score);
+    let tracingRuntime: LangfuseTracingRuntime | undefined;
     const observations = new Map<string, LangfuseObservationLike>();
-    for (const result of answerCases) {
-        const observation = tracingRuntime.startObservation({
-            name: "reader-rag-eval",
-            input: result.question,
-            metadata: {
-                runId: report.runId,
-                caseId: result.id,
-                answerModel: result.answerModel,
-                source: "packages/evals",
-            },
-        });
-        observation.update({ output: result.answer });
-        observations.set(traceKey(result.id, result.answerModel), observation);
-    }
-
     let syncedScores = 0;
-    const createScore = async (
-        caseId: string,
-        answerModel: string,
-        name: string,
-        value: number,
-        traceId?: string,
-        dataType: "NUMERIC" | "BOOLEAN" = "NUMERIC"
-    ) => {
-        if (!traceId) return;
-        createScoreEvent({
-            name,
-            value,
-            traceId,
-            dataType,
-            comment: `Reader RAG eval ${report.runId} case ${caseId} model ${answerModel}`,
-            metadata: {
-                runId: report.runId,
-                caseId,
-                answerModel,
-                source: "packages/evals",
-            },
-        });
-        syncedScores += 1;
-    };
 
     try {
+        tracingRuntime = await (tracingRuntimePromise ??
+            createLangfuseTracingRuntime());
+        if (!client.score?.create) {
+            throw new Error(
+                "Installed Langfuse client does not support scores"
+            );
+        }
+        const createScoreEvent = client.score.create.bind(client.score);
+        for (const result of answerCases) {
+            const observation = tracingRuntime.startObservation({
+                name: "reader-rag-eval",
+                input: result.question,
+                metadata: {
+                    runId: report.runId,
+                    caseId: result.id,
+                    answerModel: result.answerModel,
+                    source: "packages/evals",
+                },
+            });
+            observation.update({ output: result.answer });
+            observations.set(
+                traceKey(result.id, result.answerModel),
+                observation
+            );
+        }
+
+        const createScore = async (
+            caseId: string,
+            answerModel: string,
+            name: string,
+            value: number,
+            traceId?: string,
+            dataType: "NUMERIC" | "BOOLEAN" = "NUMERIC"
+        ) => {
+            if (!traceId) return;
+            createScoreEvent({
+                name,
+                value,
+                traceId,
+                dataType,
+                comment: `Reader RAG eval ${report.runId} case ${caseId} model ${answerModel}`,
+                metadata: {
+                    runId: report.runId,
+                    caseId,
+                    answerModel,
+                    source: "packages/evals",
+                },
+            });
+            syncedScores += 1;
+        };
+
         for (const result of answerCases) {
             const traceId = observations.get(
                 traceKey(result.id, result.answerModel)
@@ -287,10 +295,12 @@ export const syncReportToLangfuse = async (
         }
     } finally {
         for (const observation of observations.values()) observation.end();
-        try {
-            await client.flush?.();
-        } finally {
-            await tracingRuntime.shutdown();
+        if (tracingRuntime) {
+            try {
+                await client.flush?.();
+            } finally {
+                await tracingRuntime.shutdown();
+            }
         }
     }
 
