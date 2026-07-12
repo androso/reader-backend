@@ -83,6 +83,7 @@ export function ChatInterface({
         setChatState,
         setInput,
         startNewConversation,
+        isSending,
     } = useChat(bookId);
     const conversations = conversationsData?.conversations ?? [];
 
@@ -98,7 +99,9 @@ export function ChatInterface({
                 <div className="w-64 shrink-0 overflow-x-hidden">
                     <ChatHistory
                         conversations={conversations}
-                        currentConversationId={chatState.currentConversation?.id}
+                        currentConversationId={
+                            chatState.currentConversation?.id
+                        }
                         isLoading={conversationsQuery.isLoading}
                         isError={conversationsQuery.isError}
                         onNewConversation={startNewConversation}
@@ -170,6 +173,7 @@ export function ChatInterface({
                         )
                     }
                     isDocumentReady={isDocumentReady}
+                    isSending={isSending}
                     isCheckingStatus={!processingStatus}
                     processingError={processingError}
                     highlightContext={highlightContext}
@@ -239,6 +243,7 @@ const ChatInput = ({
     setInput,
     handleSubmit,
     isDocumentReady,
+    isSending,
     isCheckingStatus,
     processingError,
     highlightContext,
@@ -255,6 +260,7 @@ const ChatInput = ({
     setInput: (value: string) => void;
     handleSubmit: (e: React.FormEvent) => void;
     isDocumentReady: boolean;
+    isSending: boolean;
     isCheckingStatus: boolean;
     processingError: string | null;
     highlightContext: HighlightContext | null;
@@ -348,13 +354,13 @@ const ChatInput = ({
                           : "Document context is processing..."
                 }
                 className="h-11 flex-1 border-0 bg-transparent px-2 font-sans text-sm font-semibold text-[#1a1c1c] shadow-none ring-0 placeholder:text-[#9ea3a8] focus-visible:ring-0 focus-visible:ring-offset-0"
-                disabled={!isDocumentReady}
+                disabled={!isDocumentReady || isSending}
             />
             <Button
                 type="submit"
                 size="icon"
                 variant="default"
-                disabled={!isDocumentReady}
+                disabled={!isDocumentReady || isSending}
                 className="h-10 w-10 rounded-full bg-[#5c5d66] text-white hover:bg-[#4f5058] disabled:bg-[#c6c6c7]"
             >
                 <SendHorizontal className="h-5 w-5" />

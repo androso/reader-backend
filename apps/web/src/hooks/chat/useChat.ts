@@ -24,6 +24,7 @@ export const initialChatState: ChatState = {
 export const useChat = (bookId: string) => {
     const [chatState, setChatState] = useState<ChatState>(initialChatState);
     const [input, setInput] = useState("");
+    const [isSending, setIsSending] = useState(false);
     const queryClient = useQueryClient();
     const { data: selectedConversationData } = useSelectedConversation(
         chatState,
@@ -218,10 +219,11 @@ export const useChat = (bookId: string) => {
             onHighlightContextSent?: () => void
         ) => {
             e.preventDefault();
-            if (!input.trim()) return;
+            if (!input.trim() || isSending) return;
 
             const userMessage = { id: null, role: "user", content: input };
             setInput("");
+            setIsSending(true);
 
             try {
                 const endpoint = chatState.currentConversation
@@ -295,9 +297,11 @@ export const useChat = (bookId: string) => {
                         },
                     ],
                 }));
+            } finally {
+                setIsSending(false);
             }
         },
-        [input, chatState, bookId, handleMessageStream, queryClient]
+        [input, isSending, chatState, bookId, handleMessageStream, queryClient]
     );
 
     // Update messages when selected conversation changes
@@ -327,5 +331,6 @@ export const useChat = (bookId: string) => {
         resetChat,
         startNewConversation,
         setChatState,
+        isSending,
     };
 };
