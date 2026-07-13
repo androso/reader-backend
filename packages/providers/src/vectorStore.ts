@@ -5,6 +5,10 @@ import { createLogger } from "./logger";
 const log = createLogger("chroma");
 const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-ada-002";
 const DEFAULT_COLLECTION_CACHE_MAX_ENTRIES = 100;
+type ChromaCollectionClient = Pick<
+    ChromaClient,
+    "createCollection" | "deleteCollection" | "getCollection"
+>;
 
 const precomputedEmbeddingFunction: IEmbeddingFunction = {
     async generate() {
@@ -97,8 +101,23 @@ const isRetryableVectorStoreError = (error: unknown) => {
 };
 
 const isCollectionNotFoundError = (error: unknown) => {
-    const detail = getErrorDetail(error).toLowerCase();
-    return detail.includes("404") || detail.includes("not found");
+    if (!error || typeof error !== "object") return false;
+
+    const details = error as {
+        code?: unknown;
+        message?: unknown;
+        name?: unknown;
+        status?: unknown;
+    };
+    return (
+        details.name === "ChromaNotFoundError" ||
+        details.code === 404 ||
+        details.code === "404" ||
+        details.status === 404 ||
+        details.status === "404" ||
+        (typeof details.message === "string" &&
+            details.message.toLowerCase().includes("not found"))
+    );
 };
 
 const withRetry = async <T>(
@@ -136,7 +155,7 @@ const withRetry = async <T>(
 };
 
 export class ChromaVectorStore implements VectorStoreProvider {
-    private readonly client: ChromaClient;
+    private readonly client: ChromaCollectionClient;
     private readonly openai: OpenAI;
     private readonly embeddingModel: string;
     private readonly collections = new Map<
@@ -144,14 +163,17 @@ export class ChromaVectorStore implements VectorStoreProvider {
         { name: string; collection: any; lastAccessed: number }
     >();
 
-    constructor() {
-        this.client = new ChromaClient({
-            path: process.env.CHROMA_URL || "http://localhost:8000",
-            auth: {
-                provider: "basic",
-                credentials: process.env.CHROMA_CLIENT_AUTH_CREDENTIALS || "",
-            },
-        });
+    constructor(client?: ChromaCollectionClient) {
+        this.client =
+            client ??
+            new ChromaClient({
+                path: process.env.CHROMA_URL || "http://localhost:8000",
+                auth: {
+                    provider: "basic",
+                    credentials:
+                        process.env.CHROMA_CLIENT_AUTH_CREDENTIALS || "",
+                },
+            });
 
         this.embeddingModel =
             process.env.OPENAI_EMBEDDING_MODEL ||
