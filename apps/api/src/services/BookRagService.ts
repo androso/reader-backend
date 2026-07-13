@@ -23,6 +23,14 @@ import {
 
 const log = createLogger("bookRag");
 const answerService = new OpenAIService();
+const DEFAULT_RAG_MIN_HYBRID_SCORE = 0.03;
+
+const getRagMinHybridScore = () => {
+    const configured = Number(process.env.RAG_MIN_HYBRID_SCORE);
+    return Number.isFinite(configured)
+        ? configured
+        : DEFAULT_RAG_MIN_HYBRID_SCORE;
+};
 
 const getErrorDetail = (error: unknown) => {
     if (!error || typeof error !== "object") return String(error);
@@ -159,7 +167,9 @@ export const retrieveBookContext = async ({
             searchResults = await hybridBookSearchService.search(
                 book.collectionName,
                 query,
-                {},
+                {
+                    minScore: getRagMinHybridScore(),
+                },
                 {
                     trace: retrievalSpan,
                     capture: getLangfuseCaptureConfig(),

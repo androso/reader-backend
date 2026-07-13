@@ -399,6 +399,7 @@ export class HybridBookSearchService {
             lexicalLimit?: number;
             vectorLimit?: number;
             finalLimit?: number;
+            minScore?: number;
         } = {},
         tracing: HybridSearchTraceOptions = {}
     ): Promise<RankedSearchResult[]> {
@@ -406,6 +407,7 @@ export class HybridBookSearchService {
         const lexicalLimit = options.lexicalLimit ?? 20;
         const vectorLimit = options.vectorLimit ?? 20;
         const finalLimit = options.finalLimit ?? 5;
+        const minScore = options.minScore ?? 0;
         log.info("Starting hybrid search", {
             collectionName,
             lexicalLimit,
@@ -467,12 +469,13 @@ export class HybridBookSearchService {
             lexicalResults,
             hydratedVectorResults,
             finalLimit
-        );
+        ).filter((result) => result.score >= minScore);
         const duration = Date.now() - start;
         log.info("Hybrid search complete", {
             collectionName,
             resultCount: fused.length,
             durationMs: duration,
+            minScore,
         });
         tracing.trace?.update({
             output: {
@@ -481,6 +484,7 @@ export class HybridBookSearchService {
                 lexicalResultCount: lexicalResults.length,
                 vectorResultCount: vectorResults.length,
                 durationMs: duration,
+                minScore,
                 topResults: summarizeRankedResults(fused, tracing.capture),
             },
         });
