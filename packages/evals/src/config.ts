@@ -1,4 +1,4 @@
-import type { EvalThresholds } from "./types";
+import type { EvalSuite, EvalThresholds } from "./types";
 
 export const DEFAULT_JUDGE_MODEL = "gpt-5.4-mini-2026-03-17";
 export const DEFAULT_DATASET_NAME = "reader/rag-golden";
@@ -50,3 +50,8 @@ export const hasOpenAiConfig = () => Boolean(process.env.OPENAI_API_KEY);
 
 export const hasLangfuseConfig = () =>
     Boolean(process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY);
+
+export const shouldFailQualityGate = (
+    suite: EvalSuite,
+    qualityPassed: boolean
+) => suite === "required" && !qualityPassed;

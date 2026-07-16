@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type {
     AnswerCaseResult,
     AnswerSummary,
+    EvalCategory,
     EvalThresholds,
     JudgeScores,
     PreparedEvalCase,
@@ -173,6 +174,9 @@ export const runAnswerEval = async (
               scores.hallucinationRate <= thresholds.maxHallucinationRate;
         caseResults.push({
             id: testCase.id,
+            fixtureId: testCase.fixtureId,
+            suite: testCase.suite,
+            category: testCase.category,
             question: testCase.question,
             answer: testCase.candidateAnswer,
             expectedAnswer: testCase.expectedAnswer,
@@ -218,6 +222,42 @@ export const runAnswerEval = async (
             : 1,
         hallucinationRate: mean(
             caseResults.map((result) => result.scores.hallucinationRate)
+        ),
+        perCategory: Object.fromEntries(
+            (
+                [
+                    ...new Set(caseResults.map((result) => result.category)),
+                ] as EvalCategory[]
+            ).map((category) => {
+                const results = caseResults.filter(
+                    (result) => result.category === category
+                );
+                return [
+                    category,
+                    {
+                        caseCount: results.length,
+                        groundedness: mean(
+                            results.map((result) => result.scores.groundedness)
+                        ),
+                        citationCoverage: mean(
+                            results.map(
+                                (result) => result.scores.citationCoverage
+                            )
+                        ),
+                        refusalCorrectness: mean(
+                            results.map(
+                                (result) => result.scores.refusalCorrectness
+                            )
+                        ),
+                        hallucinationRate: mean(
+                            results.map(
+                                (result) => result.scores.hallucinationRate
+                            )
+                        ),
+                        passed: results.every((result) => result.passed),
+                    },
+                ];
+            })
         ),
         passed: false,
     };

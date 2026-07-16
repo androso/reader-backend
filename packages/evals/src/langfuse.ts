@@ -141,17 +141,21 @@ export const syncReportToLangfuse = async (
                 input: {
                     id: testCase.id,
                     question: testCase.question,
-                    fixtureSha256: report.fixture.sha256,
+                    fixtureId: testCase.fixtureId,
+                    fixtureSha256: report.fixtures.find(
+                        (fixture) => fixture.id === testCase.fixtureId
+                    )?.sha256,
                 },
                 expectedOutput: {
                     answer: testCase.expectedAnswer,
-                    evidenceText: testCase.expectedEvidenceText,
-                    chapterTitle: testCase.expectedChapterTitle,
+                    evidence: testCase.expectedEvidence,
                     noAnswerExpected: Boolean(testCase.noAnswerExpected),
                 },
                 metadata: {
                     source: "packages/evals",
                     runId: report.runId,
+                    suite: testCase.suite,
+                    category: testCase.category,
                 },
             })
         );
@@ -180,6 +184,9 @@ export const syncReportToLangfuse = async (
                 metadata: {
                     runId: report.runId,
                     caseId: result.id,
+                    fixtureId: result.fixtureId,
+                    suite: result.suite,
+                    category: result.category,
                     answerModel: result.answerModel,
                     resolvedAnswerModel: result.resolvedAnswerModel,
                     judgeModel: result.judgeModel,

@@ -12,11 +12,13 @@ const percent = (value: number | null) =>
     value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
 
 export const createReport = (
-    report: Omit<RagEvalReport, "runId" | "createdAt">
+    report: Omit<RagEvalReport, "runId" | "createdAt" | "qualityPassed">
 ): RagEvalReport => ({
     ...report,
     runId: `rag-eval-${Date.now()}`,
     createdAt: new Date().toISOString(),
+    qualityPassed:
+        report.retrieval.summary.passed && report.answers.summary.passed,
 });
 
 const emptyUsage = (): NormalizedModelUsage => ({
@@ -57,7 +59,10 @@ const formatUsage = (value: NormalizedModelUsage | null) =>
 export const summarizeExecution = ({
     retrieval,
     answers,
-}: Pick<RagEvalReport, "retrieval" | "answers">): RagEvalReport["execution"] => {
+}: Pick<
+    RagEvalReport,
+    "retrieval" | "answers"
+>): RagEvalReport["execution"] => {
     const retrievalLatency = retrieval.cases.reduce(
         (total, result) => total + result.retrievalDurationMs,
         0
@@ -83,9 +88,7 @@ export const summarizeExecution = ({
 
     return {
         pipelineVersions: [
-            ...new Set(
-                retrieval.cases.map((result) => result.pipelineVersion)
-            ),
+            ...new Set(retrieval.cases.map((result) => result.pipelineVersion)),
         ],
         promptVersions: [
             ...new Set(retrieval.cases.map((result) => result.promptVersion)),
@@ -101,9 +104,7 @@ export const summarizeExecution = ({
             answers: sumUsage(
                 answers.cases.map((result) => result.answerUsage)
             ),
-            judge: sumUsage(
-                answers.cases.map((result) => result.judgeUsage)
-            ),
+            judge: sumUsage(answers.cases.map((result) => result.judgeUsage)),
         },
         estimatedCostUsd: {
             answers: answerCost,
@@ -120,11 +121,13 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         "",
         `- Run: ${report.runId}`,
         `- Created: ${report.createdAt}`,
-        `- Fixture: ${report.fixture.title} by ${report.fixture.author}`,
-        `- Fixture SHA-256: ${report.fixture.sha256}`,
-        `- Source revision: ${report.fixture.sourceRevision}`,
-        `- Collection: ${report.ingestion.collectionName}`,
-        `- Extracted/stored chunks: ${report.ingestion.extractedChunkCount}/${report.ingestion.storedChunkCount}`,
+        `- Suite: ${report.suite}`,
+        `- Quality passed: ${report.qualityPassed}`,
+        `- Fixtures: ${report.fixtures.map((fixture) => `${fixture.title} by ${fixture.author}`).join("; ")}`,
+        `- Fixture SHA-256: ${report.fixtures.map((fixture) => `${fixture.id}=${fixture.sha256}`).join(", ")}`,
+        `- Source revisions: ${report.fixtures.map((fixture) => `${fixture.id}=${fixture.sourceRevision}`).join(", ")}`,
+        `- Collections: ${report.ingestion.map((entry) => `${entry.fixtureId}=${entry.collectionName}`).join(", ")}`,
+        `- Extracted/stored chunks: ${report.ingestion.map((entry) => `${entry.fixtureId}=${entry.extractedChunkCount}/${entry.storedChunkCount}`).join(", ")}`,
         `- Requested answer models: ${report.answerModels.join(", ")}`,
         `- Resolved answer models: ${report.resolvedAnswerModels.join(", ")}`,
         `- Requested judge model: ${report.judgeModel}`,
@@ -149,6 +152,7 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
             `- Passed: ${summary.passed}`,
             `- Cases: ${summary.caseCount}`,
             `- Recall@k: ${percent(summary.recallAtK)}`,
+            `- Evidence coverage: ${percent(summary.evidenceCoverage)}`,
             `- MRR: ${summary.mrr.toFixed(3)}`,
             `- Source hit rate: ${percent(summary.sourceHitRate)}`,
             `- Vector source hit rate: ${percent(summary.vectorSourceHitRate)}`,
@@ -157,6 +161,11 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
             `- Chunk/window hit rate: ${percent(summary.chunkWindowHitRate)}`,
             `- Chapter accuracy: ${percent(summary.chapterAccuracy)}`
         );
+        for (const [category, slice] of Object.entries(summary.perCategory)) {
+            lines.push(
+                `- ${category}: ${slice.caseCount} cases, evidence ${percent(slice.evidenceCoverage)}, passed ${slice.passed}`
+            );
+        }
     }
 
     if (report.answers) {
@@ -172,6 +181,11 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
             `- Refusal correctness: ${percent(summary.refusalCorrectness)}`,
             `- Hallucination rate: ${percent(summary.hallucinationRate)}`
         );
+        for (const [category, slice] of Object.entries(summary.perCategory)) {
+            lines.push(
+                `- ${category}: ${slice.caseCount} cases, groundedness ${percent(slice.groundedness)}, passed ${slice.passed}`
+            );
+        }
     }
 
     return `${lines.join("\n")}\n`;
