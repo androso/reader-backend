@@ -20,6 +20,7 @@ import {
     snippetForLangfuse,
     type TraceObservation,
 } from "../observability/langfuse";
+import { getRagPipeline } from "./RagPipeline";
 
 const log = createLogger("bookRag");
 const answerService = new OpenAIService();
@@ -87,6 +88,12 @@ export type BookContextResult = {
         | "ingestion_failed"
         | "retrieval_unavailable";
     sources: MessageContextSource[] | null;
+    telemetry: {
+        pipelineVersion: string;
+        promptVersion: string;
+        queryPlan: null;
+        retrieval: import("@reader/providers").HybridSearchDiagnostics | null;
+    };
     error?: string | null;
 };
 
@@ -107,6 +114,13 @@ export const retrieveBookContext = async ({
     trace?: TraceObservation;
     strict?: boolean;
 }): Promise<BookContextResult> => {
+    const pipeline = getRagPipeline();
+    const baseTelemetry = {
+        pipelineVersion: pipeline.pipelineVersion,
+        promptVersion: pipeline.promptVersion,
+        queryPlan: null,
+        retrieval: null,
+    };
     const loadBookSpan = trace.startObservation("load_book", {
         input: { resourceType: "book", resourceId: bookId },
     });
@@ -134,7 +148,12 @@ export const retrieveBookContext = async ({
 
     if (!book) {
         log.warn("Book not found for RAG", { bookId, userId });
-        return { messages, status: "not_found", sources: null };
+        return {
+            messages,
+            status: "not_found",
+            sources: null,
+            telemetry: baseTelemetry,
+        };
     }
 
     if (book.processingStatus === "failed") {
@@ -142,12 +161,18 @@ export const retrieveBookContext = async ({
             messages,
             status: "ingestion_failed",
             sources: null,
+            telemetry: baseTelemetry,
             error: book.processingError,
         };
     }
 
     if (!book.collectionName) {
-        return { messages, status: "processing", sources: null };
+        return {
+            messages,
+            status: "processing",
+            sources: null,
+            telemetry: baseTelemetry,
+        };
     }
 
     try {
@@ -160,11 +185,12 @@ export const retrieveBookContext = async ({
                 finalLimit: 5,
             },
         });
-        let searchResults: Awaited<
-            ReturnType<typeof hybridBookSearchService.search>
+        let searchResponse: Awaited<
+            ReturnType<typeof hybridBookSearchService.searchWithDiagnostics>
         >;
         try {
-            searchResults = await hybridBookSearchService.search(
+            searchResponse =
+                await hybridBookSearchService.searchWithDiagnostics(
                 book.collectionName,
                 query,
                 {
@@ -174,7 +200,7 @@ export const retrieveBookContext = async ({
                     trace: retrievalSpan,
                     capture: getLangfuseCaptureConfig(),
                 }
-            );
+                );
         } catch (error) {
             recordObservationError(
                 retrievalSpan,
@@ -186,8 +212,14 @@ export const retrieveBookContext = async ({
             retrievalSpan.end();
         }
 
+        const searchResults = searchResponse.results;
+        const telemetry = {
+            ...baseTelemetry,
+            retrieval: searchResponse.diagnostics,
+        };
+
         if (!searchResults.length) {
-            return { messages, status: "ready", sources: null };
+            return { messages, status: "ready", sources: null, telemetry };
         }
 
         const context = searchResults
@@ -211,6 +243,7 @@ export const retrieveBookContext = async ({
         return {
             status: "ready",
             sources: buildContextSources(searchResults),
+            telemetry,
             messages: [
                 {
                     role: "system",
@@ -233,6 +266,7 @@ export const retrieveBookContext = async ({
             messages,
             status: "retrieval_unavailable",
             sources: null,
+            telemetry: baseTelemetry,
             error: "Book retrieval is temporarily unavailable.",
         };
     }
@@ -243,6 +277,7 @@ export type GeneratedBookAnswer = {
     finishReason: string | null;
     streamCompleted: boolean;
     usage: unknown;
+    durationMs: number;
     transportWarning?: string;
 };
 
@@ -261,6 +296,7 @@ export const generateBookAnswer = async ({
     shouldContinue?: () => boolean;
     service?: OpenAIService;
 }): Promise<GeneratedBookAnswer> => {
+    const startedAt = Date.now();
     let answer = "";
     let streamCompleted = false;
     let finishReason: string | null = null;
@@ -291,9 +327,16 @@ export const generateBookAnswer = async ({
             finishReason,
             streamCompleted,
             usage,
+            durationMs: Date.now() - startedAt,
             transportWarning: getErrorDetail(error),
         };
     }
 
-    return { answer, finishReason, streamCompleted, usage };
+    return {
+        answer,
+        finishReason,
+        streamCompleted,
+        usage,
+        durationMs: Date.now() - startedAt,
+    };
 };

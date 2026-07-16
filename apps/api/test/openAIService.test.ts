@@ -9,6 +9,11 @@ import {
     createOpenAIClientOptions,
     type ChatMessage,
 } from "../src/services/OpenAIServices";
+import {
+    estimateModelCost,
+    normalizeModelUsage,
+} from "../src/services/AiUsage";
+import { getRagPipeline } from "../src/services/RagPipeline";
 import type OpenAI from "openai";
 
 const messages: ChatMessage[] = [
@@ -111,4 +116,42 @@ test("stream generation sends the usage-enabled request to the configured client
         restoreEnv("LANGFUSE_PUBLIC_KEY", previousPublicKey);
         restoreEnv("LANGFUSE_SECRET_KEY", previousSecretKey);
     }
+});
+
+test("RAG pipeline configuration rejects unregistered behavior versions", () => {
+    const previous = process.env.RAG_PIPELINE_VERSION;
+    process.env.RAG_PIPELINE_VERSION = "imaginary-rag-v9";
+    try {
+        assert.throws(getRagPipeline, /Unsupported RAG pipeline version/);
+    } finally {
+        if (previous === undefined) delete process.env.RAG_PIPELINE_VERSION;
+        else process.env.RAG_PIPELINE_VERSION = previous;
+    }
+});
+
+test("normalizes chat usage and estimates versioned model cost", () => {
+    const usage = normalizeModelUsage({
+        prompt_tokens: 1_000,
+        completion_tokens: 500,
+        total_tokens: 1_500,
+        prompt_tokens_details: { cached_tokens: 200 },
+    });
+
+    assert.deepEqual(usage, {
+        inputTokens: 1_000,
+        cachedInputTokens: 200,
+        outputTokens: 500,
+        totalTokens: 1_500,
+    });
+    assert.deepEqual(
+        estimateModelCost("gpt-4o-mini", usage),
+        {
+            currency: "USD",
+            amount: 0.000435,
+            pricingVersion: "openai-standard-2026-07-16",
+            sourceUrl:
+                "https://developers.openai.com/api/docs/models/gpt-4o-mini",
+        }
+    );
+    assert.equal(estimateModelCost("unknown-model", usage), null);
 });
