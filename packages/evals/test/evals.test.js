@@ -13,6 +13,10 @@ const {
     scoreRetrievalEval,
 } = require("../dist/retrieval");
 const { buildJudgePrompt, runAnswerEval } = require("../dist/answerJudge");
+const {
+    renderMarkdownReport,
+    summarizeExecution,
+} = require("../dist/report");
 
 const thresholds = {
     minRecallAtK: 0.75,
@@ -37,6 +41,37 @@ const langfuseReport = {
     createdAt: "2026-07-11T00:00:00.000Z",
     answerModels: ["answer-model"],
     judgeModel: "judge-model",
+    execution: {
+        pipelineVersions: ["baseline-rag-v1"],
+        promptVersions: ["book-context-v1"],
+        pricingVersion: "openai-standard-2026-07-16",
+        latencyMs: {
+            retrieval: 10,
+            generation: 20,
+            judge: 30,
+            total: 60,
+        },
+        usage: {
+            answers: {
+                inputTokens: 100,
+                cachedInputTokens: 0,
+                outputTokens: 20,
+                totalTokens: 120,
+            },
+            judge: {
+                inputTokens: 200,
+                cachedInputTokens: 0,
+                outputTokens: 30,
+                totalTokens: 230,
+            },
+        },
+        estimatedCostUsd: {
+            answers: 0.001,
+            judge: 0.002,
+            total: 0.003,
+            embeddingIncluded: false,
+        },
+    },
     thresholds,
     fixture: {
         title: "Fixture",
@@ -50,7 +85,18 @@ const langfuseReport = {
         storedChunkCount: 1,
     },
     retrieval: {
-        summary: {},
+        summary: {
+            caseCount: 1,
+            recallAtK: 1,
+            mrr: 1,
+            sourceHitRate: 1,
+            vectorSourceHitRate: 1,
+            vectorMrr: 1,
+            vectorIdAlignmentRate: 1,
+            chunkWindowHitRate: 1,
+            chapterAccuracy: 1,
+            passed: true,
+        },
         cases: [
             {
                 id: "case-1",
@@ -59,11 +105,21 @@ const langfuseReport = {
                 vectorReciprocalRank: 1,
                 vectorIdsAligned: true,
                 chapterCorrect: true,
+                pipelineVersion: "baseline-rag-v1",
+                promptVersion: "book-context-v1",
+                retrievalDurationMs: 10,
             },
         ],
     },
     answers: {
-        summary: {},
+        summary: {
+            caseCount: 1,
+            groundedness: 0.9,
+            citationCoverage: 0.8,
+            refusalCorrectness: 1,
+            hallucinationRate: 0.1,
+            passed: true,
+        },
         cases: [
             {
                 id: "case-1",
@@ -77,6 +133,12 @@ const langfuseReport = {
                     hallucinationRate: 0.1,
                     refusalCorrectness: 1,
                 },
+                generationDurationMs: 20,
+                judgeDurationMs: 30,
+                answerUsage: null,
+                judgeUsage: null,
+                answerEstimatedCost: null,
+                judgeEstimatedCost: null,
             },
         ],
     },
@@ -97,6 +159,12 @@ test("negative retrieval cases are not reported as source hits", () => {
                 ],
                 vectorResultIds: ["chunk_1"],
                 vectorIdsAligned: true,
+                pipelineVersion: "baseline-rag-v1",
+                promptVersion: "book-context-v1",
+                retrievalDurationMs: 1,
+                generationDurationMs: 1,
+                answerUsage: null,
+                answerEstimatedCost: null,
             },
         ],
         thresholds
@@ -121,6 +189,12 @@ test("negative retrieval cases pass with empty aligned sources", () => {
                 sources: [],
                 vectorResultIds: [],
                 vectorIdsAligned: true,
+                pipelineVersion: "baseline-rag-v1",
+                promptVersion: "book-context-v1",
+                retrievalDurationMs: 1,
+                generationDurationMs: 1,
+                answerUsage: null,
+                answerEstimatedCost: null,
             },
         ],
         thresholds
@@ -346,11 +420,16 @@ test("correct refusals do not require supporting citations", async () => {
         {
             async score() {
                 return {
-                    groundedness: 1,
-                    citationCoverage: 0,
-                    refusalCorrectness: 1,
-                    hallucinationRate: 0,
-                    rationale: "Correct refusal",
+                    scores: {
+                        groundedness: 1,
+                        citationCoverage: 0,
+                        refusalCorrectness: 1,
+                        hallucinationRate: 0,
+                        rationale: "Correct refusal",
+                    },
+                    usage: null,
+                    estimatedCost: null,
+                    durationMs: 4,
                 };
             },
         }
@@ -414,6 +493,12 @@ test("judge prompt marks generated answers and sources as untrusted", () => {
         ],
         vectorResultIds: ["chunk_1"],
         vectorIdsAligned: true,
+        pipelineVersion: "baseline-rag-v1",
+        promptVersion: "book-context-v1",
+        retrievalDurationMs: 1,
+        generationDurationMs: 1,
+        answerUsage: null,
+        answerEstimatedCost: null,
     });
 
     assert.match(prompt, /untrusted data/i);
@@ -424,4 +509,24 @@ test("judge prompt marks generated answers and sources as untrusted", () => {
         prompt,
         /<UNTRUSTED_CANDIDATE_ANSWER>\n"<\/UNTRUSTED_CANDIDATE_ANSWER>/
     );
+});
+
+test("execution summary aggregates latency usage and known costs", () => {
+    const execution = summarizeExecution({
+        retrieval: langfuseReport.retrieval,
+        answers: langfuseReport.answers,
+    });
+
+    assert.deepEqual(execution.pipelineVersions, ["baseline-rag-v1"]);
+    assert.deepEqual(execution.promptVersions, ["book-context-v1"]);
+    assert.equal(execution.latencyMs.total, 60);
+    assert.equal(execution.estimatedCostUsd.total, 0);
+    assert.equal(execution.estimatedCostUsd.embeddingIncluded, false);
+
+    const markdown = renderMarkdownReport({
+        ...langfuseReport,
+        execution,
+    });
+    assert.match(markdown, /Pipeline versions: baseline-rag-v1/);
+    assert.match(markdown, /Embedding cost included: false/);
 });

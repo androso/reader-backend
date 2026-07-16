@@ -181,10 +181,24 @@ export const syncReportToLangfuse = async (
                     runId: report.runId,
                     caseId: result.id,
                     answerModel: result.answerModel,
+                    pipelineVersions:
+                        report.execution.pipelineVersions.join(","),
+                    promptVersions: report.execution.promptVersions.join(","),
+                    pricingVersion: report.execution.pricingVersion,
                     source: "packages/evals",
                 },
             });
-            observation.update({ output: result.answer });
+            observation.update({
+                output: result.answer,
+                metadata: {
+                    generationDurationMs: result.generationDurationMs,
+                    judgeDurationMs: result.judgeDurationMs,
+                    answerUsage: result.answerUsage,
+                    judgeUsage: result.judgeUsage,
+                    answerEstimatedCost: result.answerEstimatedCost,
+                    judgeEstimatedCost: result.judgeEstimatedCost,
+                },
+            });
             observations.set(
                 traceKey(result.id, result.answerModel),
                 observation

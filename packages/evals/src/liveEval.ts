@@ -12,6 +12,10 @@ import {
     retrieveBookContext,
 } from "@reader/api/rag";
 import {
+    estimateModelCost,
+    normalizeModelUsage,
+} from "@reader/api/ai-usage";
+import {
     createBookCollectionName,
     processBookForSearch,
 } from "@reader/processing";
@@ -254,6 +258,7 @@ export const runLiveRagEval = async (
                         `Reader generated an empty answer for ${testCase.id} using ${answerModel}`
                     );
                 }
+                const answerUsage = normalizeModelUsage(generated.usage);
 
                 preparedCases.push({
                     ...testCase,
@@ -264,6 +269,16 @@ export const runLiveRagEval = async (
                     vectorResultIds: vectorResults.map((result) => result.id),
                     vectorIdsAligned: vectorResults.every((result) =>
                         storedIds.has(result.id)
+                    ),
+                    pipelineVersion: rag.telemetry.pipelineVersion,
+                    promptVersion: rag.telemetry.promptVersion,
+                    retrievalDurationMs:
+                        rag.telemetry.retrieval?.durationMs ?? 0,
+                    generationDurationMs: generated.durationMs,
+                    answerUsage,
+                    answerEstimatedCost: estimateModelCost(
+                        answerModel,
+                        answerUsage
                     ),
                 });
             }

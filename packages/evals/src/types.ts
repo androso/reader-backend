@@ -1,3 +1,7 @@
+import type {
+    EstimatedModelCost,
+    NormalizedModelUsage,
+} from "@reader/api/ai-usage";
 import type { MessageContextSource } from "@reader/api/rag";
 
 export interface RagEvalCase {
@@ -16,6 +20,12 @@ export interface PreparedEvalCase extends RagEvalCase {
     sources: MessageContextSource[];
     vectorResultIds: string[];
     vectorIdsAligned: boolean;
+    pipelineVersion: string;
+    promptVersion: string;
+    retrievalDurationMs: number;
+    generationDurationMs: number;
+    answerUsage: NormalizedModelUsage | null;
+    answerEstimatedCost: EstimatedModelCost | null;
 }
 
 export interface RetrievalCaseResult {
@@ -33,6 +43,9 @@ export interface RetrievalCaseResult {
     vectorIdsAligned: boolean;
     chunkWindowHit: boolean;
     chapterCorrect: boolean | null;
+    pipelineVersion: string;
+    promptVersion: string;
+    retrievalDurationMs: number;
     passed: boolean;
 }
 
@@ -51,6 +64,12 @@ export interface AnswerCaseResult {
     expectedAnswer: string;
     answerModel: string;
     scores: JudgeScores;
+    generationDurationMs: number;
+    judgeDurationMs: number;
+    answerUsage: NormalizedModelUsage | null;
+    judgeUsage: NormalizedModelUsage | null;
+    answerEstimatedCost: EstimatedModelCost | null;
+    judgeEstimatedCost: EstimatedModelCost | null;
     passed: boolean;
 }
 
@@ -107,6 +126,27 @@ export interface RagEvalReport {
     createdAt: string;
     answerModels: string[];
     judgeModel: string;
+    execution: {
+        pipelineVersions: string[];
+        promptVersions: string[];
+        pricingVersion: string;
+        latencyMs: {
+            retrieval: number;
+            generation: number;
+            judge: number;
+            total: number;
+        };
+        usage: {
+            answers: NormalizedModelUsage;
+            judge: NormalizedModelUsage;
+        };
+        estimatedCostUsd: {
+            answers: number;
+            judge: number;
+            total: number;
+            embeddingIncluded: false;
+        };
+    };
     thresholds: EvalThresholds;
     fixture: RagEvalFixture;
     ingestion: RagEvalIngestion;

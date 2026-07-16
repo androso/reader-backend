@@ -87,6 +87,9 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
         vectorIdsAligned: testCase.vectorIdsAligned,
         chunkWindowHit,
         chapterCorrect,
+        pipelineVersion: testCase.pipelineVersion,
+        promptVersion: testCase.promptVersion,
+        retrievalDurationMs: testCase.retrievalDurationMs,
         passed,
     };
 };

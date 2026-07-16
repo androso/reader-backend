@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { RagEvalReport } from "./types";
+import {
+    AI_PRICING_VERSION,
+    type NormalizedModelUsage,
+} from "@reader/api/ai-usage";
 
 const REPORT_DIR = path.resolve(__dirname, "../reports");
 
@@ -15,6 +19,87 @@ export const createReport = (
     createdAt: new Date().toISOString(),
 });
 
+const emptyUsage = (): NormalizedModelUsage => ({
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+});
+
+const sumUsage = (
+    values: Array<NormalizedModelUsage | null>
+): NormalizedModelUsage =>
+    values.reduce<NormalizedModelUsage>((total, usage) => {
+        if (!usage) return total;
+        return {
+            inputTokens: total.inputTokens + usage.inputTokens,
+            cachedInputTokens:
+                total.cachedInputTokens + usage.cachedInputTokens,
+            outputTokens: total.outputTokens + usage.outputTokens,
+            totalTokens: total.totalTokens + usage.totalTokens,
+        };
+    }, emptyUsage());
+
+const sumCost = (
+    values: Array<{ amount: number } | null>
+): number => values.reduce((total, cost) => total + (cost?.amount ?? 0), 0);
+
+export const summarizeExecution = ({
+    retrieval,
+    answers,
+}: Pick<RagEvalReport, "retrieval" | "answers">): RagEvalReport["execution"] => {
+    const retrievalLatency = retrieval.cases.reduce(
+        (total, result) => total + result.retrievalDurationMs,
+        0
+    );
+    const generationLatency = answers.cases.reduce(
+        (total, result) => total + result.generationDurationMs,
+        0
+    );
+    const judgeLatency = answers.cases.reduce(
+        (total, result) => total + result.judgeDurationMs,
+        0
+    );
+    const answerCost = sumCost(
+        answers.cases.map((result) => result.answerEstimatedCost)
+    );
+    const judgeCost = sumCost(
+        answers.cases.map((result) => result.judgeEstimatedCost)
+    );
+
+    return {
+        pipelineVersions: [
+            ...new Set(
+                retrieval.cases.map((result) => result.pipelineVersion)
+            ),
+        ],
+        promptVersions: [
+            ...new Set(retrieval.cases.map((result) => result.promptVersion)),
+        ],
+        pricingVersion: AI_PRICING_VERSION,
+        latencyMs: {
+            retrieval: retrievalLatency,
+            generation: generationLatency,
+            judge: judgeLatency,
+            total: retrievalLatency + generationLatency + judgeLatency,
+        },
+        usage: {
+            answers: sumUsage(
+                answers.cases.map((result) => result.answerUsage)
+            ),
+            judge: sumUsage(
+                answers.cases.map((result) => result.judgeUsage)
+            ),
+        },
+        estimatedCostUsd: {
+            answers: answerCost,
+            judge: judgeCost,
+            total: answerCost + judgeCost,
+            embeddingIncluded: false,
+        },
+    };
+};
+
 export const renderMarkdownReport = (report: RagEvalReport) => {
     const lines = [
         `# Reader RAG Eval Report`,
@@ -28,6 +113,15 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         `- Extracted/stored chunks: ${report.ingestion.extractedChunkCount}/${report.ingestion.storedChunkCount}`,
         `- Answer models: ${report.answerModels.join(", ")}`,
         `- Judge model: ${report.judgeModel}`,
+        `- Pipeline versions: ${report.execution.pipelineVersions.join(", ")}`,
+        `- Prompt versions: ${report.execution.promptVersions.join(", ")}`,
+        `- Pricing version: ${report.execution.pricingVersion}`,
+        `- Total measured latency: ${report.execution.latencyMs.total} ms`,
+        `- Answer/judge tokens: ${report.execution.usage.answers.totalTokens}/${report.execution.usage.judge.totalTokens}`,
+        `- Estimated answer cost: $${report.execution.estimatedCostUsd.answers.toFixed(6)}`,
+        `- Estimated judge cost: $${report.execution.estimatedCostUsd.judge.toFixed(6)}`,
+        `- Estimated total cost: $${report.execution.estimatedCostUsd.total.toFixed(6)}`,
+        `- Embedding cost included: ${report.execution.estimatedCostUsd.embeddingIncluded}`,
     ];
 
     if (report.retrieval) {
