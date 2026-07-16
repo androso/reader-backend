@@ -1,0 +1,24 @@
+[
+    {
+        "id": "alice",
+        "fileName": "alice-in-wonderland.epub",
+        "title": "Alice's Adventures in Wonderland",
+        "author": "Lewis Carroll",
+        "downloadUrl": "https://standardebooks.org/ebooks/lewis-carroll/alices-adventures-in-wonderland/downloads/lewis-carroll_alices-adventures-in-wonderland.epub?source=download",
+        "sourceRepository": "https://github.com/standardebooks/lewis-carroll_alices-adventures-in-wonderland_john-tenniel",
+        "sourceRevision": "dfe3e6099b7633b729bec1ce65a66997c515c845",
+        "sha256": "d422c4b00899d58b6e4f92d2fa5efc37ceb425aea6c1354c6564b64e051d505a",
+        "sizeBytes": 83911
+    },
+    {
+        "id": "frankenstein",
+        "fileName": "frankenstein.epub",
+        "title": "Frankenstein",
+        "author": "Mary Shelley",
+        "downloadUrl": "https://standardebooks.org/ebooks/mary-shelley/frankenstein/downloads/mary-shelley_frankenstein.epub?source=download",
+        "sourceRepository": "https://github.com/standardebooks/mary-shelley_frankenstein",
+        "sourceRevision": "0e54fe85d3916535d8fa9dddebee03b107fa0888",
+        "sha256": "9ef7e1a6138d8bf64e6c529e6c981a169a70f7455455598aba031da482ec6c8f",
+        "sizeBytes": 633994
+    }
+]

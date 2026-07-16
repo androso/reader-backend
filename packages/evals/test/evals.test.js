@@ -7,6 +7,11 @@ const test = require("node:test");
 const { getEvalThresholds, getJudgeModel } = require("../dist/config");
 const { hasLangfuseConfig } = require("../dist/config");
 const { loadGoldenDataset } = require("../dist/dataset");
+const {
+    getFixture,
+    loadFixtureManifest,
+    verifyFixture,
+} = require("../dist/fixtures");
 const { syncReportToLangfuse } = require("../dist/langfuse");
 const {
     resolveLiveEvalSources,
@@ -70,10 +75,15 @@ const langfuseReport = {
     },
     thresholds,
     fixture: {
+        id: "fixture",
+        fileName: "fixture.epub",
         title: "Fixture",
         author: "Author",
+        downloadUrl: "https://example.com/fixture.epub",
+        sourceRepository: "https://example.com/source",
         sha256: "fixture-sha",
         sourceRevision: "revision",
+        sizeBytes: 1,
     },
     ingestion: {
         collectionName: "collection",
@@ -142,6 +152,52 @@ const langfuseReport = {
         ],
     },
 };
+
+test("fixture manifest verifies every pinned corpus file", async () => {
+    const fixtures = await loadFixtureManifest();
+    assert.deepEqual(
+        fixtures.map((fixture) => fixture.id),
+        ["alice", "frankenstein"]
+    );
+    for (const fixture of fixtures) {
+        const verified = await verifyFixture(fixture);
+        assert.equal(verified.buffer.length, fixture.sizeBytes);
+    }
+});
+
+test("fixture validation rejects unknown fixtures and checksum drift", async () => {
+    const fixtures = await loadFixtureManifest();
+    assert.throws(() => getFixture(fixtures, "unknown"), /Unknown fixture/);
+
+    const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "reader-fixture-"));
+    await fs.writeFile(path.join(fixtureDir, "fixture.epub"), "changed");
+    await assert.rejects(
+        verifyFixture(
+            {
+                ...fixtures[0],
+                fileName: "fixture.epub",
+            },
+            fixtureDir
+        ),
+        /checksum mismatch/
+    );
+});
+
+test("fixture manifest rejects duplicate IDs", async () => {
+    const fixtureDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "reader-fixture-manifest-")
+    );
+    const manifestPath = path.join(fixtureDir, "manifest.json");
+    const fixtures = await loadFixtureManifest();
+    await fs.writeFile(
+        manifestPath,
+        JSON.stringify([fixtures[0], fixtures[0]])
+    );
+    await assert.rejects(
+        loadFixtureManifest(manifestPath),
+        /Duplicate fixture id/
+    );
+});
 
 test("negative retrieval cases are not reported as source hits", () => {
     const result = scoreRetrievalEval(

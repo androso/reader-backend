@@ -1,6 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import OpenAI from "openai";
 import { Pool } from "pg";
 import {
@@ -26,17 +24,12 @@ import type {
     RagEvalFixture,
     RagEvalIngestion,
 } from "./types";
+import {
+    getFixture,
+    loadFixtureManifest,
+    verifyFixture,
+} from "./fixtures";
 import { resolveLiveEvalSources } from "./retrieval";
-
-const FIXTURE_PATH = path.resolve(
-    __dirname,
-    "../fixtures/alice-in-wonderland.epub"
-);
-const FIXTURE_SHA256 =
-    "d422c4b00899d58b6e4f92d2fa5efc37ceb425aea6c1354c6564b64e051d505a";
-const FIXTURE_SOURCE_REVISION = "dfe3e6099b7633b729bec1ce65a66997c515c845";
-const FIXTURE_SOURCE_URL =
-    "https://github.com/standardebooks/lewis-carroll_alices-adventures-in-wonderland_john-tenniel";
 const evalAnswerService = new OpenAIService(
     new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -152,16 +145,8 @@ export const runLiveRagEval = async (
     if (!process.env.DATABASE_URL) {
         throw new Error("DATABASE_URL is required for live RAG evals");
     }
-    const fixtureBuffer = await fs.readFile(FIXTURE_PATH);
-    const fixtureHash = crypto
-        .createHash("sha256")
-        .update(fixtureBuffer)
-        .digest("hex");
-    if (fixtureHash !== FIXTURE_SHA256) {
-        throw new Error(
-            `Alice EPUB checksum mismatch: expected ${FIXTURE_SHA256}, received ${fixtureHash}`
-        );
-    }
+    const fixture = getFixture(await loadFixtureManifest(), "alice");
+    const { buffer: fixtureBuffer } = await verifyFixture(fixture);
 
     const runToken = crypto.randomUUID().replace(/-/g, "");
     const fileKey = `rag-evals/${runToken}/alice-in-wonderland.epub`;
@@ -299,14 +284,7 @@ export const runLiveRagEval = async (
                     )
                 ),
             ],
-            fixture: {
-                title: "Alice's Adventures in Wonderland",
-                author: "Lewis Carroll",
-                sourceUrl: FIXTURE_SOURCE_URL,
-                sourceRevision: FIXTURE_SOURCE_REVISION,
-                sha256: FIXTURE_SHA256,
-                sizeBytes: fixtureBuffer.length,
-            },
+            fixture,
             ingestion: {
                 collectionName,
                 extractedChunkCount: processed.chunks,

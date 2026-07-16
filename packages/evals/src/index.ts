@@ -1,6 +1,7 @@
 export * from "./answerJudge";
 export * from "./config";
 export * from "./dataset";
+export * from "./fixtures";
 export * from "./langfuse";
 export * from "./liveEval";
 export * from "./report";

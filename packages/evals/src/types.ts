@@ -111,9 +111,12 @@ export interface AnswerSummary {
 }
 
 export interface RagEvalFixture {
+    id: string;
+    fileName: string;
     title: string;
     author: string;
-    sourceUrl: string;
+    downloadUrl: string;
+    sourceRepository: string;
     sourceRevision: string;
     sha256: string;
     sizeBytes: number;
