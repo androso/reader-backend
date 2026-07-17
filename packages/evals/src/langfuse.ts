@@ -185,6 +185,14 @@ export const syncReportToLangfuse = async (
                         report.execution.pipelineVersions.join(","),
                     promptVersions: report.execution.promptVersions.join(","),
                     pricingVersion: report.execution.pricingVersion,
+                    aggregateAnswerUsage:
+                        report.execution.usage.answers === null
+                            ? "unknown"
+                            : JSON.stringify(report.execution.usage.answers),
+                    aggregateJudgeUsage:
+                        report.execution.usage.judge === null
+                            ? "unknown"
+                            : JSON.stringify(report.execution.usage.judge),
                     source: "packages/evals",
                 },
             });

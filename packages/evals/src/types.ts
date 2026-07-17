@@ -137,8 +137,8 @@ export interface RagEvalReport {
             total: number;
         };
         usage: {
-            answers: NormalizedModelUsage;
-            judge: NormalizedModelUsage;
+            answers: NormalizedModelUsage | null;
+            judge: NormalizedModelUsage | null;
         };
         estimatedCostUsd: {
             answers: number | null;

@@ -56,18 +56,8 @@ const langfuseReport = {
             total: 60,
         },
         usage: {
-            answers: {
-                inputTokens: 100,
-                cachedInputTokens: 0,
-                outputTokens: 20,
-                totalTokens: 120,
-            },
-            judge: {
-                inputTokens: 200,
-                cachedInputTokens: 0,
-                outputTokens: 30,
-                totalTokens: 230,
-            },
+            answers: null,
+            judge: null,
         },
         estimatedCostUsd: {
             answers: 0.001,
@@ -322,6 +312,14 @@ test("Langfuse publication links traces and scores and flushes both clients", as
     assert.equal(observations.length, 1);
     assert.equal(observations[0].input.name, "reader-rag-eval");
     assert.equal(observations[0].input.metadata.caseId, "case-1");
+    assert.equal(
+        observations[0].input.metadata.aggregateAnswerUsage,
+        "unknown"
+    );
+    assert.equal(
+        observations[0].input.metadata.aggregateJudgeUsage,
+        "unknown"
+    );
     assert.ok(scores.length > 0);
     assert.ok(scores.every((score) => score.traceId === "trace-1"));
     assert.equal(
@@ -572,6 +570,8 @@ test("execution summary preserves unknown costs", () => {
     assert.deepEqual(execution.pipelineVersions, ["baseline-rag-v1"]);
     assert.deepEqual(execution.promptVersions, ["book-context-v1"]);
     assert.equal(execution.latencyMs.total, 60);
+    assert.equal(execution.usage.answers, null);
+    assert.equal(execution.usage.judge, null);
     assert.equal(execution.estimatedCostUsd.answers, null);
     assert.equal(execution.estimatedCostUsd.judge, null);
     assert.equal(execution.estimatedCostUsd.total, null);
@@ -582,6 +582,7 @@ test("execution summary preserves unknown costs", () => {
         execution,
     });
     assert.match(markdown, /Pipeline versions: baseline-rag-v1/);
+    assert.match(markdown, /Answer\/judge tokens: unknown\/unknown/);
     assert.match(markdown, /Estimated answer cost: unknown/);
     assert.match(markdown, /Estimated total cost: unknown/);
     assert.match(markdown, /Embedding cost included: false/);

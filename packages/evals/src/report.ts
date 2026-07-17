@@ -28,17 +28,18 @@ const emptyUsage = (): NormalizedModelUsage => ({
 
 const sumUsage = (
     values: Array<NormalizedModelUsage | null>
-): NormalizedModelUsage =>
-    values.reduce<NormalizedModelUsage>((total, usage) => {
-        if (!usage) return total;
-        return {
-            inputTokens: total.inputTokens + usage.inputTokens,
-            cachedInputTokens:
-                total.cachedInputTokens + usage.cachedInputTokens,
-            outputTokens: total.outputTokens + usage.outputTokens,
-            totalTokens: total.totalTokens + usage.totalTokens,
-        };
-    }, emptyUsage());
+): NormalizedModelUsage | null =>
+    values.some((usage) => usage === null)
+        ? null
+        : values.reduce<NormalizedModelUsage>((total, usage) => {
+              return {
+                  inputTokens: total.inputTokens + usage!.inputTokens,
+                  cachedInputTokens:
+                      total.cachedInputTokens + usage!.cachedInputTokens,
+                  outputTokens: total.outputTokens + usage!.outputTokens,
+                  totalTokens: total.totalTokens + usage!.totalTokens,
+              };
+          }, emptyUsage());
 
 const sumCost = (
     values: Array<{ amount: number } | null>
@@ -49,6 +50,9 @@ const sumCost = (
 
 const formatCost = (value: number | null) =>
     value === null ? "unknown" : `$${value.toFixed(6)}`;
+
+const formatUsage = (value: NormalizedModelUsage | null) =>
+    value === null ? "unknown" : String(value.totalTokens);
 
 export const summarizeExecution = ({
     retrieval,
@@ -127,7 +131,7 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         `- Prompt versions: ${report.execution.promptVersions.join(", ")}`,
         `- Pricing version: ${report.execution.pricingVersion}`,
         `- Total measured latency: ${report.execution.latencyMs.total} ms`,
-        `- Answer/judge tokens: ${report.execution.usage.answers.totalTokens}/${report.execution.usage.judge.totalTokens}`,
+        `- Answer/judge tokens: ${formatUsage(report.execution.usage.answers)}/${formatUsage(report.execution.usage.judge)}`,
         `- Estimated answer cost: ${formatCost(report.execution.estimatedCostUsd.answers)}`,
         `- Estimated judge cost: ${formatCost(report.execution.estimatedCostUsd.judge)}`,
         `- Estimated total cost: ${formatCost(report.execution.estimatedCostUsd.total)}`,
