@@ -25,6 +25,7 @@ const {
     assertTargetBookIds,
     cleanupEvalResources,
     resolveExpectedChunks,
+    selectFixturesForCases,
 } = require("../dist/liveEval");
 const {
     resolveLiveEvalSources,
@@ -250,6 +251,19 @@ test("fixture manifest rejects duplicate IDs", async () => {
     await assert.rejects(
         loadFixtureManifest(manifestPath),
         /Duplicate fixture id/
+    );
+});
+
+test("live eval selects only fixtures referenced by the chosen cases", async () => {
+    const fixtures = await loadFixtureManifest();
+    const selected = selectFixturesForCases(fixtures, [
+        { fixtureId: "alice" },
+        { fixtureId: "alice" },
+    ]);
+
+    assert.deepEqual(
+        selected.map((fixture) => fixture.id),
+        ["alice"]
     );
 });
 

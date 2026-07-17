@@ -117,6 +117,15 @@ export const assertCrossUserIsolation = (fixtureId: string, status: string) => {
     }
 };
 
+export const selectFixturesForCases = (
+    manifest: RagEvalFixture[],
+    cases: RagEvalCase[]
+) => {
+    const fixtureIds = new Set(cases.map((testCase) => testCase.fixtureId));
+    for (const fixtureId of fixtureIds) getFixture(manifest, fixtureId);
+    return manifest.filter((fixture) => fixtureIds.has(fixture.id));
+};
+
 export const cleanupEvalResources = async (
     resources: EvalCleanupResource[],
     userIds: string[],
@@ -175,8 +184,7 @@ export const runLiveRagEval = async (
     }
 
     const manifest = await loadFixtureManifest();
-    for (const testCase of cases) getFixture(manifest, testCase.fixtureId);
-    const fixtures = manifest;
+    const fixtures = selectFixturesForCases(manifest, cases);
     const runToken = crypto.randomUUID().replace(/-/g, "");
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const cleanupResources: EvalCleanupResource[] = [];
