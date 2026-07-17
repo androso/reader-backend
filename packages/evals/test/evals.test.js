@@ -19,7 +19,10 @@ const {
     loadFixtureManifest,
     verifyFixture,
 } = require("../dist/fixtures");
-const { syncReportToLangfuse } = require("../dist/langfuse");
+const {
+    syncReportToLangfuse,
+    syncRerankComparisonToLangfuse,
+} = require("../dist/langfuse");
 const {
     assertCrossUserIsolation,
     assertTargetBookIds,
@@ -36,10 +39,16 @@ const {
     OpenAIJudgeClient,
     runAnswerEval,
 } = require("../dist/answerJudge");
+const { renderMarkdownReport, summarizeExecution } = require("../dist/report");
 const {
-    renderMarkdownReport,
-    summarizeExecution,
-} = require("../dist/report");
+    assertPreparedRerankMatrix,
+    assertRerankComparisonMatrix,
+    createInfrastructureFailureReport,
+    createRerankComparisonReport,
+    renderRerankComparisonMarkdown,
+    writeInfrastructureFailureReport,
+    writeRerankComparisonReport,
+} = require("../dist/rerankComparison");
 
 const thresholds = {
     minRecallAtK: 0.75,
@@ -636,15 +645,9 @@ test("correct refusals do not require supporting citations", async () => {
 
     assert.equal(result.cases[0].passed, true);
     assert.equal(result.cases[0].answerModel, "gpt-4o-mini");
-    assert.equal(
-        result.cases[0].resolvedAnswerModel,
-        "gpt-4o-mini-2024-07-18"
-    );
+    assert.equal(result.cases[0].resolvedAnswerModel, "gpt-4o-mini-2024-07-18");
     assert.equal(result.cases[0].judgeModel, getJudgeModel());
-    assert.equal(
-        result.cases[0].resolvedJudgeModel,
-        "gpt-4o-mini-2024-07-18"
-    );
+    assert.equal(result.cases[0].resolvedJudgeModel, "gpt-4o-mini-2024-07-18");
     assert.equal(result.summary.passed, true);
 });
 
@@ -750,6 +753,11 @@ test("dataset selects the required and extended matrices", async () => {
         required.length * 3,
         21,
         "required suite must remain under the 25-case judge cap"
+    );
+    assert.equal(
+        required.length * 3 * 2,
+        42,
+        "rerank comparison must judge both pipelines under the 50-case cap"
     );
     assert.equal(
         extended.length * 3,
@@ -1071,4 +1079,368 @@ test("execution summary preserves unknown costs", () => {
     assert.match(markdown, /Estimated answer cost: unknown/);
     assert.match(markdown, /Estimated total cost: unknown/);
     assert.match(markdown, /Embedding cost included: false/);
+});
+
+const comparisonUsage = {
+    inputTokens: 100,
+    cachedInputTokens: 0,
+    outputTokens: 10,
+    totalTokens: 110,
+};
+
+const makeComparisonPreparedCase = (pipelineVersion) => ({
+    id: "comparison-case",
+    fixtureId: "alice",
+    suite: "required",
+    category: "factual",
+    question: "What happened?",
+    expectedAnswer: "Something happened.",
+    expectedEvidence: [{ text: "Something happened." }],
+    expectedChunkId: "chunk-1",
+    expectedChunkIds: ["chunk-1"],
+    answerModel: "answer-model",
+    resolvedAnswerModel: "answer-model-resolved",
+    candidateAnswer: "Something happened.",
+    sources: [
+        {
+            id: "chunk-1",
+            chunkIndex: 1,
+            score: 0.04,
+            bestRank: 1,
+            excerpt: "Something happened in the story.",
+        },
+    ],
+    vectorResultIds: ["chunk-1"],
+    vectorIdsAligned: true,
+    pipelineVersion,
+    promptVersion: "book-context-v1",
+    retrievalDurationMs: pipelineVersion === "rerank-rag-v1" ? 30 : 10,
+    retrievalDiagnostics:
+        pipelineVersion === "rerank-rag-v1"
+            ? {
+                  mode: "reranked",
+                  durationMs: 30,
+                  firstStage: {
+                      mode: "hybrid",
+                      durationMs: 10,
+                      lexicalCandidates: [],
+                      vectorCandidates: [],
+                      selectedCandidates: [],
+                  },
+                  firstStageCandidates: [],
+                  finalCandidates: [],
+                  reranker: {
+                      requestedModel: "gpt-5.4-mini-2026-03-17",
+                      resolvedModel: "gpt-5.4-mini-2026-03-17",
+                      promptVersion: "rerank-documents-v1",
+                      status: "success",
+                      durationMs: 2500,
+                      usage: comparisonUsage,
+                      estimatedCost: {
+                          currency: "USD",
+                          amount: 0.001,
+                          pricingVersion: "pricing",
+                          sourceUrl: "https://example.com/pricing",
+                      },
+                      fallbackReason: null,
+                  },
+                  diversity: { maxWordTrigramJaccard: 0 },
+              }
+            : {
+                  mode: "hybrid",
+                  durationMs: 10,
+                  lexicalCandidates: [],
+                  vectorCandidates: [],
+                  selectedCandidates: [],
+              },
+    generationDurationMs: 20,
+    answerUsage: comparisonUsage,
+    answerEstimatedCost: { amount: 0.002 },
+});
+
+const makeRetrievalEvaluation = (pipelineVersion, overrides = {}) => ({
+    summary: {
+        caseCount: 1,
+        recallAtK: 1,
+        evidenceCoverage: 1,
+        mrr: 1,
+        sourceHitRate: 1,
+        vectorSourceHitRate: 1,
+        vectorMrr: 1,
+        vectorIdAlignmentRate: 1,
+        chunkWindowHitRate: 1,
+        chapterAccuracy: 1,
+        perCategory: {},
+        passed: true,
+        ...overrides,
+    },
+    cases: [
+        {
+            id: "comparison-case",
+            recallAtK: overrides.recallAtK ?? 1,
+            evidenceCoverage: overrides.evidenceCoverage ?? 1,
+            reciprocalRank: overrides.mrr ?? 1,
+            passed: overrides.passed ?? true,
+            pipelineVersion,
+        },
+    ],
+});
+
+const makeAnswerEvaluation = (pipelineVersion, overrides = {}) => ({
+    summary: {
+        caseCount: 1,
+        groundedness: 1,
+        citationCoverage: 1,
+        refusalCorrectness: 1,
+        hallucinationRate: 0,
+        perCategory: {},
+        passed: true,
+        ...overrides,
+    },
+    cases: [
+        {
+            id: "comparison-case",
+            answerModel: "answer-model",
+            pipelineVersion,
+            scores: {
+                groundedness: overrides.groundedness ?? 1,
+                citationCoverage: overrides.citationCoverage ?? 1,
+                refusalCorrectness: overrides.refusalCorrectness ?? 1,
+                hallucinationRate: overrides.hallucinationRate ?? 0,
+            },
+            passed: overrides.passed ?? true,
+            generationDurationMs: 20,
+            judgeDurationMs: 30,
+            answerUsage: comparisonUsage,
+            judgeUsage: comparisonUsage,
+            answerEstimatedCost: { amount: 0.002 },
+            judgeEstimatedCost: { amount: 0.003 },
+        },
+    ],
+});
+
+const makeComparisonReport = (overrides = {}) => {
+    const baselineCase = makeComparisonPreparedCase("baseline-rag-v1");
+    const rerankedCase = makeComparisonPreparedCase("rerank-rag-v1");
+    return createRerankComparisonReport({
+        baselineRetrieval: makeRetrievalEvaluation("baseline-rag-v1"),
+        rerankedRetrieval: makeRetrievalEvaluation(
+            "rerank-rag-v1",
+            overrides.rerankedRetrieval
+        ),
+        baselineAnswers: makeAnswerEvaluation("baseline-rag-v1"),
+        rerankedAnswers: makeAnswerEvaluation(
+            "rerank-rag-v1",
+            overrides.rerankedAnswers
+        ),
+        baselineCases: [baselineCase],
+        rerankedCases: overrides.rerankedCases ?? [rerankedCase],
+        fixtures: [],
+        ingestion: [],
+        answerModels: ["answer-model"],
+    });
+};
+
+test("rerank matrix validation enforces 7 x 3 x 2 = 42 under cap 50", () => {
+    const cases = Array.from({ length: 7 }, (_, index) => ({
+        id: `case-${index}`,
+        suite: "required",
+    }));
+    const models = ["model-a", "model-b", "model-c"];
+    assert.equal(
+        assertRerankComparisonMatrix({
+            cases,
+            answerModels: models,
+            pipelineVersions: ["baseline-rag-v1", "rerank-rag-v1"],
+            maxJudgedAnswers: 50,
+        }),
+        42
+    );
+    const prepared = (pipelineVersion) =>
+        cases.flatMap((testCase) =>
+            models.map((answerModel) => ({
+                ...testCase,
+                pipelineVersion,
+                answerModel,
+            }))
+        );
+    assert.equal(
+        assertPreparedRerankMatrix({
+            baselineCases: prepared("baseline-rag-v1"),
+            rerankedCases: prepared("rerank-rag-v1"),
+            answerModels: models,
+            maxJudgedAnswers: 50,
+        }),
+        42
+    );
+    assert.throws(
+        () =>
+            assertRerankComparisonMatrix({
+                cases,
+                answerModels: models,
+                pipelineVersions: ["baseline-rag-v1", "rerank-rag-v1"],
+                maxJudgedAnswers: 41,
+            }),
+        /under cap 41/
+    );
+});
+
+test("comparison deduplicates reranker telemetry and accepts the 2500ms boundary", () => {
+    const reranked = makeComparisonPreparedCase("rerank-rag-v1");
+    const report = makeComparisonReport({
+        rerankedCases: [reranked, reranked, reranked],
+    });
+    assert.equal(report.promotionPassed, true);
+    assert.equal(report.judgedAnswerCount, 2);
+    assert.equal(report.usage.reranker.totalTokens, 110);
+    assert.equal(report.estimatedCostUsd.reranker, 0.001);
+    assert.equal(report.latencyMs.reranker.p95, 2500);
+    assert.equal(report.promotion.checks.rerankerP95AtMost2500Ms, true);
+    assert.equal(report.pairedRetrieval.length, 1);
+    assert.equal(report.pairedAnswers.length, 1);
+});
+
+test("comparison reports retrieval and answer promotion regressions", () => {
+    const report = makeComparisonReport({
+        rerankedRetrieval: { recallAtK: 0, mrr: 0, passed: false },
+        rerankedAnswers: {
+            groundedness: 0.8,
+            citationCoverage: 0.8,
+            hallucinationRate: 0.2,
+            passed: false,
+        },
+    });
+    assert.equal(report.promotionPassed, false);
+    assert.ok(report.promotion.failedChecks.includes("noRequiredCaseLost"));
+    assert.ok(report.promotion.failedChecks.includes("recallAtKNonRegression"));
+    assert.ok(report.promotion.failedChecks.includes("groundednessBudget"));
+    assert.ok(report.promotion.failedChecks.includes("hallucinationBudget"));
+});
+
+test("comparison writers use exact report paths for infrastructure failures", async () => {
+    const report = createInfrastructureFailureReport(
+        new Error("OPENAI_API_KEY is required")
+    );
+    const paths = await writeRerankComparisonReport(report);
+    assert.equal(
+        path.basename(paths.jsonPath),
+        "latest-rerank-comparison.json"
+    );
+    assert.equal(
+        path.basename(paths.markdownPath),
+        "latest-rerank-comparison.md"
+    );
+    assert.equal(
+        JSON.parse(await fs.readFile(paths.jsonPath, "utf8"))
+            .infrastructurePassed,
+        false
+    );
+    const markdown = await fs.readFile(paths.markdownPath, "utf8");
+    assert.match(markdown, /Infrastructure passed: false/);
+    assert.match(markdown, /Stage latency p50\/p95/);
+    assert.match(markdown, /Estimated costs USD/);
+});
+
+test("comparison Langfuse sync awaits scores before flush and shutdown", async () => {
+    const report = makeComparisonReport();
+    const lifecycle = [];
+    const scores = [];
+    const client = {
+        score: {
+            async create(score) {
+                await Promise.resolve();
+                scores.push(score);
+                lifecycle.push(`score:${score.name}`);
+            },
+        },
+        async flush() {
+            lifecycle.push("flush");
+        },
+    };
+    const runtime = {
+        startObservation(input) {
+            assert.equal(input.name, "reader-rag-rerank-comparison");
+            return {
+                traceId: "comparison-trace",
+                update(output) {
+                    assert.ok(output.output.pairedRetrieval);
+                },
+                end() {
+                    lifecycle.push("end");
+                },
+            };
+        },
+        async shutdown() {
+            lifecycle.push("shutdown");
+        },
+    };
+    const result = await syncRerankComparisonToLangfuse(
+        report,
+        Promise.resolve(client),
+        Promise.resolve(runtime)
+    );
+    assert.equal(result.syncedScores, scores.length);
+    assert.ok(scores.length > 1);
+    assert.deepEqual(lifecycle.slice(-3), ["end", "flush", "shutdown"]);
+    assert.ok(
+        lifecycle.indexOf("score:rag_rerank_promotion_passed") <
+            lifecycle.indexOf("flush")
+    );
+    assert.match(
+        renderRerankComparisonMarkdown(report),
+        /Paired answer deltas/
+    );
+});
+
+test("comparison Langfuse sync observes rejected score writes", async () => {
+    const lifecycle = [];
+    const client = {
+        score: {
+            async create() {
+                throw new Error("comparison score failed");
+            },
+        },
+        async flush() {
+            lifecycle.push("flush");
+        },
+    };
+    const runtime = {
+        startObservation() {
+            return {
+                traceId: "comparison-trace-failure",
+                update() {},
+                end() {
+                    lifecycle.push("end");
+                },
+            };
+        },
+        async shutdown() {
+            lifecycle.push("shutdown");
+        },
+    };
+    await assert.rejects(
+        syncRerankComparisonToLangfuse(
+            makeComparisonReport(),
+            Promise.resolve(client),
+            Promise.resolve(runtime)
+        ),
+        /comparison score failed/
+    );
+    assert.deepEqual(lifecycle, ["end", "flush", "shutdown"]);
+});
+
+test("infrastructure failure helper writes both reports before returning", async () => {
+    const { report, paths } = await writeInfrastructureFailureReport(
+        new Error("OPENAI_API_KEY is required")
+    );
+    assert.equal(report.infrastructurePassed, false);
+    assert.equal(report.promotionPassed, false);
+    assert.match(
+        JSON.parse(await fs.readFile(paths.jsonPath, "utf8")).error,
+        /OPENAI_API_KEY is required/
+    );
+    assert.match(
+        await fs.readFile(paths.markdownPath, "utf8"),
+        /Promotion passed: false/
+    );
 });

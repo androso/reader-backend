@@ -182,6 +182,8 @@ export const runAnswerEval = async (
             expectedAnswer: testCase.expectedAnswer,
             answerModel: testCase.answerModel,
             resolvedAnswerModel: testCase.resolvedAnswerModel,
+            pipelineVersion: testCase.pipelineVersion,
+            promptVersion: testCase.promptVersion,
             judgeModel: model,
             resolvedJudgeModel: judged.modelVersion,
             scores,

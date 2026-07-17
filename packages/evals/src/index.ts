@@ -6,5 +6,6 @@ export * from "./fixtures";
 export * from "./langfuse";
 export * from "./liveEval";
 export * from "./report";
+export * from "./rerankComparison";
 export * from "./retrieval";
 export * from "./types";

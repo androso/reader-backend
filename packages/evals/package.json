@@ -10,7 +10,8 @@
         "test": "pnpm build && node --test test/*.test.js",
         "eval:live": "pnpm build && DOTENV_CONFIG_PATH=../../.env node -r dotenv/config dist/cli.js live",
         "eval:ci": "pnpm build && DOTENV_CONFIG_PATH=../../.env node -r dotenv/config dist/cli.js ci",
-        "eval:extended": "pnpm build && RAG_EVAL_JUDGE_MAX_CASES=50 DOTENV_CONFIG_PATH=../../.env node -r dotenv/config dist/cli.js extended"
+        "eval:extended": "pnpm build && RAG_EVAL_JUDGE_MAX_CASES=50 DOTENV_CONFIG_PATH=../../.env node -r dotenv/config dist/cli.js extended",
+        "eval:rerank": "pnpm build && RAG_EVAL_JUDGE_MAX_CASES=50 DOTENV_CONFIG_PATH=../../.env node -r dotenv/config dist/cli.js rerank"
     },
     "dependencies": {
         "@langfuse/client": "^5.9.0",
