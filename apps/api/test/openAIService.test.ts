@@ -144,6 +144,23 @@ test("RAG pipeline configuration rejects unregistered behavior versions", () => 
     }
 });
 
+test("RAG pipeline configuration rejects inherited object properties", () => {
+    const previous = process.env.RAG_PIPELINE_VERSION;
+    try {
+        for (const inheritedProperty of ["constructor", "toString"]) {
+            process.env.RAG_PIPELINE_VERSION = inheritedProperty;
+            assert.throws(
+                getRagPipeline,
+                new RegExp(
+                    `Unsupported RAG pipeline version: ${inheritedProperty}`
+                )
+            );
+        }
+    } finally {
+        restoreEnv("RAG_PIPELINE_VERSION", previous);
+    }
+});
+
 test("normalizes chat usage and estimates versioned model cost", () => {
     const usage = normalizeModelUsage({
         prompt_tokens: 1_000,

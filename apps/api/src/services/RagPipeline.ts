@@ -15,7 +15,7 @@ export const DEFAULT_RAG_PIPELINE_VERSION: RagPipelineVersion =
 export const getRagPipeline = () => {
     const configured =
         process.env.RAG_PIPELINE_VERSION || DEFAULT_RAG_PIPELINE_VERSION;
-    if (!(configured in RAG_PIPELINES)) {
+    if (!Object.prototype.hasOwnProperty.call(RAG_PIPELINES, configured)) {
         throw new Error(`Unsupported RAG pipeline version: ${configured}`);
     }
 
