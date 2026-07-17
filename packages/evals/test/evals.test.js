@@ -511,7 +511,7 @@ test("judge prompt marks generated answers and sources as untrusted", () => {
     );
 });
 
-test("execution summary aggregates latency usage and known costs", () => {
+test("execution summary preserves unknown costs", () => {
     const execution = summarizeExecution({
         retrieval: langfuseReport.retrieval,
         answers: langfuseReport.answers,
@@ -520,7 +520,9 @@ test("execution summary aggregates latency usage and known costs", () => {
     assert.deepEqual(execution.pipelineVersions, ["baseline-rag-v1"]);
     assert.deepEqual(execution.promptVersions, ["book-context-v1"]);
     assert.equal(execution.latencyMs.total, 60);
-    assert.equal(execution.estimatedCostUsd.total, 0);
+    assert.equal(execution.estimatedCostUsd.answers, null);
+    assert.equal(execution.estimatedCostUsd.judge, null);
+    assert.equal(execution.estimatedCostUsd.total, null);
     assert.equal(execution.estimatedCostUsd.embeddingIncluded, false);
 
     const markdown = renderMarkdownReport({
@@ -528,5 +530,7 @@ test("execution summary aggregates latency usage and known costs", () => {
         execution,
     });
     assert.match(markdown, /Pipeline versions: baseline-rag-v1/);
+    assert.match(markdown, /Estimated answer cost: unknown/);
+    assert.match(markdown, /Estimated total cost: unknown/);
     assert.match(markdown, /Embedding cost included: false/);
 });

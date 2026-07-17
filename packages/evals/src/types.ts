@@ -141,9 +141,9 @@ export interface RagEvalReport {
             judge: NormalizedModelUsage;
         };
         estimatedCostUsd: {
-            answers: number;
-            judge: number;
-            total: number;
+            answers: number | null;
+            judge: number | null;
+            total: number | null;
             embeddingIncluded: false;
         };
     };

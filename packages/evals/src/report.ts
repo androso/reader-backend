@@ -42,7 +42,13 @@ const sumUsage = (
 
 const sumCost = (
     values: Array<{ amount: number } | null>
-): number => values.reduce((total, cost) => total + (cost?.amount ?? 0), 0);
+): number | null =>
+    values.some((cost) => cost === null)
+        ? null
+        : values.reduce((total, cost) => total + cost!.amount, 0);
+
+const formatCost = (value: number | null) =>
+    value === null ? "unknown" : `$${value.toFixed(6)}`;
 
 export const summarizeExecution = ({
     retrieval,
@@ -66,6 +72,10 @@ export const summarizeExecution = ({
     const judgeCost = sumCost(
         answers.cases.map((result) => result.judgeEstimatedCost)
     );
+    const totalCost =
+        answerCost === null || judgeCost === null
+            ? null
+            : answerCost + judgeCost;
 
     return {
         pipelineVersions: [
@@ -94,7 +104,7 @@ export const summarizeExecution = ({
         estimatedCostUsd: {
             answers: answerCost,
             judge: judgeCost,
-            total: answerCost + judgeCost,
+            total: totalCost,
             embeddingIncluded: false,
         },
     };
@@ -118,9 +128,9 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         `- Pricing version: ${report.execution.pricingVersion}`,
         `- Total measured latency: ${report.execution.latencyMs.total} ms`,
         `- Answer/judge tokens: ${report.execution.usage.answers.totalTokens}/${report.execution.usage.judge.totalTokens}`,
-        `- Estimated answer cost: $${report.execution.estimatedCostUsd.answers.toFixed(6)}`,
-        `- Estimated judge cost: $${report.execution.estimatedCostUsd.judge.toFixed(6)}`,
-        `- Estimated total cost: $${report.execution.estimatedCostUsd.total.toFixed(6)}`,
+        `- Estimated answer cost: ${formatCost(report.execution.estimatedCostUsd.answers)}`,
+        `- Estimated judge cost: ${formatCost(report.execution.estimatedCostUsd.judge)}`,
+        `- Estimated total cost: ${formatCost(report.execution.estimatedCostUsd.total)}`,
         `- Embedding cost included: ${report.execution.estimatedCostUsd.embeddingIncluded}`,
     ];
 
