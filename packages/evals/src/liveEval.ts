@@ -12,6 +12,10 @@ import {
     retrieveBookContext,
 } from "@reader/api/rag";
 import {
+    estimateModelCost,
+    normalizeModelUsage,
+} from "@reader/api/ai-usage";
+import {
     createBookCollectionName,
     processBookForSearch,
 } from "@reader/processing";
@@ -143,6 +147,7 @@ export const runLiveRagEval = async (
     fixture: RagEvalFixture;
     ingestion: RagEvalIngestion;
     answerModels: string[];
+    resolvedAnswerModels: string[];
 }> => {
     if (!process.env.DATABASE_URL) {
         throw new Error("DATABASE_URL is required for live RAG evals");
@@ -254,16 +259,28 @@ export const runLiveRagEval = async (
                         `Reader generated an empty answer for ${testCase.id} using ${answerModel}`
                     );
                 }
+                const answerUsage = normalizeModelUsage(generated.usage);
 
                 preparedCases.push({
                     ...testCase,
                     answerModel,
+                    resolvedAnswerModel: generated.modelVersion,
                     expectedChunkId: expectedChunk?.id,
                     candidateAnswer: generated.answer,
                     sources,
                     vectorResultIds: vectorResults.map((result) => result.id),
                     vectorIdsAligned: vectorResults.every((result) =>
                         storedIds.has(result.id)
+                    ),
+                    pipelineVersion: rag.telemetry.pipelineVersion,
+                    promptVersion: rag.telemetry.promptVersion,
+                    retrievalDurationMs:
+                        rag.telemetry.retrieval?.durationMs ?? 0,
+                    generationDurationMs: generated.durationMs,
+                    answerUsage,
+                    answerEstimatedCost: estimateModelCost(
+                        generated.modelVersion,
+                        answerUsage
                     ),
                 });
             }
@@ -275,6 +292,13 @@ export const runLiveRagEval = async (
                 (testCase) => testCase.answerModel === OPENAI_CHAT_MODELS[0]
             ),
             answerModels: [...OPENAI_CHAT_MODELS],
+            resolvedAnswerModels: [
+                ...new Set(
+                    preparedCases.map(
+                        (testCase) => testCase.resolvedAnswerModel
+                    )
+                ),
+            ],
             fixture: {
                 title: "Alice's Adventures in Wonderland",
                 author: "Lewis Carroll",

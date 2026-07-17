@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { RagEvalReport } from "./types";
+import {
+    AI_PRICING_VERSION,
+    type NormalizedModelUsage,
+} from "@reader/api/ai-usage";
 
 const REPORT_DIR = path.resolve(__dirname, "../reports");
 
@@ -15,6 +19,101 @@ export const createReport = (
     createdAt: new Date().toISOString(),
 });
 
+const emptyUsage = (): NormalizedModelUsage => ({
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+});
+
+const sumUsage = (
+    values: Array<NormalizedModelUsage | null>
+): NormalizedModelUsage | null =>
+    values.some((usage) => usage === null)
+        ? null
+        : values.reduce<NormalizedModelUsage>((total, usage) => {
+              return {
+                  inputTokens: total.inputTokens + usage!.inputTokens,
+                  cachedInputTokens:
+                      total.cachedInputTokens + usage!.cachedInputTokens,
+                  outputTokens: total.outputTokens + usage!.outputTokens,
+                  totalTokens: total.totalTokens + usage!.totalTokens,
+              };
+          }, emptyUsage());
+
+const sumCost = (
+    values: Array<{ amount: number } | null>
+): number | null =>
+    values.some((cost) => cost === null)
+        ? null
+        : values.reduce((total, cost) => total + cost!.amount, 0);
+
+const formatCost = (value: number | null) =>
+    value === null ? "unknown" : `$${value.toFixed(6)}`;
+
+const formatUsage = (value: NormalizedModelUsage | null) =>
+    value === null ? "unknown" : String(value.totalTokens);
+
+export const summarizeExecution = ({
+    retrieval,
+    answers,
+}: Pick<RagEvalReport, "retrieval" | "answers">): RagEvalReport["execution"] => {
+    const retrievalLatency = retrieval.cases.reduce(
+        (total, result) => total + result.retrievalDurationMs,
+        0
+    );
+    const generationLatency = answers.cases.reduce(
+        (total, result) => total + result.generationDurationMs,
+        0
+    );
+    const judgeLatency = answers.cases.reduce(
+        (total, result) => total + result.judgeDurationMs,
+        0
+    );
+    const answerCost = sumCost(
+        answers.cases.map((result) => result.answerEstimatedCost)
+    );
+    const judgeCost = sumCost(
+        answers.cases.map((result) => result.judgeEstimatedCost)
+    );
+    const totalCost =
+        answerCost === null || judgeCost === null
+            ? null
+            : answerCost + judgeCost;
+
+    return {
+        pipelineVersions: [
+            ...new Set(
+                retrieval.cases.map((result) => result.pipelineVersion)
+            ),
+        ],
+        promptVersions: [
+            ...new Set(retrieval.cases.map((result) => result.promptVersion)),
+        ],
+        pricingVersion: AI_PRICING_VERSION,
+        latencyMs: {
+            retrieval: retrievalLatency,
+            generation: generationLatency,
+            judge: judgeLatency,
+            total: retrievalLatency + generationLatency + judgeLatency,
+        },
+        usage: {
+            answers: sumUsage(
+                answers.cases.map((result) => result.answerUsage)
+            ),
+            judge: sumUsage(
+                answers.cases.map((result) => result.judgeUsage)
+            ),
+        },
+        estimatedCostUsd: {
+            answers: answerCost,
+            judge: judgeCost,
+            total: totalCost,
+            embeddingIncluded: false,
+        },
+    };
+};
+
 export const renderMarkdownReport = (report: RagEvalReport) => {
     const lines = [
         `# Reader RAG Eval Report`,
@@ -26,8 +125,19 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         `- Source revision: ${report.fixture.sourceRevision}`,
         `- Collection: ${report.ingestion.collectionName}`,
         `- Extracted/stored chunks: ${report.ingestion.extractedChunkCount}/${report.ingestion.storedChunkCount}`,
-        `- Answer models: ${report.answerModels.join(", ")}`,
-        `- Judge model: ${report.judgeModel}`,
+        `- Requested answer models: ${report.answerModels.join(", ")}`,
+        `- Resolved answer models: ${report.resolvedAnswerModels.join(", ")}`,
+        `- Requested judge model: ${report.judgeModel}`,
+        `- Resolved judge models: ${report.resolvedJudgeModels.join(", ")}`,
+        `- Pipeline versions: ${report.execution.pipelineVersions.join(", ")}`,
+        `- Prompt versions: ${report.execution.promptVersions.join(", ")}`,
+        `- Pricing version: ${report.execution.pricingVersion}`,
+        `- Total measured latency: ${report.execution.latencyMs.total} ms`,
+        `- Answer/judge tokens: ${formatUsage(report.execution.usage.answers)}/${formatUsage(report.execution.usage.judge)}`,
+        `- Estimated answer cost: ${formatCost(report.execution.estimatedCostUsd.answers)}`,
+        `- Estimated judge cost: ${formatCost(report.execution.estimatedCostUsd.judge)}`,
+        `- Estimated total cost: ${formatCost(report.execution.estimatedCostUsd.total)}`,
+        `- Embedding cost included: ${report.execution.estimatedCostUsd.embeddingIncluded}`,
     ];
 
     if (report.retrieval) {

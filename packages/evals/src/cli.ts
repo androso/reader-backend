@@ -8,7 +8,7 @@ import { loadGoldenDataset } from "./dataset";
 import { runAnswerEval } from "./answerJudge";
 import { syncReportToLangfuse } from "./langfuse";
 import { runLiveRagEval } from "./liveEval";
-import { createReport, writeReport } from "./report";
+import { createReport, summarizeExecution, writeReport } from "./report";
 import { scoreRetrievalEval } from "./retrieval";
 
 const fail = (message: string): never => {
@@ -38,12 +38,19 @@ const run = async () => {
     const answers = await runAnswerEval(live.cases, thresholds);
     const report = createReport({
         answerModels: live.answerModels,
+        resolvedAnswerModels: live.resolvedAnswerModels,
         judgeModel: getJudgeModel(),
+        resolvedJudgeModels: [
+            ...new Set(
+                answers.cases.map((testCase) => testCase.resolvedJudgeModel)
+            ),
+        ],
         thresholds,
         fixture: live.fixture,
         ingestion: live.ingestion,
         retrieval,
         answers,
+        execution: summarizeExecution({ retrieval, answers }),
     });
     await persistAndPrint(report);
 

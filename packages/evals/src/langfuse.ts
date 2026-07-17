@@ -181,10 +181,39 @@ export const syncReportToLangfuse = async (
                     runId: report.runId,
                     caseId: result.id,
                     answerModel: result.answerModel,
+                    resolvedAnswerModel: result.resolvedAnswerModel,
+                    judgeModel: result.judgeModel,
+                    resolvedJudgeModel: result.resolvedJudgeModel,
+                    reportResolvedAnswerModels:
+                        report.resolvedAnswerModels.join(","),
+                    reportResolvedJudgeModels:
+                        report.resolvedJudgeModels.join(","),
+                    pipelineVersions:
+                        report.execution.pipelineVersions.join(","),
+                    promptVersions: report.execution.promptVersions.join(","),
+                    pricingVersion: report.execution.pricingVersion,
+                    aggregateAnswerUsage:
+                        report.execution.usage.answers === null
+                            ? "unknown"
+                            : JSON.stringify(report.execution.usage.answers),
+                    aggregateJudgeUsage:
+                        report.execution.usage.judge === null
+                            ? "unknown"
+                            : JSON.stringify(report.execution.usage.judge),
                     source: "packages/evals",
                 },
             });
-            observation.update({ output: result.answer });
+            observation.update({
+                output: result.answer,
+                metadata: {
+                    generationDurationMs: result.generationDurationMs,
+                    judgeDurationMs: result.judgeDurationMs,
+                    answerUsage: result.answerUsage,
+                    judgeUsage: result.judgeUsage,
+                    answerEstimatedCost: result.answerEstimatedCost,
+                    judgeEstimatedCost: result.judgeEstimatedCost,
+                },
+            });
             observations.set(
                 traceKey(result.id, result.answerModel),
                 observation

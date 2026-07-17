@@ -45,6 +45,11 @@ import {
     createAuthorizedChatConversation,
     isSupportedChatResourceType,
 } from "../services/ChatResourceAuthorization";
+import {
+    buildMessageExecutionMetadata,
+    PUBLIC_MESSAGE_SELECTION,
+} from "../services/ChatExecutionMetadata";
+import type { MessageExecutionMetadata } from "../types/ragTelemetry";
 
 const router = Router();
 const log = createLogger("chat");
@@ -280,7 +285,8 @@ const saveAssistantMessage = async (
     contextSources: MessageContextSource[] | null,
     trace: TraceObservation,
     completionStatus: "complete" | "truncated" | "cancelled" | "failed",
-    finishReason: string | null
+    finishReason: string | null,
+    executionMetadata: MessageExecutionMetadata
 ) => {
     const saveSpan = trace.startObservation("save_assistant_message", {
         input: {
@@ -298,6 +304,7 @@ const saveAssistantMessage = async (
             contextSources,
             completionStatus,
             finishReason,
+            executionMetadata,
         });
         await touchConversation(conversationId);
         saveSpan.update({
@@ -346,6 +353,7 @@ const runChatCompletion = async ({
     trace: TraceObservation;
     signal?: AbortSignal;
 }) => {
+    const startedAt = Date.now();
     const retrievalQuery = buildRetrievalQuery(query, highlightContext);
     const ragResult =
         resourceType === "book"
@@ -417,19 +425,41 @@ const runChatCompletion = async ({
                 : generated.finishReason === "length"
                   ? "truncated"
                   : "failed";
+        const telemetry =
+            "telemetry" in ragResult
+                ? ragResult.telemetry
+                : {
+                      pipelineVersion: "direct-chat-v1",
+                      promptVersion: "helpful-assistant-v1",
+                      queryPlan: null,
+                      retrieval: null,
+                  };
+        const executionMetadata = buildMessageExecutionMetadata({
+            telemetry,
+            model: generated.modelVersion,
+            usage: generated.usage,
+            generationDurationMs: generated.durationMs,
+            totalLatencyMs: Date.now() - startedAt,
+            langfuseTraceId: trace.traceId,
+        });
         await saveAssistantMessage(
             conversationId,
             generated.answer,
             ragResult.sources,
             trace,
             completionStatus,
-            generated.finishReason
+            generated.finishReason,
+            executionMetadata
         );
         trace.setTraceIO({
             output: {
                 status: "complete",
                 assistantResponseLength: generated.answer.length,
                 sourceCount: ragResult.sources?.length ?? 0,
+                pipelineVersion: executionMetadata.pipelineVersion,
+                promptVersion: executionMetadata.promptVersion,
+                totalLatencyMs: executionMetadata.totalLatencyMs,
+                estimatedCost: executionMetadata.generation.estimatedCost,
             },
         });
         if (ragResult.sources?.length) {
@@ -766,7 +796,7 @@ router.get(
             }
 
             const messages = await db
-                .select()
+                .select(PUBLIC_MESSAGE_SELECTION)
                 .from(Messages)
                 .where(eq(Messages.conversationId, conversationId))
                 .orderBy(Messages.createdAt);

@@ -28,6 +28,14 @@ export const isOpenAIChatModel = (model: unknown): model is OpenAIChatModel =>
     typeof model === "string" &&
     (OPENAI_CHAT_MODELS as readonly string[]).includes(model);
 
+export const resolveStreamModelVersion = (
+    requestedModel: string,
+    streamedModel: unknown
+) =>
+    typeof streamedModel === "string" && streamedModel
+        ? streamedModel
+        : requestedModel;
+
 const usesMaxCompletionTokens = (model: OpenAIChatModel) =>
     model !== OPENAI_CHAT_MODEL;
 

@@ -11,6 +11,7 @@ import {
     jsonb,
 } from "drizzle-orm/pg-core";
 import type { BookSearchChunkMetadata } from "@reader/providers";
+import type { MessageExecutionMetadata } from "../types/ragTelemetry";
 
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
 export const resourceTypeEnum = pgEnum("resource_type", ["book", "article"]);
@@ -100,6 +101,8 @@ export const Messages = pgTable("messages", {
     >(),
     completionStatus: messageCompletionStatusEnum("completion_status"),
     finishReason: text("finish_reason"),
+    executionMetadata:
+        jsonb("execution_metadata").$type<MessageExecutionMetadata | null>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

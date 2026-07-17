@@ -4,7 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
-const { getEvalThresholds } = require("../dist/config");
+const { getEvalThresholds, getJudgeModel } = require("../dist/config");
 const { hasLangfuseConfig } = require("../dist/config");
 const { loadGoldenDataset } = require("../dist/dataset");
 const { syncReportToLangfuse } = require("../dist/langfuse");
@@ -12,7 +12,15 @@ const {
     resolveLiveEvalSources,
     scoreRetrievalEval,
 } = require("../dist/retrieval");
-const { buildJudgePrompt, runAnswerEval } = require("../dist/answerJudge");
+const {
+    buildJudgePrompt,
+    OpenAIJudgeClient,
+    runAnswerEval,
+} = require("../dist/answerJudge");
+const {
+    renderMarkdownReport,
+    summarizeExecution,
+} = require("../dist/report");
 
 const thresholds = {
     minRecallAtK: 0.75,
@@ -36,7 +44,30 @@ const langfuseReport = {
     runId: "rag-eval-test",
     createdAt: "2026-07-11T00:00:00.000Z",
     answerModels: ["answer-model"],
+    resolvedAnswerModels: ["answer-model-2026-07-01"],
     judgeModel: "judge-model",
+    resolvedJudgeModels: ["judge-model-2026-07-01"],
+    execution: {
+        pipelineVersions: ["baseline-rag-v1"],
+        promptVersions: ["book-context-v1"],
+        pricingVersion: "openai-standard-2026-07-16",
+        latencyMs: {
+            retrieval: 10,
+            generation: 20,
+            judge: 30,
+            total: 60,
+        },
+        usage: {
+            answers: null,
+            judge: null,
+        },
+        estimatedCostUsd: {
+            answers: 0.001,
+            judge: 0.002,
+            total: 0.003,
+            embeddingIncluded: false,
+        },
+    },
     thresholds,
     fixture: {
         title: "Fixture",
@@ -50,7 +81,18 @@ const langfuseReport = {
         storedChunkCount: 1,
     },
     retrieval: {
-        summary: {},
+        summary: {
+            caseCount: 1,
+            recallAtK: 1,
+            mrr: 1,
+            sourceHitRate: 1,
+            vectorSourceHitRate: 1,
+            vectorMrr: 1,
+            vectorIdAlignmentRate: 1,
+            chunkWindowHitRate: 1,
+            chapterAccuracy: 1,
+            passed: true,
+        },
         cases: [
             {
                 id: "case-1",
@@ -59,11 +101,21 @@ const langfuseReport = {
                 vectorReciprocalRank: 1,
                 vectorIdsAligned: true,
                 chapterCorrect: true,
+                pipelineVersion: "baseline-rag-v1",
+                promptVersion: "book-context-v1",
+                retrievalDurationMs: 10,
             },
         ],
     },
     answers: {
-        summary: {},
+        summary: {
+            caseCount: 1,
+            groundedness: 0.9,
+            citationCoverage: 0.8,
+            refusalCorrectness: 1,
+            hallucinationRate: 0.1,
+            passed: true,
+        },
         cases: [
             {
                 id: "case-1",
@@ -71,12 +123,21 @@ const langfuseReport = {
                 answer: "Something happened.",
                 expectedAnswer: langfuseCase.expectedAnswer,
                 answerModel: "answer-model",
+                resolvedAnswerModel: "answer-model-2026-07-01",
+                judgeModel: "judge-model",
+                resolvedJudgeModel: "judge-model-2026-07-01",
                 scores: {
                     groundedness: 0.9,
                     citationCoverage: 0.8,
                     hallucinationRate: 0.1,
                     refusalCorrectness: 1,
                 },
+                generationDurationMs: 20,
+                judgeDurationMs: 30,
+                answerUsage: null,
+                judgeUsage: null,
+                answerEstimatedCost: null,
+                judgeEstimatedCost: null,
             },
         ],
     },
@@ -97,6 +158,12 @@ test("negative retrieval cases are not reported as source hits", () => {
                 ],
                 vectorResultIds: ["chunk_1"],
                 vectorIdsAligned: true,
+                pipelineVersion: "baseline-rag-v1",
+                promptVersion: "book-context-v1",
+                retrievalDurationMs: 1,
+                generationDurationMs: 1,
+                answerUsage: null,
+                answerEstimatedCost: null,
             },
         ],
         thresholds
@@ -121,6 +188,12 @@ test("negative retrieval cases pass with empty aligned sources", () => {
                 sources: [],
                 vectorResultIds: [],
                 vectorIdsAligned: true,
+                pipelineVersion: "baseline-rag-v1",
+                promptVersion: "book-context-v1",
+                retrievalDurationMs: 1,
+                generationDurationMs: 1,
+                answerUsage: null,
+                answerEstimatedCost: null,
             },
         ],
         thresholds
@@ -244,6 +317,22 @@ test("Langfuse publication links traces and scores and flushes both clients", as
     assert.equal(observations.length, 1);
     assert.equal(observations[0].input.name, "reader-rag-eval");
     assert.equal(observations[0].input.metadata.caseId, "case-1");
+    assert.equal(
+        observations[0].input.metadata.resolvedAnswerModel,
+        "answer-model-2026-07-01"
+    );
+    assert.equal(
+        observations[0].input.metadata.resolvedJudgeModel,
+        "judge-model-2026-07-01"
+    );
+    assert.equal(
+        observations[0].input.metadata.aggregateAnswerUsage,
+        "unknown"
+    );
+    assert.equal(
+        observations[0].input.metadata.aggregateJudgeUsage,
+        "unknown"
+    );
     assert.ok(scores.length > 0);
     assert.ok(scores.every((score) => score.traceId === "trace-1"));
     assert.equal(
@@ -336,6 +425,7 @@ test("correct refusals do not require supporting citations", async () => {
                 expectedAnswer: "not provided",
                 noAnswerExpected: true,
                 answerModel: "gpt-4o-mini",
+                resolvedAnswerModel: "gpt-4o-mini-2024-07-18",
                 candidateAnswer: "The book does not say.",
                 sources: [],
                 vectorResultIds: [],
@@ -346,11 +436,17 @@ test("correct refusals do not require supporting citations", async () => {
         {
             async score() {
                 return {
-                    groundedness: 1,
-                    citationCoverage: 0,
-                    refusalCorrectness: 1,
-                    hallucinationRate: 0,
-                    rationale: "Correct refusal",
+                    scores: {
+                        groundedness: 1,
+                        citationCoverage: 0,
+                        refusalCorrectness: 1,
+                        hallucinationRate: 0,
+                        rationale: "Correct refusal",
+                    },
+                    usage: null,
+                    estimatedCost: null,
+                    modelVersion: "gpt-4o-mini-2024-07-18",
+                    durationMs: 4,
                 };
             },
         }
@@ -358,7 +454,66 @@ test("correct refusals do not require supporting citations", async () => {
 
     assert.equal(result.cases[0].passed, true);
     assert.equal(result.cases[0].answerModel, "gpt-4o-mini");
+    assert.equal(
+        result.cases[0].resolvedAnswerModel,
+        "gpt-4o-mini-2024-07-18"
+    );
+    assert.equal(result.cases[0].judgeModel, getJudgeModel());
+    assert.equal(
+        result.cases[0].resolvedJudgeModel,
+        "gpt-4o-mini-2024-07-18"
+    );
     assert.equal(result.summary.passed, true);
+});
+
+test("judge cost uses the concrete response model", async () => {
+    const judge = new OpenAIJudgeClient({
+        chat: {
+            completions: {
+                async create() {
+                    return {
+                        model: "gpt-4o-mini-2024-07-18",
+                        choices: [
+                            {
+                                message: {
+                                    content: JSON.stringify({
+                                        groundedness: 1,
+                                        citationCoverage: 1,
+                                        refusalCorrectness: 1,
+                                        hallucinationRate: 0,
+                                        rationale: "Supported",
+                                    }),
+                                },
+                            },
+                        ],
+                        usage: {
+                            prompt_tokens: 100,
+                            completion_tokens: 20,
+                            total_tokens: 120,
+                        },
+                    };
+                },
+            },
+        },
+    });
+
+    const judged = await judge.score(
+        {
+            id: "resolved-judge-model",
+            question: "question",
+            expectedAnswer: "answer",
+            answerModel: "gpt-4o-mini",
+            resolvedAnswerModel: "gpt-4o-mini-2024-07-18",
+            candidateAnswer: "answer",
+            sources: [],
+            vectorResultIds: [],
+            vectorIdsAligned: true,
+        },
+        "custom-judge-alias"
+    );
+
+    assert.equal(judged.estimatedCost?.amount, 0.000027);
+    assert.equal(judged.modelVersion, "gpt-4o-mini-2024-07-18");
 });
 
 test("dataset validation rejects duplicate IDs", async () => {
@@ -414,6 +569,12 @@ test("judge prompt marks generated answers and sources as untrusted", () => {
         ],
         vectorResultIds: ["chunk_1"],
         vectorIdsAligned: true,
+        pipelineVersion: "baseline-rag-v1",
+        promptVersion: "book-context-v1",
+        retrievalDurationMs: 1,
+        generationDurationMs: 1,
+        answerUsage: null,
+        answerEstimatedCost: null,
     });
 
     assert.match(prompt, /untrusted data/i);
@@ -424,4 +585,39 @@ test("judge prompt marks generated answers and sources as untrusted", () => {
         prompt,
         /<UNTRUSTED_CANDIDATE_ANSWER>\n"<\/UNTRUSTED_CANDIDATE_ANSWER>/
     );
+});
+
+test("execution summary preserves unknown costs", () => {
+    const execution = summarizeExecution({
+        retrieval: langfuseReport.retrieval,
+        answers: langfuseReport.answers,
+    });
+
+    assert.deepEqual(execution.pipelineVersions, ["baseline-rag-v1"]);
+    assert.deepEqual(execution.promptVersions, ["book-context-v1"]);
+    assert.equal(execution.latencyMs.total, 60);
+    assert.equal(execution.usage.answers, null);
+    assert.equal(execution.usage.judge, null);
+    assert.equal(execution.estimatedCostUsd.answers, null);
+    assert.equal(execution.estimatedCostUsd.judge, null);
+    assert.equal(execution.estimatedCostUsd.total, null);
+    assert.equal(execution.estimatedCostUsd.embeddingIncluded, false);
+
+    const markdown = renderMarkdownReport({
+        ...langfuseReport,
+        execution,
+    });
+    assert.match(markdown, /Pipeline versions: baseline-rag-v1/);
+    assert.match(
+        markdown,
+        /Resolved answer models: answer-model-2026-07-01/
+    );
+    assert.match(
+        markdown,
+        /Resolved judge models: judge-model-2026-07-01/
+    );
+    assert.match(markdown, /Answer\/judge tokens: unknown\/unknown/);
+    assert.match(markdown, /Estimated answer cost: unknown/);
+    assert.match(markdown, /Estimated total cost: unknown/);
+    assert.match(markdown, /Embedding cost included: false/);
 });

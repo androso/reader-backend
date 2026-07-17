@@ -36,6 +36,26 @@ export interface RankedSearchResult {
     metadata?: BookSearchChunkMetadata | null;
 }
 
+export interface HybridSearchCandidateDiagnostic {
+    id: string;
+    rank: number;
+    score?: number;
+    distance?: number;
+}
+
+export interface HybridSearchDiagnostics {
+    mode: "hybrid" | "vector_only";
+    durationMs: number;
+    lexicalCandidates: HybridSearchCandidateDiagnostic[];
+    vectorCandidates: HybridSearchCandidateDiagnostic[];
+    selectedCandidates: HybridSearchCandidateDiagnostic[];
+}
+
+export interface HybridSearchResponse {
+    results: RankedSearchResult[];
+    diagnostics: HybridSearchDiagnostics;
+}
+
 interface LexicalSearchResult {
     id: string;
     content: string;
@@ -392,7 +412,7 @@ export class HybridBookSearchService {
         });
     }
 
-    async search(
+    async searchWithDiagnostics(
         collectionName: string,
         query: string,
         options: {
@@ -402,7 +422,7 @@ export class HybridBookSearchService {
             minScore?: number;
         } = {},
         tracing: HybridSearchTraceOptions = {}
-    ): Promise<RankedSearchResult[]> {
+    ): Promise<HybridSearchResponse> {
         const start = Date.now();
         const lexicalLimit = options.lexicalLimit ?? 20;
         const vectorLimit = options.vectorLimit ?? 20;
@@ -449,20 +469,35 @@ export class HybridBookSearchService {
                 collectionName,
                 resultCount: fallback.length,
             });
+            const diagnostics: HybridSearchDiagnostics = {
+                mode: "vector_only",
+                durationMs: Date.now() - start,
+                lexicalCandidates: [],
+                vectorCandidates: vectorResults.map((result) => ({
+                    id: result.id,
+                    rank: result.rank,
+                    distance: result.distance,
+                })),
+                selectedCandidates: fallback.map((result, index) => ({
+                    id: result.id,
+                    rank: index + 1,
+                    score: result.score,
+                })),
+            };
             tracing.trace?.update({
                 output: {
-                    mode: "vector_only",
+                    mode: diagnostics.mode,
                     resultCount: fallback.length,
                     lexicalResultCount: lexicalResults.length,
                     vectorResultCount: vectorResults.length,
-                    durationMs: Date.now() - start,
+                    durationMs: diagnostics.durationMs,
                     topResults: summarizeRankedResults(
                         fallback,
                         tracing.capture
                     ),
                 },
             });
-            return fallback;
+            return { results: fallback, diagnostics };
         }
 
         const fused = this.fuseResults(
@@ -471,6 +506,24 @@ export class HybridBookSearchService {
             finalLimit
         ).filter((result) => result.score >= minScore);
         const duration = Date.now() - start;
+        const diagnostics: HybridSearchDiagnostics = {
+            mode: "hybrid",
+            durationMs: duration,
+            lexicalCandidates: lexicalResults.map((result) => ({
+                id: result.id,
+                rank: result.rank,
+            })),
+            vectorCandidates: vectorResults.map((result) => ({
+                id: result.id,
+                rank: result.rank,
+                distance: result.distance,
+            })),
+            selectedCandidates: fused.map((result, index) => ({
+                id: result.id,
+                rank: index + 1,
+                score: result.score,
+            })),
+        };
         log.info("Hybrid search complete", {
             collectionName,
             resultCount: fused.length,
@@ -479,7 +532,7 @@ export class HybridBookSearchService {
         });
         tracing.trace?.update({
             output: {
-                mode: "hybrid",
+                mode: diagnostics.mode,
                 resultCount: fused.length,
                 lexicalResultCount: lexicalResults.length,
                 vectorResultCount: vectorResults.length,
@@ -488,6 +541,26 @@ export class HybridBookSearchService {
                 topResults: summarizeRankedResults(fused, tracing.capture),
             },
         });
-        return fused;
+        return { results: fused, diagnostics };
+    }
+
+    async search(
+        collectionName: string,
+        query: string,
+        options: {
+            lexicalLimit?: number;
+            vectorLimit?: number;
+            finalLimit?: number;
+            minScore?: number;
+        } = {},
+        tracing: HybridSearchTraceOptions = {}
+    ): Promise<RankedSearchResult[]> {
+        const response = await this.searchWithDiagnostics(
+            collectionName,
+            query,
+            options,
+            tracing
+        );
+        return response.results;
     }
 }

@@ -14,3 +14,17 @@ export {
     type ChatMessage,
     type OpenAIChatModel,
 } from "./services/OpenAIServices";
+export {
+    AI_PRICING_VERSION,
+    estimateModelCost,
+    normalizeModelUsage,
+    type EstimatedModelCost,
+    type NormalizedModelUsage,
+} from "./services/AiUsage";
+export {
+    DEFAULT_RAG_PIPELINE_VERSION,
+    RAG_PIPELINES,
+    getRagPipeline,
+    type RagPipelineVersion,
+    type RagPromptVersion,
+} from "./services/RagPipeline";

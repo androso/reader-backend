@@ -8,6 +8,10 @@
             "types": "./src/rag.ts",
             "default": "./build/rag.js"
         },
+        "./ai-usage": {
+            "types": "./src/ai-usage.ts",
+            "default": "./build/ai-usage.js"
+        },
         "./book-processing": {
             "types": "./src/book-processing.ts",
             "default": "./build/book-processing.js"
@@ -17,6 +21,9 @@
         "*": {
             "rag": [
                 "src/rag.ts"
+            ],
+            "ai-usage": [
+                "src/ai-usage.ts"
             ],
             "book-processing": [
                 "src/book-processing.ts"

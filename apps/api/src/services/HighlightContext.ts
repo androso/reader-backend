@@ -1,4 +1,5 @@
 import type { ChatMessage } from "./OpenAIServices";
+import { getRagPipeline } from "./RagPipeline";
 
 export const HIGHLIGHT_CONTEXT_MAX_CHARS = 4000;
 
@@ -42,6 +43,7 @@ export const buildBookContextSystemPrompt = (
     bookContext: string,
     highlightContext: HighlightContext | null
 ) => {
+    getRagPipeline();
     const selectedPassage = highlightContext
         ? `\n\nUntrusted selected passage from the user:\n${highlightContext.text}`
         : "";
