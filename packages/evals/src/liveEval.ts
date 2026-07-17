@@ -147,6 +147,7 @@ export const runLiveRagEval = async (
     fixture: RagEvalFixture;
     ingestion: RagEvalIngestion;
     answerModels: string[];
+    resolvedAnswerModels: string[];
 }> => {
     if (!process.env.DATABASE_URL) {
         throw new Error("DATABASE_URL is required for live RAG evals");
@@ -263,6 +264,7 @@ export const runLiveRagEval = async (
                 preparedCases.push({
                     ...testCase,
                     answerModel,
+                    resolvedAnswerModel: generated.modelVersion,
                     expectedChunkId: expectedChunk?.id,
                     candidateAnswer: generated.answer,
                     sources,
@@ -290,6 +292,13 @@ export const runLiveRagEval = async (
                 (testCase) => testCase.answerModel === OPENAI_CHAT_MODELS[0]
             ),
             answerModels: [...OPENAI_CHAT_MODELS],
+            resolvedAnswerModels: [
+                ...new Set(
+                    preparedCases.map(
+                        (testCase) => testCase.resolvedAnswerModel
+                    )
+                ),
+            ],
             fixture: {
                 title: "Alice's Adventures in Wonderland",
                 author: "Lewis Carroll",

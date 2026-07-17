@@ -38,7 +38,13 @@ const run = async () => {
     const answers = await runAnswerEval(live.cases, thresholds);
     const report = createReport({
         answerModels: live.answerModels,
+        resolvedAnswerModels: live.resolvedAnswerModels,
         judgeModel: getJudgeModel(),
+        resolvedJudgeModels: [
+            ...new Set(
+                answers.cases.map((testCase) => testCase.resolvedJudgeModel)
+            ),
+        ],
         thresholds,
         fixture: live.fixture,
         ingestion: live.ingestion,

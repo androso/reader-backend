@@ -15,6 +15,7 @@ export interface RagEvalCase {
 
 export interface PreparedEvalCase extends RagEvalCase {
     answerModel: string;
+    resolvedAnswerModel: string;
     expectedChunkId?: string;
     candidateAnswer: string;
     sources: MessageContextSource[];
@@ -63,6 +64,9 @@ export interface AnswerCaseResult {
     answer: string;
     expectedAnswer: string;
     answerModel: string;
+    resolvedAnswerModel: string;
+    judgeModel: string;
+    resolvedJudgeModel: string;
     scores: JudgeScores;
     generationDurationMs: number;
     judgeDurationMs: number;
@@ -125,7 +129,9 @@ export interface RagEvalReport {
     runId: string;
     createdAt: string;
     answerModels: string[];
+    resolvedAnswerModels: string[];
     judgeModel: string;
+    resolvedJudgeModels: string[];
     execution: {
         pipelineVersions: string[];
         promptVersions: string[];

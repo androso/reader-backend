@@ -181,6 +181,13 @@ export const syncReportToLangfuse = async (
                     runId: report.runId,
                     caseId: result.id,
                     answerModel: result.answerModel,
+                    resolvedAnswerModel: result.resolvedAnswerModel,
+                    judgeModel: result.judgeModel,
+                    resolvedJudgeModel: result.resolvedJudgeModel,
+                    reportResolvedAnswerModels:
+                        report.resolvedAnswerModels.join(","),
+                    reportResolvedJudgeModels:
+                        report.resolvedJudgeModels.join(","),
                     pipelineVersions:
                         report.execution.pipelineVersions.join(","),
                     promptVersions: report.execution.promptVersions.join(","),

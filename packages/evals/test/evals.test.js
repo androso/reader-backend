@@ -4,7 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
-const { getEvalThresholds } = require("../dist/config");
+const { getEvalThresholds, getJudgeModel } = require("../dist/config");
 const { hasLangfuseConfig } = require("../dist/config");
 const { loadGoldenDataset } = require("../dist/dataset");
 const { syncReportToLangfuse } = require("../dist/langfuse");
@@ -44,7 +44,9 @@ const langfuseReport = {
     runId: "rag-eval-test",
     createdAt: "2026-07-11T00:00:00.000Z",
     answerModels: ["answer-model"],
+    resolvedAnswerModels: ["answer-model-2026-07-01"],
     judgeModel: "judge-model",
+    resolvedJudgeModels: ["judge-model-2026-07-01"],
     execution: {
         pipelineVersions: ["baseline-rag-v1"],
         promptVersions: ["book-context-v1"],
@@ -121,6 +123,9 @@ const langfuseReport = {
                 answer: "Something happened.",
                 expectedAnswer: langfuseCase.expectedAnswer,
                 answerModel: "answer-model",
+                resolvedAnswerModel: "answer-model-2026-07-01",
+                judgeModel: "judge-model",
+                resolvedJudgeModel: "judge-model-2026-07-01",
                 scores: {
                     groundedness: 0.9,
                     citationCoverage: 0.8,
@@ -313,6 +318,14 @@ test("Langfuse publication links traces and scores and flushes both clients", as
     assert.equal(observations[0].input.name, "reader-rag-eval");
     assert.equal(observations[0].input.metadata.caseId, "case-1");
     assert.equal(
+        observations[0].input.metadata.resolvedAnswerModel,
+        "answer-model-2026-07-01"
+    );
+    assert.equal(
+        observations[0].input.metadata.resolvedJudgeModel,
+        "judge-model-2026-07-01"
+    );
+    assert.equal(
         observations[0].input.metadata.aggregateAnswerUsage,
         "unknown"
     );
@@ -412,6 +425,7 @@ test("correct refusals do not require supporting citations", async () => {
                 expectedAnswer: "not provided",
                 noAnswerExpected: true,
                 answerModel: "gpt-4o-mini",
+                resolvedAnswerModel: "gpt-4o-mini-2024-07-18",
                 candidateAnswer: "The book does not say.",
                 sources: [],
                 vectorResultIds: [],
@@ -431,6 +445,7 @@ test("correct refusals do not require supporting citations", async () => {
                     },
                     usage: null,
                     estimatedCost: null,
+                    modelVersion: "gpt-4o-mini-2024-07-18",
                     durationMs: 4,
                 };
             },
@@ -439,6 +454,15 @@ test("correct refusals do not require supporting citations", async () => {
 
     assert.equal(result.cases[0].passed, true);
     assert.equal(result.cases[0].answerModel, "gpt-4o-mini");
+    assert.equal(
+        result.cases[0].resolvedAnswerModel,
+        "gpt-4o-mini-2024-07-18"
+    );
+    assert.equal(result.cases[0].judgeModel, getJudgeModel());
+    assert.equal(
+        result.cases[0].resolvedJudgeModel,
+        "gpt-4o-mini-2024-07-18"
+    );
     assert.equal(result.summary.passed, true);
 });
 
@@ -479,6 +503,7 @@ test("judge cost uses the concrete response model", async () => {
             question: "question",
             expectedAnswer: "answer",
             answerModel: "gpt-4o-mini",
+            resolvedAnswerModel: "gpt-4o-mini-2024-07-18",
             candidateAnswer: "answer",
             sources: [],
             vectorResultIds: [],
@@ -488,6 +513,7 @@ test("judge cost uses the concrete response model", async () => {
     );
 
     assert.equal(judged.estimatedCost?.amount, 0.000027);
+    assert.equal(judged.modelVersion, "gpt-4o-mini-2024-07-18");
 });
 
 test("dataset validation rejects duplicate IDs", async () => {
@@ -582,6 +608,14 @@ test("execution summary preserves unknown costs", () => {
         execution,
     });
     assert.match(markdown, /Pipeline versions: baseline-rag-v1/);
+    assert.match(
+        markdown,
+        /Resolved answer models: answer-model-2026-07-01/
+    );
+    assert.match(
+        markdown,
+        /Resolved judge models: judge-model-2026-07-01/
+    );
     assert.match(markdown, /Answer\/judge tokens: unknown\/unknown/);
     assert.match(markdown, /Estimated answer cost: unknown/);
     assert.match(markdown, /Estimated total cost: unknown/);
