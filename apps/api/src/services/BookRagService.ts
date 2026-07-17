@@ -9,6 +9,7 @@ import {
 import { hybridBookSearchService } from "./HybridBookSearchService";
 import {
     OpenAIService,
+    resolveStreamModelVersion,
     type ChatMessage,
     type GenerateStreamResponseOptions,
     type OpenAIChatModel,
@@ -274,6 +275,7 @@ export const retrieveBookContext = async ({
 
 export type GeneratedBookAnswer = {
     answer: string;
+    modelVersion: string;
     finishReason: string | null;
     streamCompleted: boolean;
     usage: unknown;
@@ -298,6 +300,7 @@ export const generateBookAnswer = async ({
 }): Promise<GeneratedBookAnswer> => {
     const startedAt = Date.now();
     let answer = "";
+    let modelVersion: string = model;
     let streamCompleted = false;
     let finishReason: string | null = null;
     let usage: unknown;
@@ -311,6 +314,10 @@ export const generateBookAnswer = async ({
 
         for await (const chunk of textStream) {
             if (!shouldContinue()) break;
+            modelVersion = resolveStreamModelVersion(
+                modelVersion,
+                chunk.model
+            );
             const choice = chunk.choices[0];
             if (choice?.finish_reason) finishReason = choice.finish_reason;
             if (choice?.finish_reason === "stop") streamCompleted = true;
@@ -324,6 +331,7 @@ export const generateBookAnswer = async ({
 
         return {
             answer,
+            modelVersion,
             finishReason,
             streamCompleted,
             usage,
@@ -334,6 +342,7 @@ export const generateBookAnswer = async ({
 
     return {
         answer,
+        modelVersion,
         finishReason,
         streamCompleted,
         usage,

@@ -76,3 +76,24 @@ test("missing usage and traces remain nullable", () => {
     assert.equal(metadata.generation.estimatedCost, null);
     assert.equal(metadata.langfuseTraceId, null);
 });
+
+test("persists the resolved model version used for pricing", () => {
+    const metadata = buildMessageExecutionMetadata({
+        telemetry: {
+            pipelineVersion: "baseline-rag-v1",
+            promptVersion: "book-context-v1",
+            queryPlan: null,
+            retrieval: null,
+        },
+        model: "gpt-4o-mini-2024-07-18",
+        usage: {
+            prompt_tokens: 100,
+            completion_tokens: 20,
+            total_tokens: 120,
+        },
+        generationDurationMs: 1,
+        totalLatencyMs: 2,
+    });
+
+    assert.equal(metadata.modelVersion, "gpt-4o-mini-2024-07-18");
+});

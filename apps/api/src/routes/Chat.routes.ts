@@ -436,7 +436,7 @@ const runChatCompletion = async ({
                   };
         const executionMetadata = buildMessageExecutionMetadata({
             telemetry,
-            model,
+            model: generated.modelVersion,
             usage: generated.usage,
             generationDurationMs: generated.durationMs,
             totalLatencyMs: Date.now() - startedAt,

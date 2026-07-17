@@ -7,6 +7,7 @@ import {
     OpenAIService,
     buildChatCompletionRequest,
     createOpenAIClientOptions,
+    resolveStreamModelVersion,
     type ChatMessage,
 } from "../src/services/OpenAIServices";
 import {
@@ -31,6 +32,20 @@ const restoreEnv = (name: string, value: string | undefined) => {
 
     process.env[name] = value;
 };
+
+test("prefers the concrete model version from stream chunks", () => {
+    assert.equal(
+        resolveStreamModelVersion(
+            "gpt-4o-mini",
+            "gpt-4o-mini-2024-07-18"
+        ),
+        "gpt-4o-mini-2024-07-18"
+    );
+    assert.equal(
+        resolveStreamModelVersion("gpt-4o-mini", undefined),
+        "gpt-4o-mini"
+    );
+});
 
 test("chat stream request includes usage capture and model settings", () => {
     const request = buildChatCompletionRequest(messages);
