@@ -7,6 +7,7 @@ const {
     loadBaselineReference,
     validateBaselineReference,
 } = require("../dist/baselineRegression");
+const { renderMarkdownReport } = require("../dist/report");
 
 const clone = (value) => structuredClone(value);
 
@@ -186,4 +187,53 @@ test("enforces the five-point answer-quality budget inclusively", async () => {
     assert.equal(result.passed, false);
     assert.ok(result.failedChecks.includes("groundednessWithinBudget"));
     assert.ok(result.failedChecks.includes("hallucinationWithinBudget"));
+});
+
+test("renders absolute quality and baseline regression separately", async () => {
+    const reference = await loadBaselineReference();
+    const observation = observationFrom(reference);
+    const regression = evaluateBaselineRegression(observation);
+    const markdown = renderMarkdownReport({
+        runId: "report",
+        createdAt: "2026-07-17T00:00:00.000Z",
+        suite: "required",
+        qualityPassed: false,
+        regression,
+        answerModels: reference.answerModels,
+        resolvedAnswerModels: reference.answerModels,
+        judgeModel: reference.judgeModel,
+        resolvedJudgeModels: [reference.judgeModel],
+        execution: {
+            pipelineVersions: [reference.pipelineVersion],
+            promptVersions: [reference.promptVersion],
+            pricingVersion: "test",
+            latencyMs: { retrieval: 1, generation: 1, judge: 1, total: 3 },
+            usage: { answers: null, judge: null },
+            estimatedCostUsd: {
+                answers: null,
+                judge: null,
+                total: null,
+                embeddingIncluded: false,
+            },
+        },
+        thresholds: {
+            minRecallAtK: 0.75,
+            minMrr: 0.7,
+            minSourceHitRate: 0.75,
+            minChunkWindowHitRate: 0.75,
+            minGroundedness: 0.8,
+            minCitationCoverage: 0.8,
+            minRefusalCorrectness: 0.8,
+            maxHallucinationRate: 0.2,
+        },
+        fixtures: [],
+        ingestion: [],
+        retrieval: observation.retrieval,
+        answers: observation.answers,
+    });
+
+    assert.match(markdown, /Absolute quality passed: false/);
+    assert.match(markdown, /Baseline regression passed: true/);
+    assert.match(markdown, /Reference: baseline-rag-v1-required-2026-07-17/);
+    assert.match(markdown, /Known gaps observed: .*rabbit-pursuit-paraphrase/);
 });
