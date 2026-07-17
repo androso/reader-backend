@@ -14,7 +14,7 @@ import {
     estimateModelCost,
     normalizeModelUsage,
 } from "../src/services/AiUsage";
-import { getRagPipeline } from "../src/services/RagPipeline";
+import { getRagPipeline, getRerankerModel } from "../src/services/RagPipeline";
 import type OpenAI from "openai";
 
 const messages: ChatMessage[] = [
@@ -35,10 +35,7 @@ const restoreEnv = (name: string, value: string | undefined) => {
 
 test("prefers the concrete model version from stream chunks", () => {
     assert.equal(
-        resolveStreamModelVersion(
-            "gpt-4o-mini",
-            "gpt-4o-mini-2024-07-18"
-        ),
+        resolveStreamModelVersion("gpt-4o-mini", "gpt-4o-mini-2024-07-18"),
         "gpt-4o-mini-2024-07-18"
     );
     assert.equal(
@@ -161,6 +158,38 @@ test("RAG pipeline configuration rejects inherited object properties", () => {
     }
 });
 
+test("RAG reranker model configuration rejects unknown and inherited keys", () => {
+    const previous = process.env.RAG_RERANKER_MODEL;
+    try {
+        for (const invalid of ["unknown-model", "constructor", "toString"]) {
+            process.env.RAG_RERANKER_MODEL = invalid;
+            assert.throws(
+                getRerankerModel,
+                new RegExp(`Unsupported RAG reranker model: ${invalid}`)
+            );
+        }
+    } finally {
+        restoreEnv("RAG_RERANKER_MODEL", previous);
+    }
+});
+
+test("registers the reranked pipeline and pinned prompt/model versions", () => {
+    const previous = process.env.RAG_PIPELINE_VERSION;
+    process.env.RAG_PIPELINE_VERSION = "rerank-rag-v1";
+    try {
+        assert.deepEqual(getRagPipeline(), {
+            pipelineVersion: "rerank-rag-v1",
+            retrievalStrategy: "reranked",
+            promptVersion: "book-context-v1",
+            answerPromptVersion: "book-context-v1",
+            rerankerPromptVersion: "rerank-documents-v1",
+            rerankerModel: "gpt-5.4-mini-2026-03-17",
+        });
+    } finally {
+        restoreEnv("RAG_PIPELINE_VERSION", previous);
+    }
+});
+
 test("normalizes chat usage and estimates versioned model cost", () => {
     const usage = normalizeModelUsage({
         prompt_tokens: 1_000,
@@ -175,15 +204,11 @@ test("normalizes chat usage and estimates versioned model cost", () => {
         outputTokens: 500,
         totalTokens: 1_500,
     });
-    assert.deepEqual(
-        estimateModelCost("gpt-4o-mini", usage),
-        {
-            currency: "USD",
-            amount: 0.000435,
-            pricingVersion: "openai-standard-2026-07-16",
-            sourceUrl:
-                "https://developers.openai.com/api/docs/models/gpt-4o-mini",
-        }
-    );
+    assert.deepEqual(estimateModelCost("gpt-4o-mini", usage), {
+        currency: "USD",
+        amount: 0.000435,
+        pricingVersion: "openai-standard-2026-07-16",
+        sourceUrl: "https://developers.openai.com/api/docs/models/gpt-4o-mini",
+    });
     assert.equal(estimateModelCost("unknown-model", usage), null);
 });

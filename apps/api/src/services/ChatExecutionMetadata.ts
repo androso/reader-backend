@@ -34,6 +34,25 @@ export const buildMessageExecutionMetadata = ({
     langfuseTraceId?: string;
 }): MessageExecutionMetadata => {
     const normalizedUsage = normalizeModelUsage(usage);
+    const generationCost = estimateModelCost(model, normalizedUsage);
+    const retrievalCost =
+        telemetry.retrieval?.mode === "reranked"
+            ? telemetry.retrieval.reranker.estimatedCost
+            : null;
+    const retrievalCostKnownZero =
+        telemetry.retrieval?.mode === "reranked" &&
+        telemetry.retrieval.reranker.status === "skipped";
+    const combinedCost =
+        generationCost &&
+        (telemetry.retrieval?.mode !== "reranked" ||
+            retrievalCost ||
+            retrievalCostKnownZero)
+            ? {
+                  currency: "USD" as const,
+                  amount: generationCost.amount + (retrievalCost?.amount ?? 0),
+                  pricingVersion: AI_PRICING_VERSION,
+              }
+            : null;
     return {
         pipelineVersion: telemetry.pipelineVersion,
         promptVersion: telemetry.promptVersion,
@@ -44,8 +63,10 @@ export const buildMessageExecutionMetadata = ({
         generation: {
             durationMs: generationDurationMs,
             usage: normalizedUsage,
-            estimatedCost: estimateModelCost(model, normalizedUsage),
+            estimatedCost: generationCost,
         },
+        retrievalCost,
+        combinedCost,
         totalLatencyMs,
         langfuseTraceId: langfuseTraceId ?? null,
     };

@@ -1,5 +1,6 @@
 export {
     generateBookAnswer,
+    retrieveBookEvidence,
     retrieveBookContext,
     type BookContextResult,
     type GeneratedBookAnswer,
@@ -24,10 +25,22 @@ export {
 export {
     DEFAULT_RAG_PIPELINE_VERSION,
     RAG_PIPELINES,
+    RERANKER_MODELS,
     getRagPipeline,
+    getRerankerModel,
     type RagPipelineVersion,
     type RagPromptVersion,
+    type RagRetrievalStrategy,
 } from "./services/RagPipeline";
+export {
+    BASELINE_MIN_HYBRID_SCORE,
+    expandRerankCandidates,
+    buildBoundedRerankerDocuments,
+    classifyRerankerFallback,
+    retrieveRerankedEvidence,
+    selectWithDeterministicMmr,
+    wordTrigramJaccard,
+} from "./services/RerankedRetrieval";
 export {
     buildRetrievalQuery,
     normalizeHighlightContext,

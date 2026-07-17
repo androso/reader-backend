@@ -85,6 +85,9 @@ export type MessageContextSource = {
     chunkIndex: number;
     score: number;
     bestRank: number;
+    rerankerRank?: number;
+    rerankerScore?: number;
+    selectionReason?: string;
     excerpt: string;
     metadata?: BookSearchChunkMetadata | null;
 };
