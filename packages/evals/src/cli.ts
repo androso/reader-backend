@@ -3,6 +3,7 @@ import {
     getJudgeModel,
     hasLangfuseConfig,
     hasOpenAiConfig,
+    shouldFailQualityGate,
 } from "./config";
 import { loadGoldenDataset } from "./dataset";
 import { runAnswerEval } from "./answerJudge";
@@ -24,15 +25,16 @@ const persistAndPrint = async (report: Parameters<typeof writeReport>[0]) => {
 
 const run = async () => {
     const command = process.argv[2];
-    if (command !== "live" && command !== "ci") {
-        fail("Usage: node dist/cli.js <live|ci>");
+    if (command !== "live" && command !== "ci" && command !== "extended") {
+        fail("Usage: node dist/cli.js <live|ci|extended>");
     }
     if (!hasOpenAiConfig()) {
         fail("OPENAI_API_KEY is required for live RAG evals");
     }
 
+    const suite = command === "extended" ? "extended" : "required";
     const thresholds = getEvalThresholds();
-    const cases = await loadGoldenDataset();
+    const cases = await loadGoldenDataset(undefined, suite);
     const live = await runLiveRagEval(cases);
     const retrieval = scoreRetrievalEval(live.retrievalCases, thresholds);
     const answers = await runAnswerEval(live.cases, thresholds);
@@ -45,8 +47,9 @@ const run = async () => {
                 answers.cases.map((testCase) => testCase.resolvedJudgeModel)
             ),
         ],
+        suite,
         thresholds,
-        fixture: live.fixture,
+        fixtures: live.fixtures,
         ingestion: live.ingestion,
         retrieval,
         answers,
@@ -69,8 +72,13 @@ const run = async () => {
         console.log("Skipping Langfuse sync: LANGFUSE_* secrets are absent.");
     }
 
-    if (!retrieval.summary.passed || !answers.summary.passed) {
+    if (shouldFailQualityGate(suite, report.qualityPassed)) {
         fail("Live Reader RAG quality gate failed");
+    }
+    if (suite === "extended" && !report.qualityPassed) {
+        console.warn(
+            "Extended Reader RAG quality misses were reported without failing the manual workflow."
+        );
     }
 };
 

@@ -1,0 +1,79 @@
+name: Extended Reader RAG Baseline
+
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    extended-rag-eval:
+        runs-on: ubuntu-latest
+        services:
+            postgres:
+                image: postgres:16
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: reader_eval
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd "pg_isready -U postgres -d reader_eval"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+            chroma:
+                image: chromadb/chroma:1.0.15
+                ports:
+                    - 8000:8000
+        env:
+            DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reader_eval
+            CHROMA_URL: http://localhost:8000
+            STORAGE_DRIVER: local
+            LOCAL_STORAGE_DIR: .local-storage
+            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+            OPENAI_EMBEDDING_MODEL: ${{ vars.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002' }}
+            LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+            LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+            LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
+            RAG_EVAL_JUDGE_MODEL: ${{ vars.RAG_EVAL_JUDGE_MODEL || 'gpt-5.4-mini-2026-03-17' }}
+            RAG_EVAL_JUDGE_MAX_CASES: "50"
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.11.1
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+
+            - run: pnpm install --frozen-lockfile
+
+            - name: Wait for Chroma
+              run: |
+                  for attempt in {1..30}; do
+                    if curl --fail --silent http://localhost:8000/api/v2/heartbeat; then
+                      exit 0
+                    fi
+                    sleep 2
+                  done
+                  echo "Chroma did not become ready" >&2
+                  exit 1
+
+            - name: Run database migrations
+              run: pnpm db:migrate
+
+            - name: Run extended Reader RAG baseline
+              run: pnpm eval:extended
+
+            - name: Upload extended RAG eval report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: reader-rag-extended-eval-report
+                  path: packages/evals/reports/latest.*
+                  if-no-files-found: ignore

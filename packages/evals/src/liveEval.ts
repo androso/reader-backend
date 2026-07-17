@@ -1,42 +1,32 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import OpenAI from "openai";
 import { Pool } from "pg";
 import {
     OPENAI_CHAT_MODELS,
     OpenAIService,
     bookSearchChunkStore,
+    buildRetrievalQuery,
     closeDatabasePool,
     generateBookAnswer,
+    normalizeHighlightContext,
     retrieveBookContext,
 } from "@reader/api/rag";
-import {
-    estimateModelCost,
-    normalizeModelUsage,
-} from "@reader/api/ai-usage";
+import { estimateModelCost, normalizeModelUsage } from "@reader/api/ai-usage";
 import {
     createBookCollectionName,
     processBookForSearch,
 } from "@reader/processing";
 import { storageProvider, vectorStore } from "@reader/providers";
 import type {
+    ExpectedEvidenceAnchor,
     PreparedEvalCase,
     RagEvalCase,
     RagEvalFixture,
     RagEvalIngestion,
 } from "./types";
+import { getFixture, loadFixtureManifest, verifyFixture } from "./fixtures";
 import { resolveLiveEvalSources } from "./retrieval";
 
-const FIXTURE_PATH = path.resolve(
-    __dirname,
-    "../fixtures/alice-in-wonderland.epub"
-);
-const FIXTURE_SHA256 =
-    "d422c4b00899d58b6e4f92d2fa5efc37ceb425aea6c1354c6564b64e051d505a";
-const FIXTURE_SOURCE_REVISION = "dfe3e6099b7633b729bec1ce65a66997c515c845";
-const FIXTURE_SOURCE_URL =
-    "https://github.com/standardebooks/lewis-carroll_alices-adventures-in-wonderland_john-tenniel";
 const evalAnswerService = new OpenAIService(
     new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -45,98 +35,138 @@ const evalAnswerService = new OpenAIService(
     })
 );
 
-type StoredChunk = {
+export type StoredChunk = {
     id: string;
     chunkIndex: number;
     content: string;
     metadata: { chapterTitle?: string } | null;
 };
 
+type FixtureRuntime = {
+    fixture: RagEvalFixture;
+    fileKey: string;
+    bookId: string;
+    collectionName: string;
+    chunks: StoredChunk[];
+    storedIds: Set<string>;
+    ingestion: RagEvalIngestion;
+};
+
+export type EvalCleanupResource = {
+    fixtureId: string;
+    fileKey: string;
+    bookId?: string;
+    collectionName?: string;
+};
+
+export type EvalCleanupDependencies = {
+    deleteBook: (bookId: string) => Promise<unknown>;
+    deleteUser: (userId: string) => Promise<unknown>;
+    deleteSearchChunks: (collectionName: string) => Promise<unknown>;
+    deleteVectorCollection: (collectionName: string) => Promise<unknown>;
+    deleteStoredObject: (fileKey: string) => Promise<unknown>;
+    closeApiPool: () => Promise<unknown>;
+    closeEvalPool: () => Promise<unknown>;
+    warn?: (message: string, error: unknown) => void;
+};
+
 const normalizeText = (value: string) =>
     value.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 
-const resolveExpectedChunk = (testCase: RagEvalCase, chunks: StoredChunk[]) => {
-    if (!testCase.expectedEvidenceText) return undefined;
-    const evidence = normalizeText(testCase.expectedEvidenceText);
-    const matches = chunks.filter(
-        (chunk) =>
-            normalizeText(chunk.content).includes(evidence) &&
-            (!testCase.expectedChapterTitle ||
-                chunk.metadata?.chapterTitle === testCase.expectedChapterTitle)
+export const resolveExpectedChunks = (
+    testCase: RagEvalCase,
+    chunks: StoredChunk[]
+) =>
+    (testCase.expectedEvidence ?? []).map(
+        (anchor: ExpectedEvidenceAnchor, index) => {
+            const evidence = normalizeText(anchor.text);
+            const matches = chunks.filter(
+                (chunk) =>
+                    normalizeText(chunk.content).includes(evidence) &&
+                    (!anchor.chapterTitle ||
+                        chunk.metadata?.chapterTitle === anchor.chapterTitle)
+            );
+            if (matches.length !== 1) {
+                throw new Error(
+                    `Expected exactly one evidence chunk for ${testCase.id} anchor ${index + 1}, found ${matches.length}`
+                );
+            }
+            return matches[0];
+        }
     );
 
-    if (matches.length !== 1) {
+export const assertTargetBookIds = (
+    label: "retrieved" | "vector",
+    ids: string[],
+    targetIds: Set<string>,
+    caseId: string
+) => {
+    const foreignIds = ids.filter((id) => !targetIds.has(id));
+    if (foreignIds.length) {
         throw new Error(
-            `Expected exactly one evidence chunk for ${testCase.id}, found ${matches.length}`
+            `${caseId} returned ${label} IDs outside the target book: ${foreignIds.join(", ")}`
         );
     }
-    return matches[0];
 };
 
-const cleanup = async ({
-    pool,
-    userId,
-    bookId,
-    collectionName,
-    fileKey,
-}: {
-    pool: Pool;
-    userId?: string;
-    bookId?: string;
-    collectionName?: string;
-    fileKey: string;
-}) => {
-    const operations: Array<[string, () => Promise<unknown>]> = [
-        [
-            "database book",
-            async () => {
-                if (bookId) {
-                    await pool.query("DELETE FROM books WHERE id = $1", [
-                        bookId,
-                    ]);
-                }
-            },
-        ],
-        [
-            "database user",
-            async () => {
-                if (userId) {
-                    await pool.query("DELETE FROM users WHERE id = $1", [
-                        userId,
-                    ]);
-                }
-            },
-        ],
-        [
-            "search chunks",
-            async () => {
-                if (collectionName) {
-                    await bookSearchChunkStore.deleteCollectionChunks(
-                        collectionName
-                    );
-                }
-            },
-        ],
-        [
-            "Chroma collection",
-            async () => {
-                if (collectionName) {
-                    await vectorStore.deleteCollection(collectionName);
-                }
-            },
-        ],
-        ["fixture object", () => storageProvider.deleteFile(fileKey)],
-        ["API database pool", closeDatabasePool],
-        ["eval database pool", () => pool.end()],
-    ];
+export const assertCrossUserIsolation = (fixtureId: string, status: string) => {
+    if (status !== "not_found") {
+        throw new Error(
+            `Cross-user retrieval for ${fixtureId} returned ${status}, expected not_found`
+        );
+    }
+};
 
-    for (const [label, operation] of operations) {
+export const selectFixturesForCases = (
+    manifest: RagEvalFixture[],
+    cases: RagEvalCase[]
+) => {
+    const fixtureIds = new Set(cases.map((testCase) => testCase.fixtureId));
+    for (const fixtureId of fixtureIds) getFixture(manifest, fixtureId);
+    return manifest.filter((fixture) => fixtureIds.has(fixture.id));
+};
+
+export const cleanupEvalResources = async (
+    resources: EvalCleanupResource[],
+    userIds: string[],
+    dependencies: EvalCleanupDependencies
+) => {
+    const warn =
+        dependencies.warn ??
+        ((message: string, error: unknown) => console.warn(message, error));
+    const run = async (label: string, operation: () => Promise<unknown>) => {
         try {
             await operation();
         } catch (error) {
-            console.warn(`Could not clean up ${label}:`, error);
+            warn(`Could not clean up ${label}`, error);
         }
+    };
+
+    for (const resource of resources) {
+        if (resource.bookId) {
+            await run(`database book ${resource.fixtureId}`, () =>
+                dependencies.deleteBook(resource.bookId!)
+            );
+        }
+        if (resource.collectionName) {
+            await run(`search chunks ${resource.fixtureId}`, () =>
+                dependencies.deleteSearchChunks(resource.collectionName!)
+            );
+            await run(`Chroma collection ${resource.fixtureId}`, () =>
+                dependencies.deleteVectorCollection(resource.collectionName!)
+            );
+        }
+        await run(`fixture object ${resource.fixtureId}`, () =>
+            dependencies.deleteStoredObject(resource.fileKey)
+        );
     }
+    for (const userId of userIds) {
+        await run(`database user ${userId}`, () =>
+            dependencies.deleteUser(userId)
+        );
+    }
+    await run("API database pool", dependencies.closeApiPool);
+    await run("eval database pool", dependencies.closeEvalPool);
 };
 
 export const runLiveRagEval = async (
@@ -144,109 +174,184 @@ export const runLiveRagEval = async (
 ): Promise<{
     cases: PreparedEvalCase[];
     retrievalCases: PreparedEvalCase[];
-    fixture: RagEvalFixture;
-    ingestion: RagEvalIngestion;
+    fixtures: RagEvalFixture[];
+    ingestion: RagEvalIngestion[];
     answerModels: string[];
     resolvedAnswerModels: string[];
 }> => {
     if (!process.env.DATABASE_URL) {
         throw new Error("DATABASE_URL is required for live RAG evals");
     }
-    const fixtureBuffer = await fs.readFile(FIXTURE_PATH);
-    const fixtureHash = crypto
-        .createHash("sha256")
-        .update(fixtureBuffer)
-        .digest("hex");
-    if (fixtureHash !== FIXTURE_SHA256) {
-        throw new Error(
-            `Alice EPUB checksum mismatch: expected ${FIXTURE_SHA256}, received ${fixtureHash}`
-        );
-    }
 
+    const manifest = await loadFixtureManifest();
+    const fixtures = selectFixturesForCases(manifest, cases);
     const runToken = crypto.randomUUID().replace(/-/g, "");
-    const fileKey = `rag-evals/${runToken}/alice-in-wonderland.epub`;
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    let userId: string | undefined;
-    let bookId: string | undefined;
-    let collectionName: string | undefined;
+    const cleanupResources: EvalCleanupResource[] = [];
+    const userIds: string[] = [];
+    const runtimes = new Map<string, FixtureRuntime>();
 
     try {
-        await storageProvider.uploadFile(fileKey, fixtureBuffer);
-        const userResult = await pool.query<{ id: string }>(
+        const primaryUser = await pool.query<{ id: string }>(
             `INSERT INTO users (email, name)
              VALUES ($1, $2)
              RETURNING id`,
             [`rag-eval-${runToken}@reader.invalid`, "Reader RAG Eval"]
         );
-        userId = userResult.rows[0].id;
-        const bookResult = await pool.query<{ id: string }>(
-            `INSERT INTO books
-                (title, user_id, file_key, file_type, processing_status)
-             VALUES ($1, $2, $3, 'epub', 'processing')
+        const primaryUserId = primaryUser.rows[0].id;
+        userIds.push(primaryUserId);
+
+        const isolationUser = await pool.query<{ id: string }>(
+            `INSERT INTO users (email, name)
+             VALUES ($1, $2)
              RETURNING id`,
-            ["Alice's Adventures in Wonderland", userId, fileKey]
+            [
+                `rag-eval-isolation-${runToken}@reader.invalid`,
+                "Reader RAG Isolation Eval",
+            ]
         );
-        bookId = bookResult.rows[0].id;
-        collectionName = createBookCollectionName(bookId);
+        const isolationUserId = isolationUser.rows[0].id;
+        userIds.push(isolationUserId);
 
-        const processed = await processBookForSearch(
-            {
-                bookId,
+        for (const fixture of fixtures) {
+            const { buffer } = await verifyFixture(fixture);
+            const fileKey = `rag-evals/${runToken}/${fixture.fileName}`;
+            const cleanupResource: EvalCleanupResource = {
+                fixtureId: fixture.id,
                 fileKey,
-                fileType: "epub",
-            },
-            {
-                storage: storageProvider,
-                vectorStore,
-                searchIndexStore: bookSearchChunkStore,
-            }
-        );
-        if (processed.collectionName !== collectionName) {
-            throw new Error(
-                `Unexpected collection name: expected ${collectionName}, received ${processed.collectionName}`
-            );
-        }
-        await pool.query(
-            `UPDATE books
-             SET collection_name = $2, processing_status = 'ready'
-             WHERE id = $1`,
-            [bookId, collectionName]
-        );
+            };
+            cleanupResources.push(cleanupResource);
+            await storageProvider.uploadFile(fileKey, buffer);
 
-        const storedResult = await pool.query<StoredChunk>(
-            `SELECT id, chunk_index AS "chunkIndex", content, metadata
-             FROM book_search_chunks
-             WHERE collection_name = $1
-             ORDER BY chunk_index`,
-            [collectionName]
-        );
-        if (storedResult.rowCount !== processed.chunks) {
-            throw new Error(
-                `Stored ${storedResult.rowCount ?? 0} of ${processed.chunks} extracted chunks`
+            const bookResult = await pool.query<{ id: string }>(
+                `INSERT INTO books
+                    (title, user_id, file_key, file_type, processing_status)
+                 VALUES ($1, $2, $3, 'epub', 'processing')
+                 RETURNING id`,
+                [fixture.title, primaryUserId, fileKey]
             );
+            const bookId = bookResult.rows[0].id;
+            const collectionName = createBookCollectionName(bookId);
+            cleanupResource.bookId = bookId;
+            cleanupResource.collectionName = collectionName;
+
+            const processed = await processBookForSearch(
+                {
+                    bookId,
+                    fileKey,
+                    fileType: "epub",
+                },
+                {
+                    storage: storageProvider,
+                    vectorStore,
+                    searchIndexStore: bookSearchChunkStore,
+                }
+            );
+            if (processed.collectionName !== collectionName) {
+                throw new Error(
+                    `Unexpected collection name for ${fixture.id}: expected ${collectionName}, received ${processed.collectionName}`
+                );
+            }
+            await pool.query(
+                `UPDATE books
+                 SET collection_name = $2, processing_status = 'ready'
+                 WHERE id = $1`,
+                [bookId, collectionName]
+            );
+
+            const storedResult = await pool.query<StoredChunk>(
+                `SELECT id, chunk_index AS "chunkIndex", content, metadata
+                 FROM book_search_chunks
+                 WHERE collection_name = $1
+                 ORDER BY chunk_index`,
+                [collectionName]
+            );
+            if (storedResult.rowCount !== processed.chunks) {
+                throw new Error(
+                    `${fixture.id} stored ${storedResult.rowCount ?? 0} of ${processed.chunks} extracted chunks`
+                );
+            }
+
+            runtimes.set(fixture.id, {
+                fixture,
+                fileKey,
+                bookId,
+                collectionName,
+                chunks: storedResult.rows,
+                storedIds: new Set(storedResult.rows.map((chunk) => chunk.id)),
+                ingestion: {
+                    fixtureId: fixture.id,
+                    bookId,
+                    collectionName,
+                    extractedChunkCount: processed.chunks,
+                    storedChunkCount: storedResult.rowCount ?? 0,
+                },
+            });
         }
-        const storedIds = new Set(storedResult.rows.map((chunk) => chunk.id));
+
+        for (const runtime of runtimes.values()) {
+            const isolated = await retrieveBookContext({
+                bookId: runtime.bookId,
+                userId: isolationUserId,
+                messages: [{ role: "user", content: "isolation check" }],
+                query: "isolation check",
+                strict: true,
+            });
+            assertCrossUserIsolation(runtime.fixture.id, isolated.status);
+        }
 
         const preparedCases: PreparedEvalCase[] = [];
         for (const testCase of cases) {
-            const expectedChunk = resolveExpectedChunk(
+            const runtime = runtimes.get(testCase.fixtureId);
+            if (!runtime) {
+                throw new Error(
+                    `Fixture ${testCase.fixtureId} was not ingested for ${testCase.id}`
+                );
+            }
+            const expectedChunks = resolveExpectedChunks(
                 testCase,
-                storedResult.rows
+                runtime.chunks
             );
+            const highlightContext = normalizeHighlightContext(
+                testCase.highlightContext
+            );
+            const query = buildRetrievalQuery(
+                testCase.question,
+                highlightContext
+            );
+            const messages = [
+                ...(testCase.priorMessages ?? []),
+                { role: "user" as const, content: testCase.question },
+            ];
             const rag = await retrieveBookContext({
-                bookId,
-                userId,
-                messages: [{ role: "user", content: testCase.question }],
-                query: testCase.question,
+                bookId: runtime.bookId,
+                userId: primaryUserId,
+                messages,
+                query,
+                highlightContext,
                 strict: true,
             });
             const sources = resolveLiveEvalSources(testCase, rag);
+            assertTargetBookIds(
+                "retrieved",
+                sources.map((source) => source.id),
+                runtime.storedIds,
+                testCase.id
+            );
 
             const vectorResults = await vectorStore.searchDocuments(
-                collectionName,
-                testCase.question,
+                runtime.collectionName,
+                query,
                 20
             );
+            const vectorResultIds = vectorResults.map((result) => result.id);
+            assertTargetBookIds(
+                "vector",
+                vectorResultIds,
+                runtime.storedIds,
+                testCase.id
+            );
+
             for (const answerModel of OPENAI_CHAT_MODELS) {
                 const generated = await generateBookAnswer({
                     messages: rag.messages,
@@ -265,13 +370,12 @@ export const runLiveRagEval = async (
                     ...testCase,
                     answerModel,
                     resolvedAnswerModel: generated.modelVersion,
-                    expectedChunkId: expectedChunk?.id,
+                    expectedChunkId: expectedChunks[0]?.id,
+                    expectedChunkIds: expectedChunks.map((chunk) => chunk.id),
                     candidateAnswer: generated.answer,
                     sources,
-                    vectorResultIds: vectorResults.map((result) => result.id),
-                    vectorIdsAligned: vectorResults.every((result) =>
-                        storedIds.has(result.id)
-                    ),
+                    vectorResultIds,
+                    vectorIdsAligned: true,
                     pipelineVersion: rag.telemetry.pipelineVersion,
                     promptVersion: rag.telemetry.promptVersion,
                     retrievalDurationMs:
@@ -299,27 +403,25 @@ export const runLiveRagEval = async (
                     )
                 ),
             ],
-            fixture: {
-                title: "Alice's Adventures in Wonderland",
-                author: "Lewis Carroll",
-                sourceUrl: FIXTURE_SOURCE_URL,
-                sourceRevision: FIXTURE_SOURCE_REVISION,
-                sha256: FIXTURE_SHA256,
-                sizeBytes: fixtureBuffer.length,
-            },
-            ingestion: {
-                collectionName,
-                extractedChunkCount: processed.chunks,
-                storedChunkCount: storedResult.rowCount ?? 0,
-            },
+            fixtures,
+            ingestion: [...runtimes.values()].map(
+                (runtime) => runtime.ingestion
+            ),
         };
     } finally {
-        await cleanup({
-            pool,
-            userId,
-            bookId,
-            collectionName,
-            fileKey,
+        await cleanupEvalResources(cleanupResources, userIds, {
+            deleteBook: (bookId) =>
+                pool.query("DELETE FROM books WHERE id = $1", [bookId]),
+            deleteUser: (userId) =>
+                pool.query("DELETE FROM users WHERE id = $1", [userId]),
+            deleteSearchChunks: (collectionName) =>
+                bookSearchChunkStore.deleteCollectionChunks(collectionName),
+            deleteVectorCollection: (collectionName) =>
+                vectorStore.deleteCollection(collectionName),
+            deleteStoredObject: (fileKey) =>
+                storageProvider.deleteFile(fileKey),
+            closeApiPool: closeDatabasePool,
+            closeEvalPool: () => pool.end(),
         });
     }
 };

@@ -28,3 +28,8 @@ export {
     type RagPipelineVersion,
     type RagPromptVersion,
 } from "./services/RagPipeline";
+export {
+    buildRetrievalQuery,
+    normalizeHighlightContext,
+    type HighlightContext,
+} from "./services/HighlightContext";

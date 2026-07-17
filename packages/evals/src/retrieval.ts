@@ -1,5 +1,6 @@
 import type { BookContextResult } from "@reader/api/rag";
 import type {
+    EvalCategory,
     EvalThresholds,
     PreparedEvalCase,
     RagEvalCase,
@@ -47,6 +48,14 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
     const vectorReciprocalRank =
         vectorExpectedRank > 0 ? 1 / vectorExpectedRank : 0;
     const recallAtK = sourceHit ? 1 : 0;
+    const evidenceHits = testCase.expectedChunkIds.filter((id) =>
+        resultIds.includes(id)
+    ).length;
+    const evidenceCoverage = noAnswerExpected
+        ? 1
+        : testCase.expectedChunkIds.length
+          ? evidenceHits / testCase.expectedChunkIds.length
+          : 0;
     const reciprocalRank = expectedRank > 0 ? 1 / expectedRank : 0;
     const expectedChunkIndex = testCase.expectedChunkId
         ? parseChunkIndex(testCase.expectedChunkId)
@@ -57,16 +66,24 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
           testCase.sources.some(
               (source) => Math.abs(source.chunkIndex - expectedChunkIndex) <= 1
           );
-    const chapterCorrect = testCase.expectedChapterTitle
-        ? testCase.sources.some(
-              (source) =>
-                  source.metadata?.chapterTitle ===
-                  testCase.expectedChapterTitle
+    const expectedChapterTitles = [
+        ...new Set(
+            (testCase.expectedEvidence ?? [])
+                .map((anchor) => anchor.chapterTitle)
+                .filter((value): value is string => Boolean(value))
+        ),
+    ];
+    const chapterCorrect = expectedChapterTitles.length
+        ? expectedChapterTitles.every((chapterTitle) =>
+              testCase.sources.some(
+                  (source) => source.metadata?.chapterTitle === chapterTitle
+              )
           )
         : null;
     const passed = noAnswerExpected
         ? testCase.vectorIdsAligned && testCase.sources.length === 0
         : sourceHit &&
+          evidenceCoverage === 1 &&
           vectorSourceHit &&
           testCase.vectorIdsAligned &&
           chunkWindowHit &&
@@ -74,12 +91,16 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
 
     return {
         id: testCase.id,
+        fixtureId: testCase.fixtureId,
+        suite: testCase.suite,
+        category: testCase.category,
         question: testCase.question,
         results: testCase.sources,
         expectedChunkId: testCase.expectedChunkId,
-        expectedChapterTitle: testCase.expectedChapterTitle,
+        expectedChunkIds: testCase.expectedChunkIds,
         noAnswerExpected,
         recallAtK,
+        evidenceCoverage,
         reciprocalRank,
         sourceHit,
         vectorSourceHit,
@@ -92,6 +113,48 @@ const scoreCase = (testCase: PreparedEvalCase): RetrievalCaseResult => {
         retrievalDurationMs: testCase.retrievalDurationMs,
         passed,
     };
+};
+
+const categorySlices = (
+    caseResults: RetrievalCaseResult[]
+): RetrievalSummary["perCategory"] => {
+    const categories = [
+        ...new Set(caseResults.map((result) => result.category)),
+    ] as EvalCategory[];
+    return Object.fromEntries(
+        categories.map((category) => {
+            const cases = caseResults.filter(
+                (result) => result.category === category
+            );
+            const answerable = cases.filter(
+                (result) => !result.noAnswerExpected
+            );
+            return [
+                category,
+                {
+                    caseCount: cases.length,
+                    recallAtK: answerable.length
+                        ? mean(answerable.map((result) => result.recallAtK))
+                        : 1,
+                    evidenceCoverage: answerable.length
+                        ? mean(
+                              answerable.map(
+                                  (result) => result.evidenceCoverage
+                              )
+                          )
+                        : 1,
+                    sourceHitRate: answerable.length
+                        ? mean(
+                              answerable.map((result) =>
+                                  result.sourceHit ? 1 : 0
+                              )
+                          )
+                        : 1,
+                    passed: cases.every((result) => result.passed),
+                },
+            ];
+        })
+    );
 };
 
 export const scoreRetrievalEval = (
@@ -109,6 +172,9 @@ export const scoreRetrievalEval = (
     const summary: RetrievalSummary = {
         caseCount: caseResults.length,
         recallAtK: mean(answerableCases.map((result) => result.recallAtK)),
+        evidenceCoverage: mean(
+            answerableCases.map((result) => result.evidenceCoverage)
+        ),
         mrr: mean(answerableCases.map((result) => result.reciprocalRank)),
         sourceHitRate: mean(
             answerableCases.map((result) => (result.sourceHit ? 1 : 0))
@@ -130,10 +196,12 @@ export const scoreRetrievalEval = (
                   chapterCases.map((result) => (result.chapterCorrect ? 1 : 0))
               )
             : null,
+        perCategory: categorySlices(caseResults),
         passed: false,
     };
     summary.passed =
         summary.recallAtK >= thresholds.minRecallAtK &&
+        summary.evidenceCoverage >= thresholds.minRecallAtK &&
         summary.mrr >= thresholds.minMrr &&
         summary.sourceHitRate >= thresholds.minSourceHitRate &&
         summary.vectorSourceHitRate >= thresholds.minSourceHitRate &&

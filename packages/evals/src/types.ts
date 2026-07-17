@@ -2,21 +2,47 @@ import type {
     EstimatedModelCost,
     NormalizedModelUsage,
 } from "@reader/api/ai-usage";
-import type { MessageContextSource } from "@reader/api/rag";
+import type {
+    ChatMessage,
+    HighlightContext,
+    MessageContextSource,
+} from "@reader/api/rag";
+
+export type EvalSuite = "required" | "extended";
+export type EvalCategory =
+    | "factual"
+    | "paraphrase"
+    | "no_answer"
+    | "follow_up"
+    | "highlight"
+    | "summary"
+    | "comparison"
+    | "adversarial"
+    | "isolation";
+
+export interface ExpectedEvidenceAnchor {
+    text: string;
+    chapterTitle?: string;
+}
 
 export interface RagEvalCase {
     id: string;
+    fixtureId: string;
+    suite: EvalSuite;
+    category: EvalCategory;
     question: string;
     expectedAnswer: string;
-    expectedEvidenceText?: string;
-    expectedChapterTitle?: string;
+    expectedEvidence?: ExpectedEvidenceAnchor[];
     noAnswerExpected?: boolean;
+    priorMessages?: ChatMessage[];
+    highlightContext?: HighlightContext;
 }
 
 export interface PreparedEvalCase extends RagEvalCase {
     answerModel: string;
     resolvedAnswerModel: string;
     expectedChunkId?: string;
+    expectedChunkIds: string[];
     candidateAnswer: string;
     sources: MessageContextSource[];
     vectorResultIds: string[];
@@ -31,12 +57,16 @@ export interface PreparedEvalCase extends RagEvalCase {
 
 export interface RetrievalCaseResult {
     id: string;
+    fixtureId: string;
+    suite: EvalSuite;
+    category: EvalCategory;
     question: string;
     results: MessageContextSource[];
     expectedChunkId?: string;
-    expectedChapterTitle?: string;
+    expectedChunkIds: string[];
     noAnswerExpected: boolean;
     recallAtK: number;
+    evidenceCoverage: number;
     reciprocalRank: number;
     sourceHit: boolean;
     vectorSourceHit: boolean;
@@ -60,6 +90,9 @@ export interface JudgeScores {
 
 export interface AnswerCaseResult {
     id: string;
+    fixtureId: string;
+    suite: EvalSuite;
+    category: EvalCategory;
     question: string;
     answer: string;
     expectedAnswer: string;
@@ -91,6 +124,7 @@ export interface EvalThresholds {
 export interface RetrievalSummary {
     caseCount: number;
     recallAtK: number;
+    evidenceCoverage: number;
     mrr: number;
     sourceHitRate: number;
     vectorSourceHitRate: number;
@@ -98,6 +132,18 @@ export interface RetrievalSummary {
     vectorIdAlignmentRate: number;
     chunkWindowHitRate: number;
     chapterAccuracy: number | null;
+    perCategory: Partial<
+        Record<
+            EvalCategory,
+            {
+                caseCount: number;
+                recallAtK: number;
+                evidenceCoverage: number;
+                sourceHitRate: number;
+                passed: boolean;
+            }
+        >
+    >;
     passed: boolean;
 }
 
@@ -107,19 +153,37 @@ export interface AnswerSummary {
     citationCoverage: number;
     refusalCorrectness: number;
     hallucinationRate: number;
+    perCategory: Partial<
+        Record<
+            EvalCategory,
+            {
+                caseCount: number;
+                groundedness: number;
+                citationCoverage: number;
+                refusalCorrectness: number;
+                hallucinationRate: number;
+                passed: boolean;
+            }
+        >
+    >;
     passed: boolean;
 }
 
 export interface RagEvalFixture {
+    id: string;
+    fileName: string;
     title: string;
     author: string;
-    sourceUrl: string;
+    downloadUrl: string;
+    sourceRepository: string;
     sourceRevision: string;
     sha256: string;
     sizeBytes: number;
 }
 
 export interface RagEvalIngestion {
+    fixtureId: string;
+    bookId: string;
     collectionName: string;
     extractedChunkCount: number;
     storedChunkCount: number;
@@ -128,6 +192,8 @@ export interface RagEvalIngestion {
 export interface RagEvalReport {
     runId: string;
     createdAt: string;
+    suite: EvalSuite;
+    qualityPassed: boolean;
     answerModels: string[];
     resolvedAnswerModels: string[];
     judgeModel: string;
@@ -154,8 +220,8 @@ export interface RagEvalReport {
         };
     };
     thresholds: EvalThresholds;
-    fixture: RagEvalFixture;
-    ingestion: RagEvalIngestion;
+    fixtures: RagEvalFixture[];
+    ingestion: RagEvalIngestion[];
     retrieval: {
         summary: RetrievalSummary;
         cases: RetrievalCaseResult[];
