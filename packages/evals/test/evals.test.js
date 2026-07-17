@@ -10,7 +10,7 @@ process.env.OPENAI_API_KEY ||= "reader-evals-test-key";
 const {
     getEvalThresholds,
     getJudgeModel,
-    shouldFailQualityGate,
+    shouldFailEvalCommand,
 } = require("../dist/config");
 const { hasLangfuseConfig } = require("../dist/config");
 const { loadGoldenDataset } = require("../dist/dataset");
@@ -758,10 +758,55 @@ test("dataset selects the required and extended matrices", async () => {
     );
 });
 
-test("only required-suite quality misses fail the command", () => {
-    assert.equal(shouldFailQualityGate("required", false), true);
-    assert.equal(shouldFailQualityGate("required", true), false);
-    assert.equal(shouldFailQualityGate("extended", false), false);
+test("CI gates regressions while live and extended keep their intended semantics", () => {
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "ci",
+            qualityPassed: false,
+            regressionPassed: true,
+        }),
+        false
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "ci",
+            qualityPassed: true,
+            regressionPassed: false,
+        }),
+        true
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "ci",
+            qualityPassed: true,
+            regressionPassed: null,
+        }),
+        true
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "live",
+            qualityPassed: false,
+            regressionPassed: null,
+        }),
+        true
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "live",
+            qualityPassed: true,
+            regressionPassed: null,
+        }),
+        false
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "extended",
+            qualityPassed: false,
+            regressionPassed: null,
+        }),
+        false
+    );
 });
 
 test("every exact evidence anchor resolves in its pinned fixture", async () => {

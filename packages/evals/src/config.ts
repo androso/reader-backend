@@ -51,7 +51,18 @@ export const hasOpenAiConfig = () => Boolean(process.env.OPENAI_API_KEY);
 export const hasLangfuseConfig = () =>
     Boolean(process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY);
 
-export const shouldFailQualityGate = (
-    suite: EvalSuite,
-    qualityPassed: boolean
-) => suite === "required" && !qualityPassed;
+export type EvalCommand = "live" | "ci" | "extended";
+
+export const shouldFailEvalCommand = ({
+    command,
+    qualityPassed,
+    regressionPassed,
+}: {
+    command: EvalCommand;
+    qualityPassed: boolean;
+    regressionPassed: boolean | null;
+}) => {
+    if (command === "ci") return regressionPassed !== true;
+    if (command === "live") return !qualityPassed;
+    return false;
+};
