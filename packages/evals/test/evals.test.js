@@ -12,7 +12,11 @@ const {
     resolveLiveEvalSources,
     scoreRetrievalEval,
 } = require("../dist/retrieval");
-const { buildJudgePrompt, runAnswerEval } = require("../dist/answerJudge");
+const {
+    buildJudgePrompt,
+    OpenAIJudgeClient,
+    runAnswerEval,
+} = require("../dist/answerJudge");
 const {
     renderMarkdownReport,
     summarizeExecution,
@@ -438,6 +442,54 @@ test("correct refusals do not require supporting citations", async () => {
     assert.equal(result.cases[0].passed, true);
     assert.equal(result.cases[0].answerModel, "gpt-4o-mini");
     assert.equal(result.summary.passed, true);
+});
+
+test("judge cost uses the concrete response model", async () => {
+    const judge = new OpenAIJudgeClient({
+        chat: {
+            completions: {
+                async create() {
+                    return {
+                        model: "gpt-4o-mini-2024-07-18",
+                        choices: [
+                            {
+                                message: {
+                                    content: JSON.stringify({
+                                        groundedness: 1,
+                                        citationCoverage: 1,
+                                        refusalCorrectness: 1,
+                                        hallucinationRate: 0,
+                                        rationale: "Supported",
+                                    }),
+                                },
+                            },
+                        ],
+                        usage: {
+                            prompt_tokens: 100,
+                            completion_tokens: 20,
+                            total_tokens: 120,
+                        },
+                    };
+                },
+            },
+        },
+    });
+
+    const judged = await judge.score(
+        {
+            id: "resolved-judge-model",
+            question: "question",
+            expectedAnswer: "answer",
+            answerModel: "gpt-4o-mini",
+            candidateAnswer: "answer",
+            sources: [],
+            vectorResultIds: [],
+            vectorIdsAligned: true,
+        },
+        "custom-judge-alias"
+    );
+
+    assert.equal(judged.estimatedCost?.amount, 0.000027);
 });
 
 test("dataset validation rejects duplicate IDs", async () => {

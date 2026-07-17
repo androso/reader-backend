@@ -137,7 +137,7 @@ export class OpenAIJudgeClient implements JudgeClient {
         return {
             scores: parseJudgeJson(content),
             usage,
-            estimatedCost: estimateModelCost(model, usage),
+            estimatedCost: estimateModelCost(response.model, usage),
             durationMs: Date.now() - startedAt,
         };
     }
