@@ -277,7 +277,7 @@ export const runLiveRagEval = async (
                     generationDurationMs: generated.durationMs,
                     answerUsage,
                     answerEstimatedCost: estimateModelCost(
-                        answerModel,
+                        generated.modelVersion,
                         answerUsage
                     ),
                 });
