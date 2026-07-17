@@ -1,4 +1,5 @@
 export * from "./answerJudge";
+export * from "./baselineRegression";
 export * from "./config";
 export * from "./dataset";
 export * from "./fixtures";

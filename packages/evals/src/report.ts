@@ -12,13 +12,17 @@ const percent = (value: number | null) =>
     value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
 
 export const createReport = (
-    report: Omit<RagEvalReport, "runId" | "createdAt" | "qualityPassed">
+    report: Omit<
+        RagEvalReport,
+        "runId" | "createdAt" | "qualityPassed" | "regression"
+    >
 ): RagEvalReport => ({
     ...report,
     runId: `rag-eval-${Date.now()}`,
     createdAt: new Date().toISOString(),
     qualityPassed:
         report.retrieval.summary.passed && report.answers.summary.passed,
+    regression: null,
 });
 
 const emptyUsage = (): NormalizedModelUsage => ({
