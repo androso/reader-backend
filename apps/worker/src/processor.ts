@@ -77,6 +77,13 @@ export type ProcessRagRerankShadow = (
     payload: RagRerankShadowJobData
 ) => Promise<{ status: string }>;
 
+export class RagShadowJobFailedError extends Error {
+    constructor() {
+        super("RAG shadow job failed");
+        this.name = "RagShadowJobFailedError";
+    }
+}
+
 export const getRagShadowFailureMetadata = (
     job: Pick<Job<RagRerankShadowJobData>, "id"> | undefined,
     error: unknown
@@ -120,6 +127,6 @@ export const processRagRerankShadowJob = async (
             bookId: job.data.bookId,
             durationMs: Date.now() - start,
         });
-        throw error;
+        throw new RagShadowJobFailedError();
     }
 };

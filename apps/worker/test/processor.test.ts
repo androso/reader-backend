@@ -119,7 +119,7 @@ test("worker delegates the identifier-only RAG shadow payload", async () => {
     assert.deepEqual(result, { status: "completed" });
 });
 
-test("worker rethrows RAG shadow failures without a retry wrapper", async () => {
+test("worker rethrows a content-free RAG shadow failure", async () => {
     await assert.rejects(
         processRagRerankShadowJob(
             {
@@ -133,10 +133,18 @@ test("worker rethrows RAG shadow failures without a retry wrapper", async () => 
                 },
             },
             async () => {
-                throw new Error("retrieval unavailable");
+                throw new Error("provider echoed private user query");
             }
         ),
-        /retrieval unavailable/
+        (error: Error) => {
+            assert.equal(error.name, "RagShadowJobFailedError");
+            assert.equal(error.message, "RAG shadow job failed");
+            assert.equal(
+                error.stack?.includes("private user query") ?? false,
+                false
+            );
+            return true;
+        }
     );
 });
 
