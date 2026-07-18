@@ -459,16 +459,6 @@ const runChatCompletion = async ({
             generated.finishReason,
             executionMetadata
         );
-        if (resourceType === "book" && assistantMessage) {
-            await maybeEnqueueRagRerankShadow({
-                assistantMessageId: assistantMessage.id,
-                userMessageId,
-                conversationId,
-                bookId: resourceId,
-                userId,
-                hasHighlightContext: Boolean(highlightContext),
-            });
-        }
         trace.setTraceIO({
             output: {
                 status: "complete",
@@ -490,6 +480,16 @@ const runChatCompletion = async ({
         );
         res.write("data: [DONE]\n\n");
         res.end();
+        if (resourceType === "book" && assistantMessage) {
+            await maybeEnqueueRagRerankShadow({
+                assistantMessageId: assistantMessage.id,
+                userMessageId,
+                conversationId,
+                bookId: resourceId,
+                userId,
+                hasHighlightContext: Boolean(highlightContext),
+            });
+        }
     }
 };
 

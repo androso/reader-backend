@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { maybeEnqueueRagRerankShadow } from "../src/services/RagShadowEnqueueService";
 
@@ -86,4 +88,30 @@ test("invalid shadow configuration never rejects chat completion", async () => {
             process.env.RAG_RERANK_SHADOW_SAMPLE_RATE = previous;
         }
     }
+});
+
+test("chat ends the SSE response before awaiting shadow queue I/O", () => {
+    const route = readFileSync(
+        join(
+            resolve(__dirname, "../../.."),
+            "apps/api/src/routes/Chat.routes.ts"
+        ),
+        "utf8"
+    );
+    const completionStart = route.indexOf(
+        "const assistantMessage = await saveAssistantMessage"
+    );
+    const completionEnd = route.indexOf(
+        "const runBookChatTraceIfNeeded",
+        completionStart
+    );
+    const completion = route.slice(completionStart, completionEnd);
+
+    assert.ok(completionStart >= 0);
+    assert.ok(completionEnd > completionStart);
+    assert.ok(completion.indexOf("res.end();") >= 0);
+    assert.ok(
+        completion.indexOf("res.end();") <
+            completion.indexOf("await maybeEnqueueRagRerankShadow")
+    );
 });
