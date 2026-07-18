@@ -29,6 +29,15 @@ Parameters:
     Type: Number
     Default: 500
     MinValue: 20
+  RagRerankShadowSampleRate:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 1
+  RagRerankShadowRateLimitPerMinute:
+    Type: Number
+    Default: 30
+    MinValue: 1
   ApiDesiredCount:
     Type: Number
     MinValue: 0
@@ -423,6 +432,8 @@ Resources:
               Value: !Ref LangfuseCaptureContent
             - Name: LANGFUSE_MAX_CAPTURE_CHARS
               Value: !Sub "${LangfuseMaxCaptureChars}"
+            - Name: RAG_RERANK_SHADOW_SAMPLE_RATE
+              Value: !Sub "${RagRerankShadowSampleRate}"
             - !If
               - HasLangfusePublicKey
               - Name: LANGFUSE_PUBLIC_KEY
@@ -506,6 +517,24 @@ Resources:
               Value: !Ref UploadsBucketName
             - Name: S3_REGION
               Value: !Ref AWS::Region
+            - Name: RAG_RERANK_SHADOW_RATE_LIMIT_PER_MINUTE
+              Value: !Sub "${RagRerankShadowRateLimitPerMinute}"
+            - Name: LANGFUSE_SAMPLE_RATE
+              Value: !Ref LangfuseSampleRate
+            - Name: LANGFUSE_CAPTURE_CONTENT
+              Value: metadata
+            - Name: LANGFUSE_MAX_CAPTURE_CHARS
+              Value: !Sub "${LangfuseMaxCaptureChars}"
+            - !If
+              - HasLangfusePublicKey
+              - Name: LANGFUSE_PUBLIC_KEY
+                Value: !Ref LangfusePublicKey
+              - !Ref AWS::NoValue
+            - !If
+              - HasLangfuseBaseUrl
+              - Name: LANGFUSE_BASE_URL
+                Value: !Ref LangfuseBaseUrl
+              - !Ref AWS::NoValue
           Secrets:
             - Name: DATABASE_URL
               ValueFrom: !Ref DatabaseUrlSecretArn
@@ -515,6 +544,11 @@ Resources:
               ValueFrom: !Ref RedisUrlSecretArn
             - Name: CHROMA_CLIENT_AUTH_CREDENTIALS
               ValueFrom: !Ref ChromaClientAuthCredentialsSecretArn
+            - !If
+              - HasLangfuseSecretKey
+              - Name: LANGFUSE_SECRET_KEY
+                ValueFrom: !Ref LangfuseSecretKeySecretArn
+              - !Ref AWS::NoValue
           LogConfiguration:
             LogDriver: awslogs
             Options:

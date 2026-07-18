@@ -7,6 +7,8 @@
   { "ParameterKey": "LangfuseSampleRate", "ParameterValue": "1" },
   { "ParameterKey": "LangfuseCaptureContent", "ParameterValue": "metadata" },
   { "ParameterKey": "LangfuseMaxCaptureChars", "ParameterValue": "500" },
+  { "ParameterKey": "RagRerankShadowSampleRate", "ParameterValue": "0" },
+  { "ParameterKey": "RagRerankShadowRateLimitPerMinute", "ParameterValue": "30" },
   { "ParameterKey": "GoogleClientId", "ParameterValue": "<google-client-id>" },
   { "ParameterKey": "GoogleClientSecretValue", "ParameterValue": "<google-client-secret>" },
   { "ParameterKey": "ChromaServerAuthnCredentialsSecretValue", "ParameterValue": "<username:password>" },
