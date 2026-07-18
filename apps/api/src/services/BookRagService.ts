@@ -114,6 +114,7 @@ export const retrieveBookEvidence = async ({
     strict = false,
     pipelineVersion,
     includeErrorDetailInLogs = true,
+    strictRerankInfrastructureErrors = false,
 }: {
     bookId: string;
     userId: string;
@@ -123,6 +124,7 @@ export const retrieveBookEvidence = async ({
     strict?: boolean;
     pipelineVersion?: RagPipelineVersion;
     includeErrorDetailInLogs?: boolean;
+    strictRerankInfrastructureErrors?: boolean;
 }): Promise<
     Omit<BookContextResult, "messages"> & {
         results?: Awaited<ReturnType<typeof hybridBookSearchService.search>>;
@@ -211,6 +213,8 @@ export const retrieveBookEvidence = async ({
                           query,
                           minHybridScore: getRagMinHybridScore(),
                           signal,
+                          strictInfrastructureErrors:
+                              strictRerankInfrastructureErrors,
                       })
                     : await hybridBookSearchService.searchWithDiagnostics(
                           book.collectionName,

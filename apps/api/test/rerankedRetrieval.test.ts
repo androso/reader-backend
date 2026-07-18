@@ -512,3 +512,27 @@ test("chunk expansion failure returns the exact baseline", async () => {
         "provider_error"
     );
 });
+
+test("strict infrastructure mode surfaces chunk expansion failures", async () => {
+    const broad = [result("one", 0, 0.04), result("two", 1, 0.035)];
+
+    await assert.rejects(
+        retrieveRerankedEvidence({
+            collectionName: "book",
+            query: "query",
+            strictInfrastructureErrors: true,
+            searchService: {
+                searchWithDiagnostics: async () => ({
+                    results: broad,
+                    diagnostics: diagnostics("hybrid"),
+                }),
+            },
+            chunkReader: {
+                getCollectionChunks: async () => {
+                    throw new Error("database unavailable");
+                },
+            },
+        }),
+        /database unavailable/
+    );
+});

@@ -144,6 +144,7 @@ const defaultDependencies: RagShadowDependencies = {
             strict: true,
             pipelineVersion: "rerank-rag-v1",
             includeErrorDetailInLogs: false,
+            strictRerankInfrastructureErrors: true,
         }),
     persist: persistShadow,
 };
