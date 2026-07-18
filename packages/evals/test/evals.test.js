@@ -1300,6 +1300,18 @@ test("comparison deduplicates reranker telemetry and accepts the 2500ms boundary
     assert.equal(report.pairedAnswers.length, 1);
 });
 
+test("comparison requires cost for every successful reranker call", () => {
+    const reranked = makeComparisonPreparedCase("rerank-rag-v1");
+    reranked.retrievalDiagnostics.reranker.estimatedCost = null;
+    const report = makeComparisonReport({ rerankedCases: [reranked] });
+
+    assert.equal(report.promotionPassed, false);
+    assert.equal(report.promotion.checks.rerankerCostAtMost0015, false);
+    assert.ok(
+        report.promotion.failedChecks.includes("rerankerCostAtMost0015")
+    );
+});
+
 test("comparison reports retrieval and answer promotion regressions", () => {
     const report = makeComparisonReport({
         rerankedRetrieval: { recallAtK: 0, mrr: 0, passed: false },

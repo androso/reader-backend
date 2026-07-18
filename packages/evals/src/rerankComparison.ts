@@ -350,9 +350,16 @@ export const createRerankComparisonReport = ({
         }
         return diagnostics.reranker;
     });
-    const knownRerankerCosts = rerankerDiagnostics
+    const successfulRerankerDiagnostics = rerankerDiagnostics.filter(
+        (diagnostic) => diagnostic.status === "success"
+    );
+    const knownSuccessfulRerankerCosts = successfulRerankerDiagnostics
         .map((diagnostic) => diagnostic.estimatedCost?.amount ?? null)
         .filter((value): value is number => value !== null);
+    const successfulRerankerCostsAreComplete =
+        successfulRerankerDiagnostics.length > 0 &&
+        knownSuccessfulRerankerCosts.length ===
+            successfulRerankerDiagnostics.length;
     const highDuplicateReductionPassed = pairedRetrieval
         .filter(
             (pair) =>
@@ -410,9 +417,9 @@ export const createRerankComparisonReport = ({
         highDuplicateReduction: highDuplicateReductionPassed,
         zeroLiveRerankerFallbacks: rerankerFallbackCount === 0,
         rerankerP95AtMost2500Ms: percentile(rerankerLatencies, 0.95) <= 2_500,
-        rerankerCostAtMost0015: knownRerankerCosts.every(
-            (cost) => cost <= 0.015
-        ),
+        rerankerCostAtMost0015:
+            successfulRerankerCostsAreComplete &&
+            knownSuccessfulRerankerCosts.every((cost) => cost <= 0.015),
     };
     const failedChecks = Object.entries(checks)
         .filter(([, passed]) => !passed)
