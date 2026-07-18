@@ -194,9 +194,6 @@ export const validateRagShadowRecords = (
     ) {
         return "missing" as const;
     }
-    if (records.assistant.executionMetadata?.shadow) {
-        return "already_completed" as const;
-    }
     if (
         records.assistant.role !== "assistant" ||
         records.userMessage.role !== "user" ||
@@ -212,6 +209,9 @@ export const validateRagShadowRecords = (
         throw new RagShadowAuthorizationError(
             "Shadow job identifiers do not share one authorized book conversation"
         );
+    }
+    if (records.assistant.executionMetadata?.shadow) {
+        return "already_completed" as const;
     }
     if (!records.assistant.executionMetadata) {
         throw new Error(

@@ -196,6 +196,23 @@ test("existing shadow metadata is idempotently skipped", async () => {
     assert.equal(retrieved, false);
 });
 
+test("completed shadow jobs are reauthorized before idempotent skipping", async () => {
+    const current = records();
+    current.assistant!.executionMetadata = {
+        ...executionMetadata,
+        shadow: {} as any,
+    };
+    current.book = { id: payload.bookId, userId: "another-user" };
+
+    await assert.rejects(
+        processRagRerankShadow(
+            payload,
+            dependencies({ load: async () => current })
+        ),
+        RagShadowAuthorizationError
+    );
+});
+
 test("non-baseline assistant messages are excluded from shadow comparisons", async () => {
     const current = records();
     current.assistant!.executionMetadata = {
