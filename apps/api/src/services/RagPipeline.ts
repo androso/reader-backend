@@ -40,12 +40,13 @@ export const getRerankerModel = () => {
 };
 
 export const getRagPipeline = () => {
-    getRerankerModel();
     const configured =
         process.env.RAG_PIPELINE_VERSION || DEFAULT_RAG_PIPELINE_VERSION;
     if (!Object.prototype.hasOwnProperty.call(RAG_PIPELINES, configured)) {
         throw new Error(`Unsupported RAG pipeline version: ${configured}`);
     }
 
-    return RAG_PIPELINES[configured as RagPipelineVersion];
+    const pipeline = RAG_PIPELINES[configured as RagPipelineVersion];
+    if (pipeline.retrievalStrategy === "reranked") getRerankerModel();
+    return pipeline;
 };

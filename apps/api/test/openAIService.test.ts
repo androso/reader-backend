@@ -173,6 +173,22 @@ test("RAG reranker model configuration rejects unknown and inherited keys", () =
     }
 });
 
+test("baseline pipelines ignore unused reranker model configuration", () => {
+    const previousPipeline = process.env.RAG_PIPELINE_VERSION;
+    const previousReranker = process.env.RAG_RERANKER_MODEL;
+    try {
+        process.env.RAG_RERANKER_MODEL = "unknown-model";
+        process.env.RAG_PIPELINE_VERSION = "baseline-rag-v1";
+        assert.equal(getRagPipeline().retrievalStrategy, "baseline");
+
+        process.env.RAG_PIPELINE_VERSION = "rerank-rag-v1";
+        assert.throws(getRagPipeline, /Unsupported RAG reranker model/);
+    } finally {
+        restoreEnv("RAG_PIPELINE_VERSION", previousPipeline);
+        restoreEnv("RAG_RERANKER_MODEL", previousReranker);
+    }
+});
+
 test("registers the reranked pipeline and pinned prompt/model versions", () => {
     const previous = process.env.RAG_PIPELINE_VERSION;
     process.env.RAG_PIPELINE_VERSION = "rerank-rag-v1";
