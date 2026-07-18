@@ -1329,6 +1329,46 @@ test("comparison reports retrieval and answer promotion regressions", () => {
     assert.ok(report.promotion.failedChecks.includes("hallucinationBudget"));
 });
 
+test("comparison does not attribute answer variance to identical evidence", () => {
+    const report = makeComparisonReport({
+        rerankedAnswers: {
+            groundedness: 0.96,
+            citationCoverage: 0.96,
+            refusalCorrectness: 0.96,
+            hallucinationRate: 0.01,
+            passed: false,
+        },
+    });
+
+    assert.equal(report.pairedAnswers[0].evidenceIdentical, true);
+    assert.equal(report.promotion.checks.noRequiredCaseLost, true);
+    assert.equal(report.promotionPassed, true);
+});
+
+test("comparison attributes answer regressions when evidence changed", () => {
+    const rerankedCase = makeComparisonPreparedCase("rerank-rag-v1");
+    rerankedCase.sources = [
+        {
+            ...rerankedCase.sources[0],
+            id: "chunk-2",
+            excerpt: "Different evidence was retrieved.",
+        },
+    ];
+    const report = makeComparisonReport({
+        rerankedCases: [rerankedCase],
+        rerankedAnswers: {
+            groundedness: 0.96,
+            citationCoverage: 0.96,
+            refusalCorrectness: 0.96,
+            hallucinationRate: 0.01,
+            passed: false,
+        },
+    });
+
+    assert.equal(report.pairedAnswers[0].evidenceIdentical, false);
+    assert.equal(report.promotion.checks.noRequiredCaseLost, false);
+});
+
 test("comparison writers use exact report paths for infrastructure failures", async () => {
     const report = createInfrastructureFailureReport(
         new Error("OPENAI_API_KEY is required")
