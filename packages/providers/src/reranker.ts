@@ -216,11 +216,20 @@ export class OpenAIChatReranker implements RerankerProvider {
             buildRerankerRequest(query, documents, topN) as never,
             { signal: requestSignal }
         );
-        const message = response.choices[0]?.message as
+        const choice = response.choices[0];
+        const message = choice?.message as
             | { content?: unknown; refusal?: unknown }
             | undefined;
         if (typeof message?.refusal === "string" && message.refusal) {
             throw new Error("Reranker refused the request");
+        }
+        if (
+            typeof choice?.finish_reason === "string" &&
+            choice.finish_reason !== "stop"
+        ) {
+            throw new Error(
+                `Reranker response incomplete: finish reason ${choice.finish_reason}, content characters ${typeof message?.content === "string" ? message.content.length : 0}`
+            );
         }
         return {
             rankings: parseRerankerResponse(message?.content, documents, topN),

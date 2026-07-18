@@ -203,6 +203,29 @@ test("propagates refusal and timeout/provider rejection without retry", async ()
         }),
         /refused/
     );
+    const truncatedClient = {
+        chat: {
+            completions: {
+                create: async () => ({
+                    model: RERANKER_MODEL,
+                    choices: [
+                        {
+                            finish_reason: "length",
+                            message: { content: '{"rankings":[' },
+                        },
+                    ],
+                }),
+            },
+        },
+    } as unknown as Pick<OpenAI, "chat">;
+    await assert.rejects(
+        new OpenAIChatReranker(truncatedClient).rerank({
+            query: "query",
+            documents: candidates,
+            topN: 2,
+        }),
+        /finish reason length, content characters 13/
+    );
     let calls = 0;
     const timeoutClient = {
         chat: {
