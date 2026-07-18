@@ -15,6 +15,10 @@
         "./book-processing": {
             "types": "./src/book-processing.ts",
             "default": "./build/book-processing.js"
+        },
+        "./rag-shadow": {
+            "types": "./src/rag-shadow.ts",
+            "default": "./build/rag-shadow.js"
         }
     },
     "typesVersions": {
@@ -27,6 +31,9 @@
             ],
             "book-processing": [
                 "src/book-processing.ts"
+            ],
+            "rag-shadow": [
+                "src/rag-shadow.ts"
             ]
         }
     },
