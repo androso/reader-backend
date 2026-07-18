@@ -9,6 +9,7 @@ import {
     type RagRerankShadowJobData,
 } from "@reader/jobs";
 import {
+    getRagShadowFailureMetadata,
     processBookProcessingJob,
     processRagRerankShadowJob,
 } from "./processor";
@@ -56,7 +57,10 @@ shadowWorker.on("completed", (job) => {
 });
 
 shadowWorker.on("failed", (job, error) => {
-    console.error(`RAG shadow job ${job?.id ?? "unknown"} failed`, error);
+    console.error(
+        "RAG shadow job failed",
+        getRagShadowFailureMetadata(job, error)
+    );
 });
 
 const shutdown = async () => {

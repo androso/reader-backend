@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    getRagShadowFailureMetadata,
     processBookProcessingJob,
     processRagRerankShadowJob,
 } from "../src/processor";
@@ -137,4 +138,17 @@ test("worker rethrows RAG shadow failures without a retry wrapper", async () => 
         ),
         /retrieval unavailable/
     );
+});
+
+test("shadow failure event metadata excludes error messages", () => {
+    const metadata = getRagShadowFailureMetadata(
+        { id: "shadow-job-1" },
+        new Error("private user query")
+    );
+
+    assert.deepEqual(metadata, {
+        jobId: "shadow-job-1",
+        errorName: "Error",
+    });
+    assert.equal(JSON.stringify(metadata).includes("private user query"), false);
 });

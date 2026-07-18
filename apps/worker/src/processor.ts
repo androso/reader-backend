@@ -77,6 +77,14 @@ export type ProcessRagRerankShadow = (
     payload: RagRerankShadowJobData
 ) => Promise<{ status: string }>;
 
+export const getRagShadowFailureMetadata = (
+    job: Pick<Job<RagRerankShadowJobData>, "id"> | undefined,
+    error: unknown
+) => ({
+    jobId: job?.id ?? "unknown",
+    errorName: error instanceof Error ? error.name : typeof error,
+});
+
 const loadProcessRagRerankShadow = (): ProcessRagRerankShadow => {
     const module = require("@reader/api/rag-shadow");
     return module.processRagRerankShadow as ProcessRagRerankShadow;
@@ -106,12 +114,11 @@ export const processRagRerankShadowJob = async (
         return result;
     } catch (error) {
         log.error("RAG shadow job failed", {
-            jobId: job.id,
+            ...getRagShadowFailureMetadata(job, error),
             assistantMessageId: job.data.assistantMessageId,
             conversationId: job.data.conversationId,
             bookId: job.data.bookId,
             durationMs: Date.now() - start,
-            errorName: error instanceof Error ? error.name : typeof error,
         });
         throw error;
     }
