@@ -196,6 +196,29 @@ test("existing shadow metadata is idempotently skipped", async () => {
     assert.equal(retrieved, false);
 });
 
+test("non-baseline assistant messages are excluded from shadow comparisons", async () => {
+    const current = records();
+    current.assistant!.executionMetadata = {
+        ...executionMetadata,
+        pipelineVersion: "rerank-rag-v1",
+    };
+    let retrieved = false;
+
+    const result = await processRagRerankShadow(
+        payload,
+        dependencies({
+            load: async () => current,
+            retrieve: async () => {
+                retrieved = true;
+                return retrievalResult();
+            },
+        })
+    );
+
+    assert.deepEqual(result, { status: "not_baseline" });
+    assert.equal(retrieved, false);
+});
+
 test("every ownership and scope mismatch is rejected before retrieval", async () => {
     const invalidRecords: Array<[string, (value: RagShadowRecords) => void]> = [
         ["assistant role", (value) => (value.assistant!.role = "user")],

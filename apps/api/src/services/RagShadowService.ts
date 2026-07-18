@@ -218,6 +218,12 @@ export const validateRagShadowRecords = (
             "Assistant message is missing baseline execution metadata"
         );
     }
+    if (
+        records.assistant.executionMetadata.pipelineVersion !==
+        "baseline-rag-v1"
+    ) {
+        return "not_baseline" as const;
+    }
     return "authorized" as const;
 };
 
