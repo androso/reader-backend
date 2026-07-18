@@ -27,6 +27,7 @@ const SENSITIVE_TEXT_KEYS = new Set([
     "documents",
     "document",
     "text",
+    "error",
 ]);
 
 let sdk: NodeSDK | null = null;
@@ -198,6 +199,53 @@ const wrapObservation = (
 };
 
 export const getNoopTraceObservation = () => noopObservation;
+
+const CONTENT_FREE_CAPTURE: LangfuseCaptureConfig = {
+    mode: "metadata",
+    maxChars: DEFAULT_MAX_CAPTURE_CHARS,
+};
+
+export const getContentFreeTraceObservation = (
+    observation: TraceObservation
+): TraceObservation => {
+    let wrapped: TraceObservation;
+    wrapped = {
+        id: observation.id,
+        traceId: observation.traceId,
+        update(attributes) {
+            observation.update(
+                maskLangfuseAttribute(
+                    attributes,
+                    CONTENT_FREE_CAPTURE
+                ) as LangfuseObservationAttributes
+            );
+            return wrapped;
+        },
+        setTraceIO(attributes) {
+            observation.setTraceIO(
+                maskLangfuseAttribute(
+                    attributes,
+                    CONTENT_FREE_CAPTURE
+                ) as LangfuseTraceAttributes
+            );
+            return wrapped;
+        },
+        startObservation(name, attributes, options) {
+            const sanitized = attributes
+                ? (maskLangfuseAttribute(
+                      attributes,
+                      CONTENT_FREE_CAPTURE
+                  ) as LangfuseObservationAttributes)
+                : undefined;
+            return getContentFreeTraceObservation(
+                observation.startObservation(name, sanitized, options)
+            );
+        },
+        end: () => observation.end(),
+        getSpanContext: () => observation.getSpanContext(),
+    };
+    return wrapped;
+};
 
 export const getErrorMessage = (error: unknown) =>
     error instanceof Error ? error.message : String(error);

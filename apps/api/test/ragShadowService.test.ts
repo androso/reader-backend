@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { RagRerankShadowJobData } from "@reader/jobs";
 import {
+    recordObservationError,
+    type TraceObservation,
+} from "../src/observability/langfuse";
+import {
     compareShadowSourceRanks,
     processRagRerankShadow,
     RagShadowAuthorizationError,
@@ -286,6 +290,46 @@ test("retrieval infrastructure errors fail the one-attempt job", async () => {
         ),
         /chroma unavailable/
     );
+});
+
+test("shadow retrieval traces redact query-bearing errors", async () => {
+    const updates: unknown[] = [];
+    let trace: TraceObservation;
+    trace = {
+        id: "shadow-span",
+        traceId: "shadow-trace",
+        update: (attributes) => {
+            updates.push(attributes);
+            return trace;
+        },
+        setTraceIO: () => trace,
+        startObservation: () => trace,
+        end: () => undefined,
+        getSpanContext: () => undefined,
+    };
+
+    await assert.rejects(
+        processRagRerankShadow(
+            payload,
+            dependencies({
+                retrieve: async ({ trace: retrievalTrace }) => {
+                    const error = new Error(
+                        "provider echoed private user query"
+                    );
+                    recordObservationError(
+                        retrievalTrace,
+                        error,
+                        "Shadow retrieval failed"
+                    );
+                    throw error;
+                },
+            }),
+            trace
+        ),
+        /provider echoed private user query/
+    );
+    assert.equal(JSON.stringify(updates).includes("private user query"), false);
+    assert.equal(JSON.stringify(updates).includes("[redacted]"), true);
 });
 
 test("a book deleted after authorization is a benign missing result", async () => {

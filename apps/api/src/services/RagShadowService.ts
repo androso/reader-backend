@@ -9,6 +9,7 @@ import {
     type MessageContextSource,
 } from "../db/schema";
 import {
+    getContentFreeTraceObservation,
     getNoopTraceObservation,
     withRagShadowTrace,
     type TraceObservation,
@@ -229,11 +230,12 @@ const runAuthorizedShadow = async (
     const assistant = records.assistant!;
     const userMessage = records.userMessage!;
     const baselineMetadata = assistant.executionMetadata!;
+    const retrievalTrace = getContentFreeTraceObservation(trace);
     const evidence = await dependencies.retrieve({
         bookId: payload.bookId,
         userId: payload.userId,
         query: userMessage.content,
-        trace,
+        trace: retrievalTrace,
     });
     if (evidence.status === "not_found") {
         return { status: "missing" } as const;
