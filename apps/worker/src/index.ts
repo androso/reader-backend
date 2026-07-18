@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import {
     BOOK_PROCESSING_QUEUE_NAME,
     RAG_RERANK_SHADOW_CONCURRENCY,
+    RAG_RERANK_SHADOW_MAX_STARTED_ATTEMPTS,
     RAG_RERANK_SHADOW_QUEUE_NAME,
     getRedisConnectionOptions,
     parseRagRerankShadowRateLimit,
@@ -35,6 +36,7 @@ const shadowWorker = new Worker<RagRerankShadowJobData>(
     {
         connection: getRedisConnectionOptions(),
         concurrency: RAG_RERANK_SHADOW_CONCURRENCY,
+        maxStartedAttempts: RAG_RERANK_SHADOW_MAX_STARTED_ATTEMPTS,
         limiter: {
             max: parseRagRerankShadowRateLimit(
                 process.env.RAG_RERANK_SHADOW_RATE_LIMIT_PER_MINUTE

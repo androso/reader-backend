@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    RAG_RERANK_SHADOW_MAX_STARTED_ATTEMPTS,
     createRagRerankShadowJobId,
     getRagRerankShadowSampleBucket,
     parseRagRerankShadowSampleRate,
     parseRagRerankShadowRateLimit,
     shouldSampleRagRerankShadow,
 } from "../src";
+
+test("shadow jobs may start only once", () => {
+    assert.equal(RAG_RERANK_SHADOW_MAX_STARTED_ATTEMPTS, 1);
+});
 
 test("shadow sampling defaults to disabled and validates decimal rates", () => {
     assert.equal(parseRagRerankShadowSampleRate(undefined), 0);

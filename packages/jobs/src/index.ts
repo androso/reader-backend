@@ -4,6 +4,7 @@ import { Queue, type JobsOptions, type QueueOptions } from "bullmq";
 export const BOOK_PROCESSING_QUEUE_NAME = "book-processing";
 export const RAG_RERANK_SHADOW_QUEUE_NAME = "rag-rerank-shadow";
 export const RAG_RERANK_SHADOW_CONCURRENCY = 2;
+export const RAG_RERANK_SHADOW_MAX_STARTED_ATTEMPTS = 1;
 export const DEFAULT_RAG_RERANK_SHADOW_RATE_LIMIT_PER_MINUTE = 30;
 
 export type BookFileType = "epub" | "pdf";
