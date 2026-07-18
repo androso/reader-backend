@@ -1,5 +1,5 @@
 import MiniSearch from "minisearch";
-import { createLogger } from "./logger";
+import { contentFreeQueryLogMetadata, createLogger } from "./logger";
 import {
     vectorStore,
     type VectorSearchResult,
@@ -434,10 +434,10 @@ export class HybridBookSearchService {
             vectorLimit,
             finalLimit,
         });
-        log.debug("Search query", {
-            collectionName,
-            query: query.slice(0, 200),
-        });
+        log.debug(
+            "Search query metadata",
+            contentFreeQueryLogMetadata(query, { collectionName })
+        );
 
         const [lexicalResults, vectorResults] = await Promise.all([
             this.searchLexical(collectionName, query, lexicalLimit, tracing),
