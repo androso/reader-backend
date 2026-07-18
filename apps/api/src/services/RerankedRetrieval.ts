@@ -301,6 +301,130 @@ export const selectWithDeterministicMmr = (
     return selected;
 };
 
+export const selectDiversityGuardedMmr = (
+    candidates: Candidate[],
+    scores: Map<string, number>,
+    maxAllowedSimilarity: number,
+    limit = RERANK_FINAL_LIMIT
+) => {
+    const targetResultCount = Math.min(limit, candidates.length);
+    if (!targetResultCount) return [];
+
+    let best:
+        | {
+              candidates: Candidate[];
+              maxSimilarity: number;
+              relevance: number;
+              stableRanks: number[];
+          }
+        | undefined;
+    const selected: Candidate[] = [];
+    const similarityByPair = new Map<string, number>();
+    const pairKey = (left: Candidate, right: Candidate) =>
+        left.id < right.id
+            ? `${left.id}\u0000${right.id}`
+            : `${right.id}\u0000${left.id}`;
+    for (let left = 0; left < candidates.length; left += 1) {
+        for (let right = left + 1; right < candidates.length; right += 1) {
+            similarityByPair.set(
+                pairKey(candidates[left], candidates[right]),
+                wordTrigramJaccard(
+                    candidates[left].content,
+                    candidates[right].content
+                )
+            );
+        }
+    }
+
+    const selectedMaxSimilarity = () => {
+        let maximum = 0;
+        for (let left = 0; left < selected.length; left += 1) {
+            for (let right = left + 1; right < selected.length; right += 1) {
+                maximum = Math.max(
+                    maximum,
+                    similarityByPair.get(
+                        pairKey(selected[left], selected[right])
+                    ) ?? 0
+                );
+            }
+        }
+        return maximum;
+    };
+
+    const isBetter = (candidate: NonNullable<typeof best>) => {
+        if (!best) return true;
+        const candidateWithinCeiling =
+            candidate.maxSimilarity <=
+            maxAllowedSimilarity + Number.EPSILON;
+        const bestWithinCeiling =
+            best.maxSimilarity <= maxAllowedSimilarity + Number.EPSILON;
+        if (candidateWithinCeiling !== bestWithinCeiling) {
+            return candidateWithinCeiling;
+        }
+        if (
+            !candidateWithinCeiling &&
+            candidate.maxSimilarity !== best.maxSimilarity
+        ) {
+            return candidate.maxSimilarity < best.maxSimilarity;
+        }
+        if (candidate.relevance !== best.relevance) {
+            return candidate.relevance > best.relevance;
+        }
+        for (let index = 0; index < candidate.stableRanks.length; index += 1) {
+            if (candidate.stableRanks[index] !== best.stableRanks[index]) {
+                return candidate.stableRanks[index] < best.stableRanks[index];
+            }
+        }
+        return false;
+    };
+
+    const considerSelection = () => {
+        const stableCandidates = [...selected].sort((left, right) => {
+            if (left.firstStageRank !== right.firstStageRank) {
+                return left.firstStageRank - right.firstStageRank;
+            }
+            return left.chunkIndex - right.chunkIndex;
+        });
+        const candidate = {
+            candidates: [...selected],
+            maxSimilarity: selectedMaxSimilarity(),
+            relevance: selected.reduce(
+                (total, result) => total + (scores.get(result.id) ?? 0),
+                0
+            ),
+            stableRanks: stableCandidates.flatMap((result) => [
+                result.firstStageRank,
+                result.chunkIndex,
+            ]),
+        };
+        if (isBetter(candidate)) best = candidate;
+    };
+
+    const visit = (startIndex: number) => {
+        if (selected.length === targetResultCount) {
+            considerSelection();
+            return;
+        }
+        const remainingNeeded = targetResultCount - selected.length;
+        for (
+            let index = startIndex;
+            index <= candidates.length - remainingNeeded;
+            index += 1
+        ) {
+            selected.push(candidates[index]);
+            visit(index + 1);
+            selected.pop();
+        }
+    };
+
+    visit(0);
+    return selectWithDeterministicMmr(
+        best?.candidates ?? candidates,
+        scores,
+        targetResultCount
+    );
+};
+
 const diagnosticCandidates = (
     candidates: Candidate[]
 ): RerankedCandidateDiagnostic[] =>
@@ -448,32 +572,20 @@ export const retrieveRerankedEvidence = async ({
             })
         );
         if (
-            baseline.length === targetResultCount &&
             maxWordTrigramSimilarity(results) >
             baselineMaxSimilarity + Number.EPSILON
         ) {
-            const guarded = selectWithDeterministicMmr(
+            const guarded = selectDiversityGuardedMmr(
                 candidates,
                 scores,
-                RERANK_FINAL_LIMIT,
-                baselineMaxSimilarity
+                baselineMaxSimilarity,
+                RERANK_FINAL_LIMIT
             );
-            results =
-                guarded.length === targetResultCount
-                    ? guarded.map((result) => ({
-                          ...result,
-                          rerankerRank:
-                              ranks.get(result.id) ?? result.rerankerRank,
-                          selectionReason: `diversity_guard;${result.selectionReason}`,
-                      }))
-                    : baseline.map((result, index) => ({
-                          ...result,
-                          rerankerRank:
-                              ranks.get(result.id) ??
-                              candidates.length + index + 1,
-                          rerankerScore: scores.get(result.id) ?? 0,
-                          selectionReason: "diversity_guard_exact_baseline",
-                      }));
+            results = guarded.map((result) => ({
+                ...result,
+                rerankerRank: ranks.get(result.id) ?? result.rerankerRank,
+                selectionReason: `diversity_guard;${result.selectionReason}`,
+            }));
         }
         const finalCandidates = results.map((result, index) => {
             const source = candidates.find(

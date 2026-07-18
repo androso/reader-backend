@@ -14,6 +14,7 @@ import {
     describeRerankerError,
     maxWordTrigramSimilarity,
     retrieveRerankedEvidence,
+    selectDiversityGuardedMmr,
     selectWithDeterministicMmr,
     wordTrigramJaccard,
 } from "../src/services/RerankedRetrieval";
@@ -229,6 +230,55 @@ test("MMR enforces a deterministic maximum similarity ceiling", () => {
     assert.ok(maxWordTrigramSimilarity(guarded) <= 0.1);
 });
 
+test("diversity guard backtracks to a complete set under the ceiling", () => {
+    const candidates = expandRerankCandidates(
+        [
+            result(
+                "highest",
+                0,
+                0.04,
+                "alice followed the white rabbit through the long hall"
+            ),
+            result(
+                "stable",
+                1,
+                0.039,
+                "the queen convened a trial before the assembled court"
+            ),
+            result(
+                "conflict-1",
+                2,
+                0.038,
+                "alice followed the white rabbit before sunset"
+            ),
+            result(
+                "conflict-2",
+                3,
+                0.037,
+                "through the long hall today everyone cheered"
+            ),
+        ],
+        []
+    );
+    const guarded = selectDiversityGuardedMmr(
+        candidates,
+        new Map([
+            ["highest", 1],
+            ["stable", 0.8],
+            ["conflict-1", 0.7],
+            ["conflict-2", 0.6],
+        ]),
+        0,
+        3
+    );
+
+    assert.deepEqual(
+        guarded.map((candidate) => candidate.id),
+        ["stable", "conflict-1", "conflict-2"]
+    );
+    assert.equal(maxWordTrigramSimilarity(guarded), 0);
+});
+
 test("successful reranking cannot exceed exact baseline diversity", async () => {
     const baselineContents = [
         "alpha one two three four",
@@ -354,7 +404,7 @@ test("short hybrid baselines preserve the reranked result count", async () => {
     assert.ok(
         response.diagnostics.finalCandidates.every(
             (candidate) =>
-                !candidate.selectionReason.startsWith("diversity_guard")
+                candidate.selectionReason.startsWith("diversity_guard")
         )
     );
 });
