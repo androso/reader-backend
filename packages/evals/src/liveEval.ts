@@ -10,6 +10,7 @@ import {
     generateBookAnswer,
     normalizeHighlightContext,
     retrieveBookContext,
+    type RagPipelineVersion,
 } from "@reader/api/rag";
 import { estimateModelCost, normalizeModelUsage } from "@reader/api/ai-usage";
 import {
@@ -27,13 +28,14 @@ import type {
 import { getFixture, loadFixtureManifest, verifyFixture } from "./fixtures";
 import { resolveLiveEvalSources } from "./retrieval";
 
-const evalAnswerService = new OpenAIService(
-    new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        maxRetries: 2,
-        timeout: 30_000,
-    })
-);
+const createEvalAnswerService = () =>
+    new OpenAIService(
+        new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+            maxRetries: 2,
+            timeout: 30_000,
+        })
+    );
 
 export type StoredChunk = {
     id: string;
@@ -170,7 +172,10 @@ export const cleanupEvalResources = async (
 };
 
 export const runLiveRagEval = async (
-    cases: RagEvalCase[]
+    cases: RagEvalCase[],
+    {
+        pipelineVersions = ["baseline-rag-v1"],
+    }: { pipelineVersions?: RagPipelineVersion[] } = {}
 ): Promise<{
     cases: PreparedEvalCase[];
     retrievalCases: PreparedEvalCase[];
@@ -182,6 +187,7 @@ export const runLiveRagEval = async (
     if (!process.env.DATABASE_URL) {
         throw new Error("DATABASE_URL is required for live RAG evals");
     }
+    const evalAnswerService = createEvalAnswerService();
 
     const manifest = await loadFixtureManifest();
     const fixtures = selectFixturesForCases(manifest, cases);
@@ -289,14 +295,33 @@ export const runLiveRagEval = async (
             });
         }
 
+        const withPipeline = async <T>(
+            pipelineVersion: RagPipelineVersion,
+            operation: () => Promise<T>
+        ) => {
+            const previous = process.env.RAG_PIPELINE_VERSION;
+            process.env.RAG_PIPELINE_VERSION = pipelineVersion;
+            try {
+                return await operation();
+            } finally {
+                if (previous === undefined) {
+                    Reflect.deleteProperty(process.env, "RAG_PIPELINE_VERSION");
+                } else {
+                    process.env.RAG_PIPELINE_VERSION = previous;
+                }
+            }
+        };
+
         for (const runtime of runtimes.values()) {
-            const isolated = await retrieveBookContext({
-                bookId: runtime.bookId,
-                userId: isolationUserId,
-                messages: [{ role: "user", content: "isolation check" }],
-                query: "isolation check",
-                strict: true,
-            });
+            const isolated = await withPipeline("baseline-rag-v1", () =>
+                retrieveBookContext({
+                    bookId: runtime.bookId,
+                    userId: isolationUserId,
+                    messages: [{ role: "user", content: "isolation check" }],
+                    query: "isolation check",
+                    strict: true,
+                })
+            );
             assertCrossUserIsolation(runtime.fixture.id, isolated.status);
         }
 
@@ -323,22 +348,6 @@ export const runLiveRagEval = async (
                 ...(testCase.priorMessages ?? []),
                 { role: "user" as const, content: testCase.question },
             ];
-            const rag = await retrieveBookContext({
-                bookId: runtime.bookId,
-                userId: primaryUserId,
-                messages,
-                query,
-                highlightContext,
-                strict: true,
-            });
-            const sources = resolveLiveEvalSources(testCase, rag);
-            assertTargetBookIds(
-                "retrieved",
-                sources.map((source) => source.id),
-                runtime.storedIds,
-                testCase.id
-            );
-
             const vectorResults = await vectorStore.searchDocuments(
                 runtime.collectionName,
                 query,
@@ -352,41 +361,64 @@ export const runLiveRagEval = async (
                 testCase.id
             );
 
-            for (const answerModel of OPENAI_CHAT_MODELS) {
-                const generated = await generateBookAnswer({
-                    messages: rag.messages,
-                    model: answerModel,
-                    options: { temperature: 0 },
-                    service: evalAnswerService,
-                });
-                if (!generated.answer.trim()) {
-                    throw new Error(
-                        `Reader generated an empty answer for ${testCase.id} using ${answerModel}`
-                    );
-                }
-                const answerUsage = normalizeModelUsage(generated.usage);
+            for (const pipelineVersion of pipelineVersions) {
+                const rag = await withPipeline(pipelineVersion, () =>
+                    retrieveBookContext({
+                        bookId: runtime.bookId,
+                        userId: primaryUserId,
+                        messages,
+                        query,
+                        highlightContext,
+                        strict: true,
+                    })
+                );
+                const sources = resolveLiveEvalSources(testCase, rag);
+                assertTargetBookIds(
+                    "retrieved",
+                    sources.map((source) => source.id),
+                    runtime.storedIds,
+                    testCase.id
+                );
 
-                preparedCases.push({
-                    ...testCase,
-                    answerModel,
-                    resolvedAnswerModel: generated.modelVersion,
-                    expectedChunkId: expectedChunks[0]?.id,
-                    expectedChunkIds: expectedChunks.map((chunk) => chunk.id),
-                    candidateAnswer: generated.answer,
-                    sources,
-                    vectorResultIds,
-                    vectorIdsAligned: true,
-                    pipelineVersion: rag.telemetry.pipelineVersion,
-                    promptVersion: rag.telemetry.promptVersion,
-                    retrievalDurationMs:
-                        rag.telemetry.retrieval?.durationMs ?? 0,
-                    generationDurationMs: generated.durationMs,
-                    answerUsage,
-                    answerEstimatedCost: estimateModelCost(
-                        generated.modelVersion,
-                        answerUsage
-                    ),
-                });
+                for (const answerModel of OPENAI_CHAT_MODELS) {
+                    const generated = await generateBookAnswer({
+                        messages: rag.messages,
+                        model: answerModel,
+                        options: { temperature: 0 },
+                        service: evalAnswerService,
+                    });
+                    if (!generated.answer.trim()) {
+                        throw new Error(
+                            `Reader generated an empty answer for ${testCase.id} using ${answerModel}`
+                        );
+                    }
+                    const answerUsage = normalizeModelUsage(generated.usage);
+
+                    preparedCases.push({
+                        ...testCase,
+                        answerModel,
+                        resolvedAnswerModel: generated.modelVersion,
+                        expectedChunkId: expectedChunks[0]?.id,
+                        expectedChunkIds: expectedChunks.map(
+                            (chunk) => chunk.id
+                        ),
+                        candidateAnswer: generated.answer,
+                        sources,
+                        vectorResultIds,
+                        vectorIdsAligned: true,
+                        pipelineVersion: rag.telemetry.pipelineVersion,
+                        promptVersion: rag.telemetry.promptVersion,
+                        retrievalDurationMs:
+                            rag.telemetry.retrieval?.durationMs ?? 0,
+                        retrievalDiagnostics: rag.telemetry.retrieval,
+                        generationDurationMs: generated.durationMs,
+                        answerUsage,
+                        answerEstimatedCost: estimateModelCost(
+                            generated.modelVersion,
+                            answerUsage
+                        ),
+                    });
+                }
             }
         }
 

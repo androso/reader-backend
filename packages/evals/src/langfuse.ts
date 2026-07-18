@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { RagEvalCase, RagEvalReport } from "./types";
+import type { RerankComparisonReport } from "./rerankComparison";
 import { getLangfuseDatasetName } from "./config";
 
 type LangfuseClientLike = {
@@ -13,7 +14,7 @@ type LangfuseClientLike = {
         createItem?: (input: unknown) => Promise<unknown>;
     };
     score?: {
-        create?: (input: unknown) => void;
+        create?: (input: unknown) => void | Promise<void>;
     };
     flush?: () => Promise<void>;
 };
@@ -354,4 +355,75 @@ export const syncReportToLangfuse = async (
     }
 
     return { datasetName, syncedItems: cases.length, syncedScores };
+};
+
+export const syncRerankComparisonToLangfuse = async (
+    report: RerankComparisonReport,
+    clientPromise = createLangfuseClient(),
+    tracingRuntimePromise?: Promise<LangfuseTracingRuntime>
+) => {
+    const client = await clientPromise;
+    let tracingRuntime: LangfuseTracingRuntime | undefined;
+    let observation: LangfuseObservationLike | undefined;
+    let syncedScores = 0;
+    try {
+        tracingRuntime = await (tracingRuntimePromise ??
+            createLangfuseTracingRuntime());
+        observation = tracingRuntime.startObservation({
+            name: "reader-rag-rerank-comparison",
+            input: report.runId,
+            metadata: {
+                runId: report.runId,
+                promotionPassed: String(report.promotionPassed),
+                judgedAnswerCount: String(report.judgedAnswerCount),
+                answerModels: report.answerModels.join(","),
+                failedChecks: report.promotion.failedChecks.join(","),
+                usage: JSON.stringify(report.usage),
+                estimatedCostUsd: JSON.stringify(report.estimatedCostUsd),
+                source: "packages/evals",
+            },
+        });
+        observation.update({
+            output: {
+                aggregate: report.aggregate,
+                latencyMs: report.latencyMs,
+                pairedRetrieval: report.pairedRetrieval,
+                pairedAnswers: report.pairedAnswers,
+            },
+        });
+        if (!client.score?.create) {
+            throw new Error(
+                "Installed Langfuse client does not support scores"
+            );
+        }
+        const createScore = client.score.create.bind(client.score);
+        await createScore({
+            name: "rag_rerank_promotion_passed",
+            value: report.promotionPassed ? 1 : 0,
+            traceId: observation.traceId,
+            dataType: "BOOLEAN",
+            metadata: { runId: report.runId, source: "packages/evals" },
+        });
+        syncedScores += 1;
+        for (const [name, passed] of Object.entries(report.promotion.checks)) {
+            await createScore({
+                name: `rag_rerank_${name}`,
+                value: passed ? 1 : 0,
+                traceId: observation.traceId,
+                dataType: "BOOLEAN",
+                metadata: { runId: report.runId, source: "packages/evals" },
+            });
+            syncedScores += 1;
+        }
+    } finally {
+        observation?.end();
+        if (tracingRuntime) {
+            try {
+                await client.flush?.();
+            } finally {
+                await tracingRuntime.shutdown();
+            }
+        }
+    }
+    return { syncedScores };
 };

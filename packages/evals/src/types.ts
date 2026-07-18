@@ -3,6 +3,7 @@ import type {
     NormalizedModelUsage,
 } from "@reader/api/ai-usage";
 import type {
+    BookContextResult,
     ChatMessage,
     HighlightContext,
     MessageContextSource,
@@ -50,6 +51,7 @@ export interface PreparedEvalCase extends RagEvalCase {
     pipelineVersion: string;
     promptVersion: string;
     retrievalDurationMs: number;
+    retrievalDiagnostics: BookContextResult["telemetry"]["retrieval"];
     generationDurationMs: number;
     answerUsage: NormalizedModelUsage | null;
     answerEstimatedCost: EstimatedModelCost | null;
@@ -98,6 +100,8 @@ export interface AnswerCaseResult {
     expectedAnswer: string;
     answerModel: string;
     resolvedAnswerModel: string;
+    pipelineVersion: string;
+    promptVersion: string;
     judgeModel: string;
     resolvedJudgeModel: string;
     scores: JudgeScores;

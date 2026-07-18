@@ -1,5 +1,6 @@
 import {
     getEvalThresholds,
+    getJudgeMaxCases,
     getJudgeModel,
     hasLangfuseConfig,
     hasOpenAiConfig,
@@ -13,10 +14,21 @@ import {
 } from "./baselineRegression";
 import { loadGoldenDataset } from "./dataset";
 import { runAnswerEval } from "./answerJudge";
-import { syncReportToLangfuse } from "./langfuse";
+import {
+    syncReportToLangfuse,
+    syncRerankComparisonToLangfuse,
+} from "./langfuse";
 import { runLiveRagEval } from "./liveEval";
 import { createReport, summarizeExecution, writeReport } from "./report";
 import { scoreRetrievalEval } from "./retrieval";
+import {
+    createRerankComparisonReport,
+    assertRerankComparisonMatrix,
+    assertPreparedRerankMatrix,
+    writeRerankComparisonReport,
+    writeInfrastructureFailureReport,
+} from "./rerankComparison";
+import { OPENAI_CHAT_MODELS } from "@reader/api/rag";
 
 const fail = (message: string): never => {
     console.error(message);
@@ -29,10 +41,116 @@ const persistAndPrint = async (report: Parameters<typeof writeReport>[0]) => {
     console.log(`Wrote ${paths.markdownPath}`);
 };
 
+const runRerankComparison = async () => {
+    let reportWritten = false;
+    try {
+        if (!hasOpenAiConfig()) {
+            throw new Error("OPENAI_API_KEY is required for live RAG evals");
+        }
+        const thresholds = getEvalThresholds();
+        const cases = await loadGoldenDataset(undefined, "required");
+        const pipelineVersions = ["baseline-rag-v1", "rerank-rag-v1"] as const;
+        const expectedJudgedAnswers = assertRerankComparisonMatrix({
+            cases,
+            answerModels: [...OPENAI_CHAT_MODELS],
+            pipelineVersions: [...pipelineVersions],
+            maxJudgedAnswers: Math.min(50, getJudgeMaxCases()),
+        });
+        const live = await runLiveRagEval(cases, {
+            pipelineVersions: [...pipelineVersions],
+        });
+        const baselineCases = live.cases.filter(
+            (testCase) => testCase.pipelineVersion === "baseline-rag-v1"
+        );
+        const rerankedCases = live.cases.filter(
+            (testCase) => testCase.pipelineVersion === "rerank-rag-v1"
+        );
+        const baselineRetrievalCases = live.retrievalCases.filter(
+            (testCase) => testCase.pipelineVersion === "baseline-rag-v1"
+        );
+        const rerankedRetrievalCases = live.retrievalCases.filter(
+            (testCase) => testCase.pipelineVersion === "rerank-rag-v1"
+        );
+        const generatedAnswerCount = assertPreparedRerankMatrix({
+            baselineCases,
+            rerankedCases,
+            answerModels: live.answerModels,
+            maxJudgedAnswers: Math.min(50, getJudgeMaxCases()),
+        });
+        if (generatedAnswerCount !== expectedJudgedAnswers) {
+            throw new Error(
+                "Generated rerank matrix does not match input matrix"
+            );
+        }
+        const baselineRetrieval = scoreRetrievalEval(
+            baselineRetrievalCases,
+            thresholds
+        );
+        const rerankedRetrieval = scoreRetrievalEval(
+            rerankedRetrievalCases,
+            thresholds
+        );
+        const baselineAnswers = await runAnswerEval(baselineCases, thresholds);
+        const rerankedAnswers = await runAnswerEval(rerankedCases, thresholds);
+        const report = createRerankComparisonReport({
+            baselineRetrieval,
+            rerankedRetrieval,
+            baselineAnswers,
+            rerankedAnswers,
+            baselineCases: baselineRetrievalCases,
+            rerankedCases: rerankedRetrievalCases,
+            fixtures: live.fixtures,
+            ingestion: live.ingestion,
+            answerModels: live.answerModels,
+        });
+        const paths = await writeRerankComparisonReport(report);
+        reportWritten = true;
+        console.log(`Wrote ${paths.jsonPath}`);
+        console.log(`Wrote ${paths.markdownPath}`);
+        if (hasLangfuseConfig()) {
+            try {
+                const result = await syncRerankComparisonToLangfuse(report);
+                console.log(JSON.stringify(result, null, 2));
+            } catch (error) {
+                console.warn(
+                    `Langfuse comparison sync failed without changing the promotion result: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`
+                );
+            }
+        } else {
+            console.log(
+                "Skipping Langfuse comparison sync: LANGFUSE_* secrets are absent."
+            );
+        }
+        if (!report.promotionPassed) {
+            throw new Error(
+                `Reranking promotion gate failed: ${report.promotion.failedChecks.join(", ")}`
+            );
+        }
+    } catch (error) {
+        if (!reportWritten) {
+            const { paths } = await writeInfrastructureFailureReport(error);
+            console.error(`Wrote ${paths.jsonPath}`);
+            console.error(`Wrote ${paths.markdownPath}`);
+        }
+        throw error;
+    }
+};
+
 const run = async () => {
-    const command = process.argv[2] as EvalCommand | undefined;
-    if (command !== "live" && command !== "ci" && command !== "extended") {
-        fail("Usage: node dist/cli.js <live|ci|extended>");
+    const command = process.argv[2] as EvalCommand | "rerank" | undefined;
+    if (
+        command !== "live" &&
+        command !== "ci" &&
+        command !== "extended" &&
+        command !== "rerank"
+    ) {
+        fail("Usage: node dist/cli.js <live|ci|extended|rerank>");
+    }
+    if (command === "rerank") {
+        await runRerankComparison();
+        return;
     }
     const evalCommand = command as EvalCommand;
     if (!hasOpenAiConfig()) {

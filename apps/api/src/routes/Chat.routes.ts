@@ -362,6 +362,7 @@ const runChatCompletion = async ({
                   userId,
                   messages,
                   query: retrievalQuery,
+                  signal,
                   highlightContext,
                   trace,
               })

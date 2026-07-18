@@ -22,17 +22,10 @@ import {
     type TraceObservation,
 } from "../observability/langfuse";
 import { getRagPipeline } from "./RagPipeline";
+import { getRagMinHybridScore } from "./RagRetrievalConfig";
+import { retrieveRerankedEvidence } from "./RerankedRetrieval";
 
 const log = createLogger("bookRag");
-const answerService = new OpenAIService();
-const DEFAULT_RAG_MIN_HYBRID_SCORE = 0.03;
-
-const getRagMinHybridScore = () => {
-    const configured = Number(process.env.RAG_MIN_HYBRID_SCORE);
-    return Number.isFinite(configured)
-        ? configured
-        : DEFAULT_RAG_MIN_HYBRID_SCORE;
-};
 
 const getErrorDetail = (error: unknown) => {
     if (!error || typeof error !== "object") return String(error);
@@ -53,11 +46,14 @@ const isPrematureCloseError = (error: unknown) =>
     getErrorDetail(error).includes("Premature close");
 
 const summarizeRetrievedChunks = (
-    results: Awaited<ReturnType<typeof hybridBookSearchService.search>>
+    results: Awaited<ReturnType<typeof hybridBookSearchService.search>>,
+    allowSnippets = true
 ) => {
     const capture = getLangfuseCaptureConfig();
     return results.map((result) => {
-        const snippet = snippetForLangfuse(result.content, capture);
+        const snippet = allowSnippets
+            ? snippetForLangfuse(result.content, capture)
+            : undefined;
         return {
             id: result.id,
             chunkIndex: result.chunkIndex,
@@ -76,6 +72,15 @@ const buildContextSources = (
         chunkIndex: result.chunkIndex,
         score: result.score,
         bestRank: result.bestRank,
+        ...("rerankerRank" in result
+            ? { rerankerRank: result.rerankerRank as number }
+            : {}),
+        ...("rerankerScore" in result
+            ? { rerankerScore: result.rerankerScore as number }
+            : {}),
+        ...("selectionReason" in result
+            ? { selectionReason: result.selectionReason as string }
+            : {}),
         excerpt: result.content,
         metadata: result.metadata,
     }));
@@ -93,28 +98,32 @@ export type BookContextResult = {
         pipelineVersion: string;
         promptVersion: string;
         queryPlan: null;
-        retrieval: import("@reader/providers").HybridSearchDiagnostics | null;
+        retrieval:
+            | import("../types/ragTelemetry").RagRetrievalDiagnostics
+            | null;
     };
     error?: string | null;
 };
 
-export const retrieveBookContext = async ({
+export const retrieveBookEvidence = async ({
     bookId,
     userId,
-    messages,
     query,
-    highlightContext = null,
+    signal,
     trace = getNoopTraceObservation(),
     strict = false,
 }: {
     bookId: string;
     userId: string;
-    messages: ChatMessage[];
     query: string;
-    highlightContext?: HighlightContext | null;
+    signal?: AbortSignal;
     trace?: TraceObservation;
     strict?: boolean;
-}): Promise<BookContextResult> => {
+}): Promise<
+    Omit<BookContextResult, "messages"> & {
+        results?: Awaited<ReturnType<typeof hybridBookSearchService.search>>;
+    }
+> => {
     const pipeline = getRagPipeline();
     const baseTelemetry = {
         pipelineVersion: pipeline.pipelineVersion,
@@ -150,7 +159,6 @@ export const retrieveBookContext = async ({
     if (!book) {
         log.warn("Book not found for RAG", { bookId, userId });
         return {
-            messages,
             status: "not_found",
             sources: null,
             telemetry: baseTelemetry,
@@ -159,7 +167,6 @@ export const retrieveBookContext = async ({
 
     if (book.processingStatus === "failed") {
         return {
-            messages,
             status: "ingestion_failed",
             sources: null,
             telemetry: baseTelemetry,
@@ -169,7 +176,6 @@ export const retrieveBookContext = async ({
 
     if (!book.collectionName) {
         return {
-            messages,
             status: "processing",
             sources: null,
             telemetry: baseTelemetry,
@@ -186,22 +192,34 @@ export const retrieveBookContext = async ({
                 finalLimit: 5,
             },
         });
-        let searchResponse: Awaited<
-            ReturnType<typeof hybridBookSearchService.searchWithDiagnostics>
-        >;
+        let searchResponse:
+            | Awaited<
+                  ReturnType<
+                      typeof hybridBookSearchService.searchWithDiagnostics
+                  >
+              >
+            | Awaited<ReturnType<typeof retrieveRerankedEvidence>>;
         try {
             searchResponse =
-                await hybridBookSearchService.searchWithDiagnostics(
-                book.collectionName,
-                query,
-                {
-                    minScore: getRagMinHybridScore(),
-                },
-                {
-                    trace: retrievalSpan,
-                    capture: getLangfuseCaptureConfig(),
-                }
-                );
+                pipeline.retrievalStrategy === "reranked"
+                    ? await retrieveRerankedEvidence({
+                          collectionName: book.collectionName,
+                          query,
+                          minHybridScore: getRagMinHybridScore(),
+                          signal,
+                      })
+                    : await hybridBookSearchService.searchWithDiagnostics(
+                          book.collectionName,
+                          query,
+                          {
+                              minScore: getRagMinHybridScore(),
+                          },
+                          {
+                              trace: retrievalSpan,
+                              capture: getLangfuseCaptureConfig(),
+                          }
+                      );
+            retrievalSpan.update({ output: searchResponse.diagnostics });
         } catch (error) {
             recordObservationError(
                 retrievalSpan,
@@ -220,41 +238,14 @@ export const retrieveBookContext = async ({
         };
 
         if (!searchResults.length) {
-            return { messages, status: "ready", sources: null, telemetry };
+            return { status: "ready", sources: null, telemetry, results: [] };
         }
-
-        const context = searchResults
-            .map((result) => result.content)
-            .join("\n\n---\n\n");
-        const promptSpan = trace.startObservation("build_rag_prompt", {
-            input: {
-                retrievedChunkCount: searchResults.length,
-                baseMessageCount: messages.length,
-            },
-        });
-        promptSpan.update({
-            output: {
-                contextLength: context.length,
-                messageCount: messages.length + 1,
-                selectedChunks: summarizeRetrievedChunks(searchResults),
-            },
-        });
-        promptSpan.end();
 
         return {
             status: "ready",
             sources: buildContextSources(searchResults),
             telemetry,
-            messages: [
-                {
-                    role: "system",
-                    content: buildBookContextSystemPrompt(
-                        context,
-                        highlightContext
-                    ),
-                },
-                ...messages,
-            ],
+            results: searchResults,
         };
     } catch (error) {
         log.error("Error retrieving book context", {
@@ -264,13 +255,62 @@ export const retrieveBookContext = async ({
         });
         if (strict) throw error;
         return {
-            messages,
             status: "retrieval_unavailable",
             sources: null,
             telemetry: baseTelemetry,
             error: "Book retrieval is temporarily unavailable.",
         };
     }
+};
+
+export const retrieveBookContext = async ({
+    messages,
+    highlightContext = null,
+    ...options
+}: Parameters<typeof retrieveBookEvidence>[0] & {
+    messages: ChatMessage[];
+    highlightContext?: HighlightContext | null;
+}): Promise<BookContextResult> => {
+    const evidence = await retrieveBookEvidence(options);
+    if (evidence.status !== "ready" || !evidence.results?.length) {
+        return { ...evidence, messages };
+    }
+    const context = evidence.results
+        .map((result) => result.content)
+        .join("\n\n---\n\n");
+    const promptSpan = (
+        options.trace ?? getNoopTraceObservation()
+    ).startObservation("build_rag_prompt", {
+        input: {
+            retrievedChunkCount: evidence.results.length,
+            baseMessageCount: messages.length,
+        },
+    });
+    promptSpan.update({
+        output: {
+            contextLength: context.length,
+            messageCount: messages.length + 1,
+            selectedChunks: summarizeRetrievedChunks(
+                evidence.results,
+                getRagPipeline().retrievalStrategy !== "reranked"
+            ),
+        },
+    });
+    promptSpan.end();
+    const { results: _results, ...bookContext } = evidence;
+    return {
+        ...bookContext,
+        messages: [
+            {
+                role: "system",
+                content: buildBookContextSystemPrompt(
+                    context,
+                    highlightContext
+                ),
+            },
+            ...messages,
+        ],
+    };
 };
 
 export type GeneratedBookAnswer = {
@@ -289,7 +329,7 @@ export const generateBookAnswer = async ({
     options,
     onContent,
     shouldContinue = () => true,
-    service = answerService,
+    service,
 }: {
     messages: ChatMessage[];
     model: OpenAIChatModel;
@@ -298,6 +338,7 @@ export const generateBookAnswer = async ({
     shouldContinue?: () => boolean;
     service?: OpenAIService;
 }): Promise<GeneratedBookAnswer> => {
+    const activeService = service ?? new OpenAIService();
     const startedAt = Date.now();
     let answer = "";
     let modelVersion: string = model;
@@ -306,7 +347,7 @@ export const generateBookAnswer = async ({
     let usage: unknown;
 
     try {
-        const textStream = await service.generateStreamResponse(
+        const textStream = await activeService.generateStreamResponse(
             messages,
             undefined,
             { ...options, model }
