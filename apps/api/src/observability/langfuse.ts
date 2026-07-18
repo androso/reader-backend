@@ -27,6 +27,7 @@ const SENSITIVE_TEXT_KEYS = new Set([
     "documents",
     "document",
     "text",
+    "error",
 ]);
 
 let sdk: NodeSDK | null = null;
@@ -199,6 +200,53 @@ const wrapObservation = (
 
 export const getNoopTraceObservation = () => noopObservation;
 
+const CONTENT_FREE_CAPTURE: LangfuseCaptureConfig = {
+    mode: "metadata",
+    maxChars: DEFAULT_MAX_CAPTURE_CHARS,
+};
+
+export const getContentFreeTraceObservation = (
+    observation: TraceObservation
+): TraceObservation => {
+    let wrapped: TraceObservation;
+    wrapped = {
+        id: observation.id,
+        traceId: observation.traceId,
+        update(attributes) {
+            observation.update(
+                maskLangfuseAttribute(
+                    attributes,
+                    CONTENT_FREE_CAPTURE
+                ) as LangfuseObservationAttributes
+            );
+            return wrapped;
+        },
+        setTraceIO(attributes) {
+            observation.setTraceIO(
+                maskLangfuseAttribute(
+                    attributes,
+                    CONTENT_FREE_CAPTURE
+                ) as LangfuseTraceAttributes
+            );
+            return wrapped;
+        },
+        startObservation(name, attributes, options) {
+            const sanitized = attributes
+                ? (maskLangfuseAttribute(
+                      attributes,
+                      CONTENT_FREE_CAPTURE
+                  ) as LangfuseObservationAttributes)
+                : undefined;
+            return getContentFreeTraceObservation(
+                observation.startObservation(name, sanitized, options)
+            );
+        },
+        end: () => observation.end(),
+        getSpanContext: () => observation.getSpanContext(),
+    };
+    return wrapped;
+};
+
 export const getErrorMessage = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
 
@@ -230,7 +278,7 @@ export const shutdownLangfuseTracing = async () => {
     }
 };
 
-export const startLangfuseTracing = () => {
+export const startLangfuseTracing = (serviceName = "reader-api") => {
     if (!isLangfuseTracingConfigured()) {
         log.info("Langfuse tracing disabled; missing credentials");
         return;
@@ -246,7 +294,7 @@ export const startLangfuseTracing = () => {
 
     const capture = getLangfuseCaptureConfig();
     sdk = new NodeSDK({
-        serviceName: "reader-api",
+        serviceName,
         sampler: new TraceIdRatioBasedSampler(sampleRate),
         spanProcessors: [
             new LangfuseSpanProcessor({
@@ -280,6 +328,46 @@ export interface BookChatTraceContext {
     queryLength: number;
     hasHighlightContext?: boolean;
 }
+
+export interface RagShadowTraceContext {
+    userId: string;
+    conversationId: string;
+    bookId: string;
+    assistantMessageId: string;
+    baselineTraceId: string | null;
+}
+
+export const withRagShadowTrace = <T>(
+    context: RagShadowTraceContext,
+    fn: (trace: TraceObservation) => T
+): T => {
+    if (!isLangfuseTracingEnabled()) return fn(noopObservation);
+
+    return startActiveObservation(
+        "rag_rerank_shadow",
+        (observation) => {
+            const trace = wrapObservation(observation);
+            return propagateAttributes(
+                {
+                    traceName: "rag_rerank_shadow",
+                    userId: context.userId,
+                    sessionId: context.conversationId,
+                    tags: ["reader-worker", "rag-shadow", "rerank-rag-v1"],
+                    metadata: {
+                        bookId: context.bookId,
+                        assistantMessageId: context.assistantMessageId,
+                        ...(context.baselineTraceId
+                            ? { baselineTraceId: context.baselineTraceId }
+                            : {}),
+                        environment: process.env.NODE_ENV || "development",
+                    },
+                },
+                () => fn(trace)
+            );
+        },
+        { endOnExit: true }
+    );
+};
 
 export const withBookChatTrace = <T>(
     context: BookChatTraceContext,

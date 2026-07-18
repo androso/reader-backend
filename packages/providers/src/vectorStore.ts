@@ -1,6 +1,6 @@
 import { ChromaClient, type IEmbeddingFunction } from "chromadb";
 import OpenAI from "openai";
-import { createLogger } from "./logger";
+import { contentFreeQueryLogMetadata, createLogger } from "./logger";
 
 const log = createLogger("chroma");
 const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-ada-002";
@@ -494,7 +494,10 @@ export class ChromaVectorStore implements VectorStoreProvider {
     async queryCollection(collectionName: string, query: string, nResults = 3) {
         const start = Date.now();
         log.info("Querying collection", { collectionName, nResults });
-        log.debug("Query text", { collectionName, query: query.slice(0, 200) });
+        log.debug(
+            "Query metadata",
+            contentFreeQueryLogMetadata(query, { collectionName })
+        );
         const collection = await this.getOrCreateCollection(collectionName);
         const [queryEmbedding] = await this.createEmbeddings([query], {
             collectionName,

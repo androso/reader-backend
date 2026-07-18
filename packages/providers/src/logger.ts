@@ -64,6 +64,14 @@ export interface Logger {
     error: (message: string, meta?: Record<string, unknown>) => void;
 }
 
+export const contentFreeQueryLogMetadata = (
+    query: string,
+    metadata: Record<string, unknown> = {}
+) => ({
+    ...metadata,
+    queryLength: query.length,
+});
+
 export const createLogger = (component: string): Logger => ({
     debug: (message, meta) => log("debug", component, message, meta),
     info: (message, meta) => log("info", component, message, meta),

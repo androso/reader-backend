@@ -2,6 +2,7 @@ import "./observability/bootstrap";
 import app from "./app";
 import { shutdownLangfuseTracing } from "./observability/langfuse";
 import swaggerdocs from "./utils/swagger";
+import { closeRagRerankShadowQueue } from "./services/RagShadowQueue";
 
 const PORT = process.env.PORT || 3000;
 const SHUTDOWN_TIMEOUT_MS = 10000;
@@ -30,7 +31,10 @@ const shutdown = (signal: NodeJS.Signals) => {
             console.error("Error closing API server", error);
         }
 
-        await shutdownLangfuseTracing();
+        await Promise.all([
+            shutdownLangfuseTracing(),
+            closeRagRerankShadowQueue(),
+        ]);
         clearTimeout(timeout);
         process.exit(error ? 1 : 0);
     });

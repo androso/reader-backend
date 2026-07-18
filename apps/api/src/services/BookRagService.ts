@@ -21,7 +21,7 @@ import {
     snippetForLangfuse,
     type TraceObservation,
 } from "../observability/langfuse";
-import { getRagPipeline } from "./RagPipeline";
+import { getRagPipeline, type RagPipelineVersion } from "./RagPipeline";
 import { getRagMinHybridScore } from "./RagRetrievalConfig";
 import { retrieveRerankedEvidence } from "./RerankedRetrieval";
 
@@ -112,6 +112,9 @@ export const retrieveBookEvidence = async ({
     signal,
     trace = getNoopTraceObservation(),
     strict = false,
+    pipelineVersion,
+    includeErrorDetailInLogs = true,
+    strictRerankInfrastructureErrors = false,
 }: {
     bookId: string;
     userId: string;
@@ -119,12 +122,15 @@ export const retrieveBookEvidence = async ({
     signal?: AbortSignal;
     trace?: TraceObservation;
     strict?: boolean;
+    pipelineVersion?: RagPipelineVersion;
+    includeErrorDetailInLogs?: boolean;
+    strictRerankInfrastructureErrors?: boolean;
 }): Promise<
     Omit<BookContextResult, "messages"> & {
         results?: Awaited<ReturnType<typeof hybridBookSearchService.search>>;
     }
 > => {
-    const pipeline = getRagPipeline();
+    const pipeline = getRagPipeline(pipelineVersion);
     const baseTelemetry = {
         pipelineVersion: pipeline.pipelineVersion,
         promptVersion: pipeline.promptVersion,
@@ -207,6 +213,8 @@ export const retrieveBookEvidence = async ({
                           query,
                           minHybridScore: getRagMinHybridScore(),
                           signal,
+                          strictInfrastructureErrors:
+                              strictRerankInfrastructureErrors,
                       })
                     : await hybridBookSearchService.searchWithDiagnostics(
                           book.collectionName,
@@ -251,7 +259,17 @@ export const retrieveBookEvidence = async ({
         log.error("Error retrieving book context", {
             bookId,
             collectionName: book.collectionName,
-            error: error instanceof Error ? error.message : String(error),
+            ...(includeErrorDetailInLogs
+                ? {
+                      error:
+                          error instanceof Error
+                              ? error.message
+                              : String(error),
+                  }
+                : {
+                      errorName:
+                          error instanceof Error ? error.name : typeof error,
+                  }),
         });
         if (strict) throw error;
         return {
@@ -355,10 +373,7 @@ export const generateBookAnswer = async ({
 
         for await (const chunk of textStream) {
             if (!shouldContinue()) break;
-            modelVersion = resolveStreamModelVersion(
-                modelVersion,
-                chunk.model
-            );
+            modelVersion = resolveStreamModelVersion(modelVersion, chunk.model);
             const choice = chunk.choices[0];
             if (choice?.finish_reason) finishReason = choice.finish_reason;
             if (choice?.finish_reason === "stop") streamCompleted = true;

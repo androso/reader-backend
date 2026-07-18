@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { processBookProcessingJob } from "../src/processor";
+import {
+    getRagShadowFailureMetadata,
+    processBookProcessingJob,
+    processRagRerankShadowJob,
+} from "../src/processor";
 
 test("worker processor delegates book processing job payload", async () => {
     const seenCalls: unknown[] = [];
@@ -93,4 +97,66 @@ test("worker processor rethrows processing errors for BullMQ retry", async () =>
         ),
         /temporary embedding failure/
     );
+});
+
+test("worker delegates the identifier-only RAG shadow payload", async () => {
+    const payload = {
+        assistantMessageId: "assistant-1",
+        userMessageId: "user-message-1",
+        conversationId: "conversation-1",
+        bookId: "book-1",
+        userId: "user-1",
+    };
+    const seen: unknown[] = [];
+    const result = await processRagRerankShadowJob(
+        { id: "shadow-job-1", data: payload },
+        async (data) => {
+            seen.push(data);
+            return { status: "completed" };
+        }
+    );
+    assert.deepEqual(seen, [payload]);
+    assert.deepEqual(result, { status: "completed" });
+});
+
+test("worker rethrows a content-free RAG shadow failure", async () => {
+    await assert.rejects(
+        processRagRerankShadowJob(
+            {
+                id: "shadow-job-1",
+                data: {
+                    assistantMessageId: "assistant-1",
+                    userMessageId: "user-message-1",
+                    conversationId: "conversation-1",
+                    bookId: "book-1",
+                    userId: "user-1",
+                },
+            },
+            async () => {
+                throw new Error("provider echoed private user query");
+            }
+        ),
+        (error: Error) => {
+            assert.equal(error.name, "RagShadowJobFailedError");
+            assert.equal(error.message, "RAG shadow job failed");
+            assert.equal(
+                error.stack?.includes("private user query") ?? false,
+                false
+            );
+            return true;
+        }
+    );
+});
+
+test("shadow failure event metadata excludes error messages", () => {
+    const metadata = getRagShadowFailureMetadata(
+        { id: "shadow-job-1" },
+        new Error("private user query")
+    );
+
+    assert.deepEqual(metadata, {
+        jobId: "shadow-job-1",
+        errorName: "Error",
+    });
+    assert.equal(JSON.stringify(metadata).includes("private user query"), false);
 });

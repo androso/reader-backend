@@ -60,6 +60,43 @@ export interface MessageCombinedCost {
     pricingVersion: string;
 }
 
+export interface RagShadowSourceRank {
+    id: string;
+    rank: number;
+}
+
+export interface RagShadowResult {
+    version: "rag-shadow-v1";
+    completedAt: string;
+    baseline: {
+        pipelineVersion: string;
+        sources: RagShadowSourceRank[];
+        traceId: string | null;
+    };
+    candidate: {
+        pipelineVersion: "rerank-rag-v1";
+        sources: RagShadowSourceRank[];
+        retrievalDurationMs: number;
+        reranker: {
+            requestedModel: string;
+            resolvedModel: string | null;
+            status: "success" | "skipped" | "fallback";
+            durationMs: number;
+            fallbackReason: string | null;
+            usage: MessageModelUsage | null;
+            estimatedCost: MessageModelCost | null;
+        };
+        maxWordTrigramJaccard: number;
+        traceId: string | null;
+    };
+    comparison: {
+        overlapCount: number;
+        sourceSetJaccard: number;
+        exactRankMatches: number;
+        identical: boolean;
+    };
+}
+
 export interface MessageExecutionMetadata {
     pipelineVersion: string;
     promptVersion: string;
@@ -76,4 +113,5 @@ export interface MessageExecutionMetadata {
     combinedCost: MessageCombinedCost | null;
     totalLatencyMs: number;
     langfuseTraceId: string | null;
+    shadow?: RagShadowResult;
 }

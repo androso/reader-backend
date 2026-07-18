@@ -50,6 +50,7 @@ import {
     PUBLIC_MESSAGE_SELECTION,
 } from "../services/ChatExecutionMetadata";
 import type { MessageExecutionMetadata } from "../types/ragTelemetry";
+import { maybeEnqueueRagRerankShadow } from "../services/RagShadowEnqueueService";
 
 const router = Router();
 const log = createLogger("chat");
@@ -297,15 +298,18 @@ const saveAssistantMessage = async (
     });
 
     try {
-        await db.insert(Messages).values({
-            conversationId,
-            role: "assistant",
-            content,
-            contextSources,
-            completionStatus,
-            finishReason,
-            executionMetadata,
-        });
+        const [message] = await db
+            .insert(Messages)
+            .values({
+                conversationId,
+                role: "assistant",
+                content,
+                contextSources,
+                completionStatus,
+                finishReason,
+                executionMetadata,
+            })
+            .returning({ id: Messages.id });
         await touchConversation(conversationId);
         saveSpan.update({
             output: {
@@ -314,6 +318,7 @@ const saveAssistantMessage = async (
                 sourceCount: contextSources?.length ?? 0,
             },
         });
+        return message;
     } catch (error) {
         recordObservationError(
             saveSpan,
@@ -339,6 +344,7 @@ const runChatCompletion = async ({
     highlightContext,
     trace,
     signal,
+    userMessageId,
 }: {
     resourceType: string;
     resourceId: string;
@@ -352,6 +358,7 @@ const runChatCompletion = async ({
     highlightContext: HighlightContext | null;
     trace: TraceObservation;
     signal?: AbortSignal;
+    userMessageId: string;
 }) => {
     const startedAt = Date.now();
     const retrievalQuery = buildRetrievalQuery(query, highlightContext);
@@ -443,7 +450,7 @@ const runChatCompletion = async ({
             totalLatencyMs: Date.now() - startedAt,
             langfuseTraceId: trace.traceId,
         });
-        await saveAssistantMessage(
+        const assistantMessage = await saveAssistantMessage(
             conversationId,
             generated.answer,
             ragResult.sources,
@@ -473,6 +480,16 @@ const runChatCompletion = async ({
         );
         res.write("data: [DONE]\n\n");
         res.end();
+        if (resourceType === "book" && assistantMessage) {
+            await maybeEnqueueRagRerankShadow({
+                assistantMessageId: assistantMessage.id,
+                userMessageId,
+                conversationId,
+                bookId: resourceId,
+                userId,
+                hasHighlightContext: Boolean(highlightContext),
+            });
+        }
     }
 };
 
@@ -562,9 +579,10 @@ router.post(
             );
 
             const messages = appendSubmittedUserMessage([], message);
-            await db
+            const [userMessage] = await db
                 .insert(Messages)
-                .values(buildUserMessageInsert(conversation.id, message));
+                .values(buildUserMessageInsert(conversation.id, message))
+                .returning({ id: Messages.id });
             await touchConversation(conversation.id);
 
             const abortController = new AbortController();
@@ -595,6 +613,7 @@ router.post(
                         highlightContext,
                         trace,
                         signal: abortController.signal,
+                        userMessageId: userMessage.id,
                     })
             );
         } catch (e) {
@@ -721,9 +740,10 @@ router.post(
                 await loadConversationHistory(conversationId),
                 message
             );
-            await db
+            const [userMessage] = await db
                 .insert(Messages)
-                .values(buildUserMessageInsert(conversationId, message));
+                .values(buildUserMessageInsert(conversationId, message))
+                .returning({ id: Messages.id });
             await touchConversation(conversationId);
 
             const abortController = new AbortController();
@@ -754,6 +774,7 @@ router.post(
                         highlightContext,
                         trace,
                         signal: abortController.signal,
+                        userMessageId: userMessage.id,
                     })
             );
         } catch (error) {

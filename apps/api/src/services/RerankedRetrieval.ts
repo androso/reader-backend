@@ -456,6 +456,7 @@ export const retrieveRerankedEvidence = async ({
     searchService = hybridBookSearchService,
     chunkReader = bookSearchChunkStore,
     reranker,
+    strictInfrastructureErrors = false,
 }: {
     collectionName: string;
     query: string;
@@ -466,6 +467,7 @@ export const retrieveRerankedEvidence = async ({
         getCollectionChunks(name: string): Promise<BookSearchChunk[]>;
     };
     reranker?: RerankerProvider;
+    strictInfrastructureErrors?: boolean;
 }): Promise<{
     results: Array<RankedSearchResult | SelectedRerankedResult>;
     diagnostics: RerankedRetrievalDiagnostics;
@@ -534,18 +536,33 @@ export const retrieveRerankedEvidence = async ({
     }
     if (!broad.results.length) return makeFallback("skipped", "no_candidates");
 
-    let rerankerStartedAt: number | null = null;
-    let rerankerCandidateCount = 0;
-    let rerankerDocumentCharacters = 0;
+    let candidates: Candidate[];
+    let boundedDocuments: ReturnType<typeof buildBoundedRerankerDocuments>;
     try {
         const chunks = await chunkReader.getCollectionChunks(collectionName);
-        const candidates = expandRerankCandidates(broad.results, chunks);
-        const boundedDocuments = buildBoundedRerankerDocuments(candidates);
-        rerankerCandidateCount = boundedDocuments.length;
-        rerankerDocumentCharacters = boundedDocuments.reduce(
-            (total, document) => total + document.content.length,
-            0
+        candidates = expandRerankCandidates(broad.results, chunks);
+        boundedDocuments = buildBoundedRerankerDocuments(candidates);
+    } catch (error) {
+        if (strictInfrastructureErrors) throw error;
+        log.warn(
+            "Reranker candidate preparation failed; returning exact baseline evidence",
+            {
+                requestedModel: RERANKER_MODEL,
+                promptVersion: RERANKER_PROMPT_VERSION,
+                errorName:
+                    error instanceof Error ? error.name : typeof error,
+            }
         );
+        return makeFallback("fallback", "provider_error");
+    }
+
+    let rerankerStartedAt: number | null = null;
+    const rerankerCandidateCount = boundedDocuments.length;
+    const rerankerDocumentCharacters = boundedDocuments.reduce(
+        (total, document) => total + document.content.length,
+        0
+    );
+    try {
         const activeReranker = reranker ?? new OpenAIChatReranker();
         rerankerStartedAt = Date.now();
         const reranked = await activeReranker.rerank({

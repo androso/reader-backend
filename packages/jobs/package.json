@@ -5,7 +5,8 @@
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
-        "build": "tsc -p tsconfig.json"
+        "build": "tsc -p tsconfig.json",
+        "test": "tsc -p tsconfig.test.json && NODE_PATH=./node_modules node --test ../../.tmp/packages-jobs-test/test/*.js"
     },
     "dependencies": {
         "bullmq": "^5.0.0",

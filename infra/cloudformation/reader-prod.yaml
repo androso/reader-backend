@@ -36,6 +36,15 @@ Parameters:
     Type: Number
     Default: 500
     MinValue: 20
+  RagRerankShadowSampleRate:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 1
+  RagRerankShadowRateLimitPerMinute:
+    Type: Number
+    Default: 30
+    MinValue: 1
   GoogleClientId:
     Type: String
   GoogleClientSecretValue:
@@ -141,6 +150,8 @@ Resources:
         LangfuseSampleRate: !Ref LangfuseSampleRate
         LangfuseCaptureContent: !Ref LangfuseCaptureContent
         LangfuseMaxCaptureChars: !Ref LangfuseMaxCaptureChars
+        RagRerankShadowSampleRate: !Ref RagRerankShadowSampleRate
+        RagRerankShadowRateLimitPerMinute: !Ref RagRerankShadowRateLimitPerMinute
         ApiDesiredCount: !Ref ApiDesiredCount
         WorkerDesiredCount: !Ref WorkerDesiredCount
         WebDesiredCount: !Ref WebDesiredCount
