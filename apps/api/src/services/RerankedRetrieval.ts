@@ -448,6 +448,7 @@ export const retrieveRerankedEvidence = async ({
             })
         );
         if (
+            baseline.length === targetResultCount &&
             maxWordTrigramSimilarity(results) >
             baselineMaxSimilarity + Number.EPSILON
         ) {

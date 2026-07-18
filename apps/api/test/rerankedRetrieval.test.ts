@@ -294,6 +294,71 @@ test("successful reranking cannot exceed exact baseline diversity", async () => 
     );
 });
 
+test("short hybrid baselines preserve the reranked result count", async () => {
+    const shared = "alice followed the white rabbit through the long hall";
+    const broad = [
+        result("baseline-0", 0, 0.05, shared),
+        result(
+            "baseline-1",
+            1,
+            0.04,
+            "the queen convened a trial before the assembled court"
+        ),
+        result("weak-duplicate", 2, 0.029, `${shared} quickly`),
+        result(
+            "weak-1",
+            3,
+            0.028,
+            "the caterpillar offered advice from atop a mushroom"
+        ),
+        result(
+            "weak-2",
+            4,
+            0.027,
+            "the dormouse told a story during the tea party"
+        ),
+    ];
+    const reranker: RerankerProvider = {
+        rerank: async ({ documents }) => ({
+            rankings: documents.map((document, index) => ({
+                id: document.id,
+                score: 1 - index / 100,
+                rank: index + 1,
+            })),
+            requestedModel: "gpt-5.4-mini-2026-03-17",
+            resolvedModel: "gpt-5.4-mini-2026-03-17",
+            usage: {
+                prompt_tokens: 10,
+                completion_tokens: 10,
+                total_tokens: 20,
+            },
+            durationMs: 5,
+        }),
+    };
+    const response = await retrieveRerankedEvidence({
+        collectionName: "book",
+        query: "query",
+        searchService: {
+            searchWithDiagnostics: async () => ({
+                results: broad,
+                diagnostics: diagnostics("hybrid"),
+            }),
+        },
+        chunkReader: { getCollectionChunks: async () => [] },
+        reranker,
+    });
+
+    assert.equal(deriveBaselineResults(broad, "hybrid", 0.03).length, 2);
+    assert.equal(response.results.length, 5);
+    assert.equal(response.diagnostics.reranker.status, "success");
+    assert.ok(
+        response.diagnostics.finalCandidates.every(
+            (candidate) =>
+                !candidate.selectionReason.startsWith("diversity_guard")
+        )
+    );
+});
+
 test("provider failure returns the exact baseline with compact diagnostics", async () => {
     const broad = [
         result("one", 0, 0.04, "private excerpt one"),
