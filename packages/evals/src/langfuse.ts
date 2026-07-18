@@ -198,6 +198,19 @@ export const syncReportToLangfuse = async (
                     pipelineVersions:
                         report.execution.pipelineVersions.join(","),
                     promptVersions: report.execution.promptVersions.join(","),
+                    absoluteQualityPassed: String(report.qualityPassed),
+                    baselineRegressionPassed:
+                        report.regression === null
+                            ? "not-evaluated"
+                            : String(report.regression.passed),
+                    baselineReferenceVersion:
+                        report.regression?.referenceVersion ?? "not-evaluated",
+                    baselineFailedChecks:
+                        report.regression?.failedChecks.join(",") ?? "",
+                    baselineObservedKnownGaps:
+                        report.regression?.observedKnownGaps.join(",") ?? "",
+                    baselineImprovements:
+                        report.regression?.improvements.join(",") ?? "",
                     pricingVersion: report.execution.pricingVersion,
                     aggregateAnswerUsage:
                         report.execution.usage.answers === null

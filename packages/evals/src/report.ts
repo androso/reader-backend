@@ -12,13 +12,17 @@ const percent = (value: number | null) =>
     value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
 
 export const createReport = (
-    report: Omit<RagEvalReport, "runId" | "createdAt" | "qualityPassed">
+    report: Omit<
+        RagEvalReport,
+        "runId" | "createdAt" | "qualityPassed" | "regression"
+    >
 ): RagEvalReport => ({
     ...report,
     runId: `rag-eval-${Date.now()}`,
     createdAt: new Date().toISOString(),
     qualityPassed:
         report.retrieval.summary.passed && report.answers.summary.passed,
+    regression: null,
 });
 
 const emptyUsage = (): NormalizedModelUsage => ({
@@ -122,7 +126,8 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         `- Run: ${report.runId}`,
         `- Created: ${report.createdAt}`,
         `- Suite: ${report.suite}`,
-        `- Quality passed: ${report.qualityPassed}`,
+        `- Absolute quality passed: ${report.qualityPassed}`,
+        `- Baseline regression passed: ${report.regression?.passed ?? "n/a"}`,
         `- Fixtures: ${report.fixtures.map((fixture) => `${fixture.title} by ${fixture.author}`).join("; ")}`,
         `- Fixture SHA-256: ${report.fixtures.map((fixture) => `${fixture.id}=${fixture.sha256}`).join(", ")}`,
         `- Source revisions: ${report.fixtures.map((fixture) => `${fixture.id}=${fixture.sourceRevision}`).join(", ")}`,
@@ -142,6 +147,22 @@ export const renderMarkdownReport = (report: RagEvalReport) => {
         `- Estimated total cost: ${formatCost(report.execution.estimatedCostUsd.total)}`,
         `- Embedding cost included: ${report.execution.estimatedCostUsd.embeddingIncluded}`,
     ];
+
+    if (report.regression) {
+        lines.push(
+            "",
+            "## Baseline regression",
+            "",
+            `- Reference: ${report.regression.referenceVersion}`,
+            `- Pipeline: ${report.regression.pipelineVersion}`,
+            `- Dataset SHA-256: ${report.regression.datasetSha256}`,
+            `- Fixture manifest SHA-256: ${report.regression.fixtureManifestSha256}`,
+            `- Passed: ${report.regression.passed}`,
+            `- Failed checks: ${report.regression.failedChecks.length ? report.regression.failedChecks.join(", ") : "none"}`,
+            `- Known gaps observed: ${report.regression.observedKnownGaps.length ? report.regression.observedKnownGaps.join(", ") : "none"}`,
+            `- Improvements: ${report.regression.improvements.length ? report.regression.improvements.join(", ") : "none"}`
+        );
+    }
 
     if (report.retrieval) {
         const summary = report.retrieval.summary;

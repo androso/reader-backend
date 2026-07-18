@@ -3,8 +3,14 @@ import {
     getJudgeModel,
     hasLangfuseConfig,
     hasOpenAiConfig,
-    shouldFailQualityGate,
+    shouldFailEvalCommand,
 } from "./config";
+import type { EvalCommand } from "./config";
+import {
+    computeBaselineInputHashes,
+    evaluateBaselineRegression,
+    loadBaselineReference,
+} from "./baselineRegression";
 import { loadGoldenDataset } from "./dataset";
 import { runAnswerEval } from "./answerJudge";
 import { syncReportToLangfuse } from "./langfuse";
@@ -24,21 +30,22 @@ const persistAndPrint = async (report: Parameters<typeof writeReport>[0]) => {
 };
 
 const run = async () => {
-    const command = process.argv[2];
+    const command = process.argv[2] as EvalCommand | undefined;
     if (command !== "live" && command !== "ci" && command !== "extended") {
         fail("Usage: node dist/cli.js <live|ci|extended>");
     }
+    const evalCommand = command as EvalCommand;
     if (!hasOpenAiConfig()) {
         fail("OPENAI_API_KEY is required for live RAG evals");
     }
 
-    const suite = command === "extended" ? "extended" : "required";
+    const suite = evalCommand === "extended" ? "extended" : "required";
     const thresholds = getEvalThresholds();
     const cases = await loadGoldenDataset(undefined, suite);
     const live = await runLiveRagEval(cases);
     const retrieval = scoreRetrievalEval(live.retrievalCases, thresholds);
     const answers = await runAnswerEval(live.cases, thresholds);
-    const report = createReport({
+    let report = createReport({
         answerModels: live.answerModels,
         resolvedAnswerModels: live.resolvedAnswerModels,
         judgeModel: getJudgeModel(),
@@ -55,7 +62,43 @@ const run = async () => {
         answers,
         execution: summarizeExecution({ retrieval, answers }),
     });
+    if (evalCommand === "ci") {
+        const [reference, hashes] = await Promise.all([
+            loadBaselineReference(),
+            computeBaselineInputHashes(),
+        ]);
+        report = {
+            ...report,
+            regression: evaluateBaselineRegression({
+                reference,
+                ...hashes,
+                pipelineVersions: report.execution.pipelineVersions,
+                promptVersions: report.execution.promptVersions,
+                answerModels: report.answerModels,
+                judgeModel: report.judgeModel,
+                retrieval: report.retrieval,
+                answers: report.answers,
+            }),
+        };
+    }
     await persistAndPrint(report);
+    console.log(`Absolute quality passed: ${report.qualityPassed}`);
+    if (report.regression) {
+        console.log(
+            `Baseline regression passed: ${report.regression.passed} (${report.regression.referenceVersion})`
+        );
+        console.log(
+            `Observed known gaps: ${report.regression.observedKnownGaps.join(", ") || "none"}`
+        );
+        console.log(
+            `Baseline improvements: ${report.regression.improvements.join(", ") || "none"}`
+        );
+        if (report.regression.failedChecks.length) {
+            console.error(
+                `Failed baseline checks: ${report.regression.failedChecks.join(", ")}`
+            );
+        }
+    }
 
     if (hasLangfuseConfig()) {
         try {
@@ -72,8 +115,18 @@ const run = async () => {
         console.log("Skipping Langfuse sync: LANGFUSE_* secrets are absent.");
     }
 
-    if (shouldFailQualityGate(suite, report.qualityPassed)) {
-        fail("Live Reader RAG quality gate failed");
+    if (
+        shouldFailEvalCommand({
+            command: evalCommand,
+            qualityPassed: report.qualityPassed,
+            regressionPassed: report.regression?.passed ?? null,
+        })
+    ) {
+        fail(
+            evalCommand === "ci"
+                ? "Reader RAG baseline regression gate failed"
+                : "Live Reader RAG quality gate failed"
+        );
     }
     if (suite === "extended" && !report.qualityPassed) {
         console.warn(

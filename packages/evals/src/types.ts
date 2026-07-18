@@ -121,6 +121,59 @@ export interface EvalThresholds {
     maxHallucinationRate: number;
 }
 
+export interface BaselineRetrievalCaseReference {
+    id: string;
+    noAnswerExpected: boolean;
+    passed: boolean;
+    sourceCount: number;
+    recallAtK: number;
+    evidenceCoverage: number;
+    reciprocalRank: number;
+    vectorReciprocalRank: number;
+    vectorIdsAligned: boolean;
+    chunkWindowHit: boolean;
+    chapterCorrect: boolean | null;
+}
+
+export interface BaselineRegressionReference {
+    schemaVersion: 1;
+    referenceVersion: string;
+    pipelineVersion: string;
+    promptVersion: string;
+    datasetSha256: string;
+    fixtureManifestSha256: string;
+    requiredCaseIds: string[];
+    answerModels: string[];
+    judgeModel: string;
+    judgedAnswerCount: number;
+    answerMetricTolerance: number;
+    retrieval: Omit<RetrievalSummary, "caseCount" | "perCategory" | "passed">;
+    answers: Omit<AnswerSummary, "caseCount" | "perCategory" | "passed">;
+    cases: BaselineRetrievalCaseReference[];
+    knownGaps: Array<{
+        caseId: string;
+        stages: Array<"retrieval" | "answer">;
+        issue: number;
+        description: string;
+    }>;
+    provenance: {
+        runUrl: string;
+        capturedAt: string;
+    };
+}
+
+export interface BaselineRegressionResult {
+    referenceVersion: string;
+    pipelineVersion: string;
+    datasetSha256: string;
+    fixtureManifestSha256: string;
+    passed: boolean;
+    checks: Record<string, boolean>;
+    failedChecks: string[];
+    improvements: string[];
+    observedKnownGaps: string[];
+}
+
 export interface RetrievalSummary {
     caseCount: number;
     recallAtK: number;
@@ -194,6 +247,7 @@ export interface RagEvalReport {
     createdAt: string;
     suite: EvalSuite;
     qualityPassed: boolean;
+    regression: BaselineRegressionResult | null;
     answerModels: string[];
     resolvedAnswerModels: string[];
     judgeModel: string;

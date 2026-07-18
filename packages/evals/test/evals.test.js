@@ -10,7 +10,7 @@ process.env.OPENAI_API_KEY ||= "reader-evals-test-key";
 const {
     getEvalThresholds,
     getJudgeModel,
-    shouldFailQualityGate,
+    shouldFailEvalCommand,
 } = require("../dist/config");
 const { hasLangfuseConfig } = require("../dist/config");
 const { loadGoldenDataset } = require("../dist/dataset");
@@ -67,6 +67,7 @@ const langfuseReport = {
     createdAt: "2026-07-11T00:00:00.000Z",
     suite: "required",
     qualityPassed: true,
+    regression: null,
     answerModels: ["answer-model"],
     resolvedAnswerModels: ["answer-model-2026-07-01"],
     judgeModel: "judge-model",
@@ -443,7 +444,21 @@ test("Langfuse publication links traces and scores and flushes both clients", as
     };
 
     const result = await syncReportToLangfuse(
-        langfuseReport,
+        {
+            ...langfuseReport,
+            qualityPassed: false,
+            regression: {
+                referenceVersion: "baseline-rag-v1-required-2026-07-17",
+                pipelineVersion: "baseline-rag-v1",
+                datasetSha256: "dataset-sha",
+                fixtureManifestSha256: "fixture-manifest-sha",
+                passed: true,
+                checks: { baseline: true },
+                failedChecks: [],
+                improvements: [],
+                observedKnownGaps: ["known-gap"],
+            },
+        },
         [langfuseCase],
         Promise.resolve(client),
         Promise.resolve(tracingRuntime)
@@ -473,6 +488,22 @@ test("Langfuse publication links traces and scores and flushes both clients", as
     assert.equal(
         observations[0].input.metadata.aggregateJudgeUsage,
         "unknown"
+    );
+    assert.equal(
+        observations[0].input.metadata.absoluteQualityPassed,
+        "false"
+    );
+    assert.equal(
+        observations[0].input.metadata.baselineRegressionPassed,
+        "true"
+    );
+    assert.equal(
+        observations[0].input.metadata.baselineReferenceVersion,
+        "baseline-rag-v1-required-2026-07-17"
+    );
+    assert.equal(
+        observations[0].input.metadata.baselineObservedKnownGaps,
+        "known-gap"
     );
     assert.ok(scores.length > 0);
     assert.ok(scores.every((score) => score.traceId === "trace-1"));
@@ -727,10 +758,55 @@ test("dataset selects the required and extended matrices", async () => {
     );
 });
 
-test("only required-suite quality misses fail the command", () => {
-    assert.equal(shouldFailQualityGate("required", false), true);
-    assert.equal(shouldFailQualityGate("required", true), false);
-    assert.equal(shouldFailQualityGate("extended", false), false);
+test("CI gates regressions while live and extended keep their intended semantics", () => {
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "ci",
+            qualityPassed: false,
+            regressionPassed: true,
+        }),
+        false
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "ci",
+            qualityPassed: true,
+            regressionPassed: false,
+        }),
+        true
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "ci",
+            qualityPassed: true,
+            regressionPassed: null,
+        }),
+        true
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "live",
+            qualityPassed: false,
+            regressionPassed: null,
+        }),
+        true
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "live",
+            qualityPassed: true,
+            regressionPassed: null,
+        }),
+        false
+    );
+    assert.equal(
+        shouldFailEvalCommand({
+            command: "extended",
+            qualityPassed: false,
+            regressionPassed: null,
+        }),
+        false
+    );
 });
 
 test("every exact evidence anchor resolves in its pinned fixture", async () => {
@@ -981,6 +1057,8 @@ test("execution summary preserves unknown costs", () => {
         execution,
     });
     assert.match(markdown, /Pipeline versions: baseline-rag-v1/);
+    assert.match(markdown, /Absolute quality passed: true/);
+    assert.match(markdown, /Baseline regression passed: n\/a/);
     assert.match(
         markdown,
         /Resolved answer models: answer-model-2026-07-01/
