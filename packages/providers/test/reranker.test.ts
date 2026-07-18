@@ -33,6 +33,18 @@ test("builds the pinned deterministic strict-schema request", () => {
         request.response_format.json_schema.schema.properties.rankings.maxItems,
         2
     );
+    assert.deepEqual(
+        request.response_format.json_schema.schema.properties.rankings.items
+            .properties.alias.enum,
+        ["d0", "d1"]
+    );
+    const payload = JSON.parse(request.messages[1].content);
+    assert.deepEqual(payload.documents, [
+        { alias: "d0", text: candidates[0].content },
+        { alias: "d1", text: candidates[1].content },
+    ]);
+    assert.equal(request.messages[1].content.includes("chunk-1"), false);
+    assert.equal(request.messages[1].content.includes("chunk-2"), false);
     assert.equal("temperature" in request, false);
     assert.equal("top_p" in request, false);
 });
@@ -51,8 +63,8 @@ test("makes one request and returns validated rankings", async () => {
                                 message: {
                                     content: JSON.stringify({
                                         rankings: [
-                                            { id: "chunk-1", score: 0.9 },
-                                            { id: "chunk-2", score: 0.2 },
+                                            { alias: "d0", score: 0.9 },
+                                            { alias: "d1", score: 0.2 },
                                         ],
                                     }),
                                 },
@@ -83,7 +95,7 @@ test("makes one request and returns validated rankings", async () => {
     assert.equal(RERANKER_TIMEOUT_MS, 10_000);
 });
 
-test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {
+test("rejects invalid JSON, duplicate aliases, and unknown aliases", () => {
     assert.throws(
         () => parseRerankerResponse("not json", candidates),
         /invalid JSON/
@@ -95,7 +107,7 @@ test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {
     assert.throws(
         () =>
             parseRerankerResponse(
-                '{"rankings":[{"id":"chunk-1","score":2},{"id":"chunk-2","score":0}]}',
+                '{"rankings":[{"alias":"d0","score":2},{"alias":"d1","score":0}]}',
                 candidates
             ),
         /out-of-range score/
@@ -103,18 +115,18 @@ test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {
     assert.throws(
         () =>
             parseRerankerResponse(
-                '{"rankings":[{"id":"chunk-1","score":1},{"id":"chunk-1","score":0}]}',
+                '{"rankings":[{"alias":"d0","score":1},{"alias":"d0","score":0}]}',
                 candidates
             ),
-        /duplicate ID/
+        /duplicate alias/
     );
     assert.throws(
         () =>
             parseRerankerResponse(
-                '{"rankings":[{"id":"chunk-1","score":1},{"id":"missing","score":0}]}',
+                '{"rankings":[{"alias":"d0","score":1},{"alias":"missing","score":0}]}',
                 candidates
             ),
-        /unknown ID/
+        /unknown alias/
     );
 });
 
