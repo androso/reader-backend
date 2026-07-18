@@ -22,17 +22,10 @@ import {
     type TraceObservation,
 } from "../observability/langfuse";
 import { getRagPipeline } from "./RagPipeline";
+import { getRagMinHybridScore } from "./RagRetrievalConfig";
 import { retrieveRerankedEvidence } from "./RerankedRetrieval";
 
 const log = createLogger("bookRag");
-const DEFAULT_RAG_MIN_HYBRID_SCORE = 0.03;
-
-const getRagMinHybridScore = () => {
-    const configured = Number(process.env.RAG_MIN_HYBRID_SCORE);
-    return Number.isFinite(configured)
-        ? configured
-        : DEFAULT_RAG_MIN_HYBRID_SCORE;
-};
 
 const getErrorDetail = (error: unknown) => {
     if (!error || typeof error !== "object") return String(error);
@@ -212,6 +205,7 @@ export const retrieveBookEvidence = async ({
                     ? await retrieveRerankedEvidence({
                           collectionName: book.collectionName,
                           query,
+                          minHybridScore: getRagMinHybridScore(),
                           signal,
                       })
                     : await hybridBookSearchService.searchWithDiagnostics(

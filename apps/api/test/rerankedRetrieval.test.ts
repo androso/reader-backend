@@ -49,11 +49,15 @@ test("derives the exact hybrid and vector-only top-five baselines", () => {
         )
     );
     assert.deepEqual(
-        deriveBaselineResults(candidates, "hybrid").map((item) => item.id),
+        deriveBaselineResults(candidates, "hybrid", 0.03).map(
+            (item) => item.id
+        ),
         ["chunk-0", "chunk-2", "chunk-3", "chunk-4", "chunk-5"]
     );
     assert.deepEqual(
-        deriveBaselineResults(candidates, "vector_only").map((item) => item.id),
+        deriveBaselineResults(candidates, "vector_only", 0.03).map(
+            (item) => item.id
+        ),
         candidates.slice(0, 5).map((item) => item.id)
     );
 });
@@ -188,6 +192,29 @@ test("provider failure returns the exact baseline with compact diagnostics", asy
     assert.equal(
         JSON.stringify(response.diagnostics).includes("private excerpt"),
         false
+    );
+});
+
+test("fallback honors the configured hybrid threshold", async () => {
+    const broad = [result("below-configured-threshold", 0, 0.04)];
+    const response = await retrieveRerankedEvidence({
+        collectionName: "book",
+        query: "query",
+        minHybridScore: 0.05,
+        searchService: {
+            searchWithDiagnostics: async () => ({
+                results: broad,
+                diagnostics: diagnostics("hybrid"),
+            }),
+        },
+        chunkReader: { getCollectionChunks: async () => [] },
+    });
+
+    assert.deepEqual(response.results, []);
+    assert.equal(response.diagnostics.reranker.status, "skipped");
+    assert.equal(
+        response.diagnostics.reranker.fallbackReason,
+        "no_baseline_eligible_hybrid_seed"
     );
 });
 

@@ -12,6 +12,7 @@ import {
 import { estimateModelCost, normalizeModelUsage } from "./AiUsage";
 import { bookSearchChunkStore } from "./BookSearchChunkStore";
 import { hybridBookSearchService } from "./HybridBookSearchService";
+import { getRagMinHybridScore } from "./RagRetrievalConfig";
 import type {
     RerankedCandidateDiagnostic,
     RerankedRetrievalDiagnostics,
@@ -55,12 +56,11 @@ const isSamePage = (left: BookSearchChunk, right: RankedSearchResult) =>
 
 export const deriveBaselineResults = (
     broadResults: RankedSearchResult[],
-    mode: HybridSearchDiagnostics["mode"]
+    mode: HybridSearchDiagnostics["mode"],
+    minHybridScore: number
 ) =>
     (mode === "hybrid"
-        ? broadResults.filter(
-              (result) => result.score >= BASELINE_MIN_HYBRID_SCORE
-          )
+        ? broadResults.filter((result) => result.score >= minHybridScore)
         : broadResults
     ).slice(0, RERANK_FINAL_LIMIT);
 
@@ -261,6 +261,7 @@ const baselineDiagnostics = (
 export const retrieveRerankedEvidence = async ({
     collectionName,
     query,
+    minHybridScore = getRagMinHybridScore(),
     signal,
     searchService = hybridBookSearchService,
     chunkReader = bookSearchChunkStore,
@@ -268,6 +269,7 @@ export const retrieveRerankedEvidence = async ({
 }: {
     collectionName: string;
     query: string;
+    minHybridScore?: number;
     signal?: AbortSignal;
     searchService?: Pick<HybridBookSearchService, "searchWithDiagnostics">;
     chunkReader?: {
@@ -291,7 +293,8 @@ export const retrieveRerankedEvidence = async ({
     );
     const baseline = deriveBaselineResults(
         broad.results,
-        broad.diagnostics.mode
+        broad.diagnostics.mode,
+        minHybridScore
     );
     const firstStage = baselineDiagnostics(broad.diagnostics, baseline);
     const makeFallback = (
