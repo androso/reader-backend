@@ -44,6 +44,17 @@ export const maxDuplicateSimilarity = (
     return maximum;
 };
 
+export const hasIdenticalEvidence = (
+    baseline: PreparedEvalCase["sources"],
+    reranked: PreparedEvalCase["sources"]
+) =>
+    baseline.length === reranked.length &&
+    baseline.every(
+        (source, index) =>
+            source.id === reranked[index]?.id &&
+            source.excerpt === reranked[index]?.excerpt
+    );
+
 const emptyUsage = (): NormalizedModelUsage => ({
     inputTokens: 0,
     cachedInputTokens: 0,
@@ -307,9 +318,21 @@ export const createRerankComparisonReport = ({
                 `Missing paired answer result for ${answerKey(baseline)}`
             );
         }
+        const baselinePrepared = baselinePreparedById.get(baseline.id);
+        const rerankedPrepared = rerankedPreparedById.get(reranked.id);
+        if (!baselinePrepared || !rerankedPrepared) {
+            throw new Error(
+                `Missing paired prepared answer context for ${answerKey(baseline)}`
+            );
+        }
+        const evidenceIdentical = hasIdenticalEvidence(
+            baselinePrepared.sources,
+            rerankedPrepared.sources
+        );
         return {
             id: baseline.id,
             answerModel: baseline.answerModel,
+            evidenceIdentical,
             baseline: { scores: baseline.scores, passed: baseline.passed },
             reranked: { scores: reranked.scores, passed: reranked.passed },
             delta: {
@@ -382,7 +405,8 @@ export const createRerankComparisonReport = ({
         pairedAnswers.every(
             (pair) =>
                 !(pair.baseline as { passed: boolean }).passed ||
-                (pair.reranked as { passed: boolean }).passed
+                (pair.reranked as { passed: boolean }).passed ||
+                (pair as { evidenceIdentical: boolean }).evidenceIdentical
         );
     const rerankerFallbackCount = rerankerDiagnostics.filter(
         (diagnostic) => diagnostic.status === "fallback"

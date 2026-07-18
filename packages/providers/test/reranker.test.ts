@@ -33,6 +33,18 @@ test("builds the pinned deterministic strict-schema request", () => {
         request.response_format.json_schema.schema.properties.rankings.maxItems,
         2
     );
+    assert.deepEqual(
+        request.response_format.json_schema.schema.properties.rankings.items
+            .properties.alias.enum,
+        ["d0", "d1"]
+    );
+    const payload = JSON.parse(request.messages[1].content);
+    assert.deepEqual(payload.documents, [
+        { alias: "d0", text: candidates[0].content },
+        { alias: "d1", text: candidates[1].content },
+    ]);
+    assert.equal(request.messages[1].content.includes("chunk-1"), false);
+    assert.equal(request.messages[1].content.includes("chunk-2"), false);
     assert.equal("temperature" in request, false);
     assert.equal("top_p" in request, false);
 });
@@ -51,8 +63,8 @@ test("makes one request and returns validated rankings", async () => {
                                 message: {
                                     content: JSON.stringify({
                                         rankings: [
-                                            { id: "chunk-1", score: 0.9 },
-                                            { id: "chunk-2", score: 0.2 },
+                                            { alias: "d0", score: 0.9 },
+                                            { alias: "d1", score: 0.2 },
                                         ],
                                     }),
                                 },
@@ -80,10 +92,10 @@ test("makes one request and returns validated rankings", async () => {
         (calls[0].options as { signal: AbortSignal }).signal instanceof
             AbortSignal
     );
-    assert.equal(RERANKER_TIMEOUT_MS, 2_500);
+    assert.equal(RERANKER_TIMEOUT_MS, 10_000);
 });
 
-test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {
+test("rejects invalid JSON, duplicate aliases, and unknown aliases", () => {
     assert.throws(
         () => parseRerankerResponse("not json", candidates),
         /invalid JSON/
@@ -95,32 +107,34 @@ test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {
     assert.throws(
         () =>
             parseRerankerResponse(
-                '{"rankings":[{"id":"chunk-1","score":2},{"id":"chunk-2","score":0}]}',
+                '{"rankings":[{"alias":"d0","score":2},{"alias":"d1","score":0}]}',
                 candidates
             ),
-        /schema/
+        /out-of-range score/
     );
     assert.throws(
         () =>
             parseRerankerResponse(
-                '{"rankings":[{"id":"chunk-1","score":1},{"id":"chunk-1","score":0}]}',
+                '{"rankings":[{"alias":"d0","score":1},{"alias":"d0","score":0}]}',
                 candidates
             ),
-        /schema/
+        /duplicate alias/
     );
     assert.throws(
         () =>
             parseRerankerResponse(
-                '{"rankings":[{"id":"chunk-1","score":1},{"id":"missing","score":0}]}',
+                '{"rankings":[{"alias":"d0","score":1},{"alias":"missing","score":0}]}',
                 candidates
             ),
-        /schema/
+        /unknown alias/
     );
 });
 
 test("validates topN and provider document bounds", async () => {
     const unusedClient = {
-        chat: { completions: { create: async () => assert.fail("unexpected call") } },
+        chat: {
+            completions: { create: async () => assert.fail("unexpected call") },
+        },
     } as unknown as Pick<OpenAI, "chat">;
     const reranker = new OpenAIChatReranker(unusedClient);
     for (const topN of [0, 3, 1.5]) {
@@ -155,7 +169,10 @@ test("preserves caller aborts while applying the timeout", async () => {
     const client = {
         chat: {
             completions: {
-                create: async (_request: unknown, options: { signal?: AbortSignal }) => {
+                create: async (
+                    _request: unknown,
+                    options: { signal?: AbortSignal }
+                ) => {
                     receivedSignal = options.signal;
                     if (options.signal?.aborted) {
                         throw options.signal.reason;
@@ -180,7 +197,6 @@ test("preserves caller aborts while applying the timeout", async () => {
 });
 
 test("propagates refusal and timeout/provider rejection without retry", async () => {
-
     const refusingClient = {
         chat: {
             completions: {
@@ -198,6 +214,29 @@ test("propagates refusal and timeout/provider rejection without retry", async ()
             topN: 2,
         }),
         /refused/
+    );
+    const truncatedClient = {
+        chat: {
+            completions: {
+                create: async () => ({
+                    model: RERANKER_MODEL,
+                    choices: [
+                        {
+                            finish_reason: "length",
+                            message: { content: '{"rankings":[' },
+                        },
+                    ],
+                }),
+            },
+        },
+    } as unknown as Pick<OpenAI, "chat">;
+    await assert.rejects(
+        new OpenAIChatReranker(truncatedClient).rerank({
+            query: "query",
+            documents: candidates,
+            topN: 2,
+        }),
+        /finish reason length, content characters 13/
     );
     let calls = 0;
     const timeoutClient = {
