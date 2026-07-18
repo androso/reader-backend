@@ -135,6 +135,7 @@ export const classifyRerankerFallback = (error: unknown) => {
     if (detail.includes("refus")) return "refusal";
     if (
         detail.includes("invalid json") ||
+        detail.includes("response incomplete") ||
         detail.includes("schema") ||
         detail.includes("ranking") ||
         detail.includes("candidate exactly once")

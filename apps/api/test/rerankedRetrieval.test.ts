@@ -126,6 +126,12 @@ test("classifies reranker fallbacks deterministically", () => {
         "invalid_or_incomplete_ranking"
     );
     assert.equal(
+        classifyRerankerFallback(
+            new Error("Reranker response incomplete: finish reason length")
+        ),
+        "invalid_or_incomplete_ranking"
+    );
+    assert.equal(
         classifyRerankerFallback(new Error("network closed")),
         "provider_error"
     );
