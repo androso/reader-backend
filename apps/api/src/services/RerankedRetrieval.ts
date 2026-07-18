@@ -207,10 +207,29 @@ export const wordTrigramJaccard = (left: string, right: string) => {
     return intersection / (leftSet.size + rightSet.size - intersection);
 };
 
+export const maxWordTrigramSimilarity = (
+    results: Array<Pick<RankedSearchResult, "content">>
+) => {
+    let maximum = 0;
+    for (let left = 0; left < results.length; left += 1) {
+        for (let right = left + 1; right < results.length; right += 1) {
+            maximum = Math.max(
+                maximum,
+                wordTrigramJaccard(
+                    results[left].content,
+                    results[right].content
+                )
+            );
+        }
+    }
+    return maximum;
+};
+
 export const selectWithDeterministicMmr = (
     candidates: Candidate[],
     scores: Map<string, number>,
-    limit = RERANK_FINAL_LIMIT
+    limit = RERANK_FINAL_LIMIT,
+    maxAllowedSimilarity = 1
 ): SelectedRerankedResult[] => {
     const rerankerOrder = [...candidates].sort((left, right) => {
         const scoreDelta =
@@ -252,6 +271,10 @@ export const selectWithDeterministicMmr = (
                         MMR_DIVERSITY_WEIGHT * maxSimilarity,
                 };
             })
+            .filter(
+                ({ maxSimilarity }) =>
+                    maxSimilarity <= maxAllowedSimilarity + Number.EPSILON
+            )
             .sort((left, right) => {
                 if (right.mmr !== left.mmr) return right.mmr - left.mmr;
                 if (
@@ -266,6 +289,7 @@ export const selectWithDeterministicMmr = (
                 return left.candidate.chunkIndex - right.candidate.chunkIndex;
             });
         const winner = ranked[0];
+        if (!winner) break;
         remaining.delete(winner.candidate.id);
         selected.push({
             ...winner.candidate,
@@ -412,12 +436,44 @@ export const retrieveRerankedEvidence = async ({
         const ranks = new Map(
             reranked.rankings.map((ranking) => [ranking.id, ranking.rank])
         );
-        const results = selectWithDeterministicMmr(candidates, scores).map(
+        const targetResultCount = Math.min(
+            RERANK_FINAL_LIMIT,
+            candidates.length
+        );
+        const baselineMaxSimilarity = maxWordTrigramSimilarity(baseline);
+        let results = selectWithDeterministicMmr(candidates, scores).map(
             (result) => ({
                 ...result,
                 rerankerRank: ranks.get(result.id) ?? result.rerankerRank,
             })
         );
+        if (
+            maxWordTrigramSimilarity(results) >
+            baselineMaxSimilarity + Number.EPSILON
+        ) {
+            const guarded = selectWithDeterministicMmr(
+                candidates,
+                scores,
+                RERANK_FINAL_LIMIT,
+                baselineMaxSimilarity
+            );
+            results =
+                guarded.length === targetResultCount
+                    ? guarded.map((result) => ({
+                          ...result,
+                          rerankerRank:
+                              ranks.get(result.id) ?? result.rerankerRank,
+                          selectionReason: `diversity_guard;${result.selectionReason}`,
+                      }))
+                    : baseline.map((result, index) => ({
+                          ...result,
+                          rerankerRank:
+                              ranks.get(result.id) ??
+                              candidates.length + index + 1,
+                          rerankerScore: scores.get(result.id) ?? 0,
+                          selectionReason: "diversity_guard_exact_baseline",
+                      }));
+        }
         const finalCandidates = results.map((result, index) => {
             const source = candidates.find(
                 (candidate) => candidate.id === result.id
@@ -443,11 +499,7 @@ export const retrieveRerankedEvidence = async ({
                 maxWordTrigramJaccard: maxSimilarity,
             };
         });
-        const maxSimilarity = finalCandidates.reduce(
-            (maximum, candidate) =>
-                Math.max(maximum, candidate.maxWordTrigramJaccard),
-            0
-        );
+        const maxSimilarity = maxWordTrigramSimilarity(results);
         const usage = normalizeModelUsage(reranked.usage);
         return {
             results,

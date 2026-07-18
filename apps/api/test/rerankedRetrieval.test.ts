@@ -12,6 +12,7 @@ import {
     buildBoundedRerankerDocuments,
     classifyRerankerFallback,
     describeRerankerError,
+    maxWordTrigramSimilarity,
     retrieveRerankedEvidence,
     selectWithDeterministicMmr,
     wordTrigramJaccard,
@@ -191,6 +192,105 @@ test("MMR uses trigram diversity with deterministic first-stage ties", () => {
     assert.deepEqual(
         selected.map((candidate) => candidate.id),
         ["first", "diverse"]
+    );
+});
+
+test("MMR enforces a deterministic maximum similarity ceiling", () => {
+    const shared = "alice followed the white rabbit through the long hall";
+    const candidates = expandRerankCandidates(
+        [
+            result("first", 0, 0.04, shared),
+            result("duplicate", 1, 0.039, `${shared} quickly`),
+            result(
+                "diverse",
+                2,
+                0.038,
+                "the queen convened a trial before the assembled court"
+            ),
+        ],
+        []
+    );
+    const scores = new Map([
+        ["first", 1],
+        ["duplicate", 0.99],
+        ["diverse", 0.1],
+    ]);
+    const unconstrained = selectWithDeterministicMmr(candidates, scores, 2);
+    const guarded = selectWithDeterministicMmr(candidates, scores, 2, 0.1);
+
+    assert.deepEqual(
+        unconstrained.map((candidate) => candidate.id),
+        ["first", "duplicate"]
+    );
+    assert.deepEqual(
+        guarded.map((candidate) => candidate.id),
+        ["first", "diverse"]
+    );
+    assert.ok(maxWordTrigramSimilarity(guarded) <= 0.1);
+});
+
+test("successful reranking cannot exceed exact baseline diversity", async () => {
+    const baselineContents = [
+        "alpha one two three four",
+        "bravo five six seven eight",
+        "charlie nine ten eleven twelve",
+        "delta thirteen fourteen fifteen sixteen",
+        "echo seventeen eighteen nineteen twenty",
+    ];
+    const broad = [
+        ...baselineContents.map((content, index) =>
+            result(`baseline-${index}`, index, 0.05 - index / 1000, content)
+        ),
+        result("duplicate", 5, 0.031, `${baselineContents[0]} repeated words`),
+    ];
+    const reranker: RerankerProvider = {
+        rerank: async ({ documents }) => ({
+            rankings: documents.map((document, index) => ({
+                id: document.id,
+                score:
+                    document.id === "baseline-0"
+                        ? 1
+                        : document.id === "duplicate"
+                          ? 0.99
+                          : 0.1 - index / 1000,
+                rank: index + 1,
+            })),
+            requestedModel: "gpt-5.4-mini-2026-03-17",
+            resolvedModel: "gpt-5.4-mini-2026-03-17",
+            usage: {
+                prompt_tokens: 10,
+                completion_tokens: 10,
+                total_tokens: 20,
+            },
+            durationMs: 5,
+        }),
+    };
+    const response = await retrieveRerankedEvidence({
+        collectionName: "book",
+        query: "query",
+        searchService: {
+            searchWithDiagnostics: async () => ({
+                results: broad,
+                diagnostics: diagnostics("hybrid"),
+            }),
+        },
+        chunkReader: { getCollectionChunks: async () => [] },
+        reranker,
+    });
+
+    assert.equal(response.diagnostics.reranker.status, "success");
+    assert.ok(
+        maxWordTrigramSimilarity(response.results) <=
+            maxWordTrigramSimilarity(broad.slice(0, 5))
+    );
+    assert.equal(
+        response.results.some((candidate) => candidate.id === "duplicate"),
+        false
+    );
+    assert.ok(
+        response.diagnostics.finalCandidates.every((candidate) =>
+            candidate.selectionReason.startsWith("diversity_guard")
+        )
     );
 });
 
