@@ -11,6 +11,7 @@ import {
     expandRerankCandidates,
     buildBoundedRerankerDocuments,
     classifyRerankerFallback,
+    describeRerankerError,
     retrieveRerankedEvidence,
     selectWithDeterministicMmr,
     wordTrigramJaccard,
@@ -128,6 +129,32 @@ test("classifies reranker fallbacks deterministically", () => {
         classifyRerankerFallback(new Error("network closed")),
         "provider_error"
     );
+});
+
+test("describes reranker failures without logging provider messages", () => {
+    const validation = describeRerankerError(
+        new Error(
+            "Reranker response returned the wrong number of rankings: expected 30, received 12"
+        )
+    );
+    assert.match(validation.errorDetail ?? "", /expected 30, received 12/);
+
+    const providerError = Object.assign(
+        new Error("provider echoed private excerpt text"),
+        {
+            status: 429,
+            code: "rate_limit_exceeded",
+            type: "rate_limit_error",
+            request_id: "req-safe",
+        }
+    );
+    const provider = describeRerankerError(providerError);
+    assert.equal(provider.errorDetail, null);
+    assert.equal(provider.providerStatus, 429);
+    assert.equal(provider.providerCode, "rate_limit_exceeded");
+    assert.equal(provider.providerType, "rate_limit_error");
+    assert.equal(provider.providerRequestId, "req-safe");
+    assert.equal(JSON.stringify(provider).includes("private excerpt"), false);
 });
 
 test("MMR uses trigram diversity with deterministic first-stage ties", () => {

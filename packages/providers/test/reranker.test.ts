@@ -98,7 +98,7 @@ test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {
                 '{"rankings":[{"id":"chunk-1","score":2},{"id":"chunk-2","score":0}]}',
                 candidates
             ),
-        /schema/
+        /out-of-range score/
     );
     assert.throws(
         () =>
@@ -106,7 +106,7 @@ test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {
                 '{"rankings":[{"id":"chunk-1","score":1},{"id":"chunk-1","score":0}]}',
                 candidates
             ),
-        /schema/
+        /duplicate ID/
     );
     assert.throws(
         () =>
@@ -114,13 +114,15 @@ test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {
                 '{"rankings":[{"id":"chunk-1","score":1},{"id":"missing","score":0}]}',
                 candidates
             ),
-        /schema/
+        /unknown ID/
     );
 });
 
 test("validates topN and provider document bounds", async () => {
     const unusedClient = {
-        chat: { completions: { create: async () => assert.fail("unexpected call") } },
+        chat: {
+            completions: { create: async () => assert.fail("unexpected call") },
+        },
     } as unknown as Pick<OpenAI, "chat">;
     const reranker = new OpenAIChatReranker(unusedClient);
     for (const topN of [0, 3, 1.5]) {
@@ -155,7 +157,10 @@ test("preserves caller aborts while applying the timeout", async () => {
     const client = {
         chat: {
             completions: {
-                create: async (_request: unknown, options: { signal?: AbortSignal }) => {
+                create: async (
+                    _request: unknown,
+                    options: { signal?: AbortSignal }
+                ) => {
                     receivedSignal = options.signal;
                     if (options.signal?.aborted) {
                         throw options.signal.reason;
@@ -180,7 +185,6 @@ test("preserves caller aborts while applying the timeout", async () => {
 });
 
 test("propagates refusal and timeout/provider rejection without retry", async () => {
-
     const refusingClient = {
         chat: {
             completions: {

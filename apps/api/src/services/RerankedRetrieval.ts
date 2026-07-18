@@ -3,6 +3,7 @@ import {
     RERANKER_MAX_DOCUMENT_CHARACTERS,
     RERANKER_MODEL,
     RERANKER_PROMPT_VERSION,
+    createLogger,
     type BookSearchChunk,
     type HybridBookSearchService,
     type HybridSearchDiagnostics,
@@ -17,6 +18,8 @@ import type {
     RerankedCandidateDiagnostic,
     RerankedRetrievalDiagnostics,
 } from "../types/ragTelemetry";
+
+const log = createLogger("rerankedRetrieval");
 
 export const RERANK_FIRST_STAGE_LIMIT = 20;
 export const RERANK_FINAL_LIMIT = 5;
@@ -139,6 +142,44 @@ export const classifyRerankerFallback = (error: unknown) => {
         return "invalid_or_incomplete_ranking";
     }
     return "provider_error";
+};
+
+const SAFE_RERANKER_ERROR_PREFIXES = [
+    "Reranker returned",
+    "Reranker response",
+    "Reranker ranking",
+    "Reranker refused",
+    "Reranker requires",
+    "Reranker documents exceed",
+    "Reranker candidate IDs",
+    "Reranker topN",
+] as const;
+
+export const describeRerankerError = (error: unknown) => {
+    const record =
+        error && typeof error === "object"
+            ? (error as Record<string, unknown>)
+            : undefined;
+    const message = error instanceof Error ? error.message : "";
+    const safeDetail = SAFE_RERANKER_ERROR_PREFIXES.some((prefix) =>
+        message.startsWith(prefix)
+    )
+        ? message
+        : null;
+    const stringField = (field: string) =>
+        typeof record?.[field] === "string" ? record[field] : null;
+    const numericField = (field: string) =>
+        typeof record?.[field] === "number" ? record[field] : null;
+
+    return {
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorDetail: safeDetail,
+        providerStatus: numericField("status"),
+        providerCode: stringField("code"),
+        providerType: stringField("type"),
+        providerRequestId:
+            stringField("request_id") ?? stringField("requestId"),
+    };
 };
 
 const wordTrigrams = (text: string) => {
@@ -345,10 +386,17 @@ export const retrieveRerankedEvidence = async ({
     if (!broad.results.length) return makeFallback("skipped", "no_candidates");
 
     let rerankerStartedAt: number | null = null;
+    let rerankerCandidateCount = 0;
+    let rerankerDocumentCharacters = 0;
     try {
         const chunks = await chunkReader.getCollectionChunks(collectionName);
         const candidates = expandRerankCandidates(broad.results, chunks);
         const boundedDocuments = buildBoundedRerankerDocuments(candidates);
+        rerankerCandidateCount = boundedDocuments.length;
+        rerankerDocumentCharacters = boundedDocuments.reduce(
+            (total, document) => total + document.content.length,
+            0
+        );
         const activeReranker = reranker ?? new OpenAIChatReranker();
         rerankerStartedAt = Date.now();
         const reranked = await activeReranker.rerank({
@@ -425,10 +473,19 @@ export const retrieveRerankedEvidence = async ({
             },
         };
     } catch (error) {
-        return makeFallback(
-            "fallback",
-            classifyRerankerFallback(error),
-            rerankerStartedAt === null ? 0 : Date.now() - rerankerStartedAt
-        );
+        const fallbackReason = classifyRerankerFallback(error);
+        const rerankerDurationMs =
+            rerankerStartedAt === null ? 0 : Date.now() - rerankerStartedAt;
+        log.warn("Reranker failed; returning exact baseline evidence", {
+            fallbackReason,
+            requestedModel: RERANKER_MODEL,
+            promptVersion: RERANKER_PROMPT_VERSION,
+            durationMs: rerankerDurationMs,
+            candidateCount: rerankerCandidateCount,
+            documentCharacters: rerankerDocumentCharacters,
+            callerAborted: signal?.aborted ?? false,
+            ...describeRerankerError(error),
+        });
+        return makeFallback("fallback", fallbackReason, rerankerDurationMs);
     }
 };

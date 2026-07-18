@@ -145,26 +145,39 @@ export const parseRerankerResponse = (
     }
     const rankings = (parsed as { rankings?: unknown }).rankings;
     if (!Array.isArray(rankings) || rankings.length !== topN) {
-        throw new Error("Reranker response returned the wrong number of rankings");
+        throw new Error(
+            `Reranker response returned the wrong number of rankings: expected ${topN}, received ${Array.isArray(rankings) ? rankings.length : "non-array"}`
+        );
     }
     const expectedIds = new Set(candidates.map((candidate) => candidate.id));
     const seen = new Set<string>();
     const normalized = rankings.map((ranking, index) => {
         if (!ranking || typeof ranking !== "object") {
-            throw new Error("Reranker ranking does not match the schema");
+            throw new Error(
+                `Reranker ranking at index ${index} is not an object`
+            );
         }
         const { id, score } = ranking as { id?: unknown; score?: unknown };
-        if (
-            typeof id !== "string" ||
-            !expectedIds.has(id) ||
-            seen.has(id) ||
-            typeof score !== "number" ||
-            !Number.isFinite(score) ||
-            score < 0 ||
-            score > 1
-        ) {
-            throw new Error("Reranker ranking does not match the schema");
-        }
+        if (typeof id !== "string")
+            throw new Error(
+                `Reranker ranking at index ${index} has a non-string ID`
+            );
+        if (!expectedIds.has(id))
+            throw new Error(
+                `Reranker ranking at index ${index} has an unknown ID`
+            );
+        if (seen.has(id))
+            throw new Error(
+                `Reranker ranking at index ${index} has a duplicate ID`
+            );
+        if (typeof score !== "number" || !Number.isFinite(score))
+            throw new Error(
+                `Reranker ranking at index ${index} has a non-finite score`
+            );
+        if (score < 0 || score > 1)
+            throw new Error(
+                `Reranker ranking at index ${index} has an out-of-range score`
+            );
         seen.add(id);
         return { id, score, rank: index + 1 };
     });
