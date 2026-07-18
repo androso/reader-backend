@@ -2,12 +2,23 @@ name: Reader RAG Reranking Comparison
 
 on:
     workflow_dispatch:
+    pull_request:
+        branches: [main]
+        types: [labeled, synchronize, reopened]
+
+concurrency:
+    group: rag-rerank-comparison-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
 
 permissions:
     contents: read
 
 jobs:
     compare-reranking:
+        if: >-
+            github.event_name == 'workflow_dispatch' ||
+            (github.event.pull_request.head.repo.full_name == github.repository &&
+            contains(github.event.pull_request.labels.*.name, 'run-rerank-comparison'))
         runs-on: ubuntu-latest
         services:
             postgres:
