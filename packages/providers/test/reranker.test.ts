@@ -80,7 +80,7 @@ test("makes one request and returns validated rankings", async () => {
         (calls[0].options as { signal: AbortSignal }).signal instanceof
             AbortSignal
     );
-    assert.equal(RERANKER_TIMEOUT_MS, 2_500);
+    assert.equal(RERANKER_TIMEOUT_MS, 10_000);
 });
 
 test("rejects invalid JSON, duplicate IDs, and missing IDs", () => {

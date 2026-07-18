@@ -5,7 +5,7 @@ export const RERANKER_PROMPT_VERSION = "rerank-documents-v1" as const;
 export const RERANKER_MAX_CANDIDATES = 30;
 export const RERANKER_MAX_DOCUMENT_CHARACTERS = 40_000;
 export const RERANKER_MAX_COMPLETION_TOKENS = 800;
-export const RERANKER_TIMEOUT_MS = 2_500;
+export const RERANKER_TIMEOUT_MS = 10_000;
 
 export interface RerankerCandidate {
     id: string;
