@@ -5,7 +5,7 @@ worker, and shared ingestion packages.
 
 ## Layout
 
-- `apps/api`: Express API for auth, books, chat, progress, storage, and current ingestion flow.
+- `apps/api`: NestJS API (Express adapter) for auth, books, chat, progress, storage, and current ingestion flow.
 - `apps/web`: Next.js frontend for the library, reader, auth, and chat UI.
 - `apps/worker`: BullMQ worker that processes uploaded books outside the API request path.
 - `packages/epub`: shared EPUB parsing utilities.
