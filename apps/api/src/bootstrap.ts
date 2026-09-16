@@ -5,7 +5,6 @@ import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { enforceTrustedOrigin } from "./common/middleware/csrf";
 import { logger } from "./common/middleware/request-logger";
-import { mountLegacyRouters } from "./legacy/legacy-express";
 
 const allowedOrigins = [
     process.env.FRONTEND_URL,
@@ -52,7 +51,6 @@ export async function createApp(): Promise<NestExpressApplication> {
     app.useGlobalFilters(
         new AllExceptionsFilter(app.get(HttpAdapterHost).httpAdapter)
     );
-    mountLegacyRouters(app);
     const config = new DocumentBuilder()
         .setTitle("Mentarie API")
         .setVersion("1.0.0")

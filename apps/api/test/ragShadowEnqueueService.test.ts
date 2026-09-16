@@ -94,7 +94,7 @@ test("chat ends the SSE response before awaiting shadow queue I/O", () => {
     const route = readFileSync(
         join(
             resolve(__dirname, "../../.."),
-            "apps/api/src/routes/Chat.routes.ts"
+            "apps/api/src/chat/chat-stream.ts"
         ),
         "utf8"
     );
