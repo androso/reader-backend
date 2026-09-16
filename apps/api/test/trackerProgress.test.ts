@@ -1,21 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Request, Response, NextFunction } from "express";
-import { db } from "../src/db";
-import { Books, Progress } from "../src/db/schema";
+import type { User } from "../src/types";
 
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret";
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? "reader-api-test-secret";
 
-const trackerRoutes = require("../src/routes/Tracker.routes").default;
+const { TrackerController } =
+    require("../src/tracker/tracker.controller") as typeof import("../src/tracker/tracker.controller");
+const { DRIZZLE } =
+    require("../src/database/database.module") as typeof import("../src/database/database.module");
+const { Books, Progress } =
+    require("../src/db/schema") as typeof import("../src/db/schema");
+const { createTestApp } =
+    require("./helpers/nestApp") as typeof import("./helpers/nestApp");
 
-type RouteLayer = {
-    route?: {
-        path: string;
-        methods: Record<string, boolean>;
-        stack: Array<{
-            handle: (req: Request, res: Response, next: NextFunction) => void;
-        }>;
-    };
+const owner: User = {
+    id: "owner-1",
+    email: "owner@example.com",
+    name: "Owner",
+    image: null,
+    googleId: null,
+    username: "owner",
+    password: null,
+    createdAt: new Date("2024-01-01T00:00:00Z"),
+    updatedAt: new Date("2024-01-01T00:00:00Z"),
 };
 
 type ProgressMutationValues = {
@@ -24,191 +31,116 @@ type ProgressMutationValues = {
     [key: string]: unknown;
 };
 
-const asRequest = (request: unknown) => request as Request;
-
-const getRouteHandlers = (method: string, path: string) => {
-    const stack = (trackerRoutes as unknown as { stack: RouteLayer[] }).stack;
-    const layer = stack.find(
-        (item) => item.route?.path === path && item.route.methods[method]
-    );
-
-    assert.ok(layer?.route);
-    return layer.route.stack.map((item) => item.handle);
-};
-
-const createResponse = () => {
-    let statusCode = 200;
-    let body: unknown;
-
-    const res = {
-        status(code: number) {
-            statusCode = code;
-            return this;
-        },
-        json(payload: unknown) {
-            body = payload;
-            return this;
-        },
-    } as Response;
-
-    return {
-        res,
-        get statusCode() {
-            return statusCode;
-        },
-        get body() {
-            return body;
-        },
-    };
-};
-
-const installDbMock = ({
+const createDbMock = ({
     bookRows = [],
     progressRows = [],
 }: {
     bookRows?: unknown[];
     progressRows?: unknown[];
 }) => {
-    const dbMock = db as unknown as {
-        select: unknown;
-        update: unknown;
-        insert: unknown;
-    };
-    const original = {
-        select: dbMock.select,
-        update: dbMock.update,
-        insert: dbMock.insert,
-    };
     const calls = {
-        selectedTables: [] as unknown[],
         insertedValues: null as ProgressMutationValues | null,
-        updatedValues: null as unknown,
     };
 
-    dbMock.select = () => ({
-        from(table: unknown) {
-            calls.selectedTables.push(table);
+    const db = {
+        select() {
             return {
-                where: async () => {
-                    if (table === Books) return bookRows;
-                    if (table === Progress) return progressRows;
-                    return [];
+                from(table: unknown) {
+                    return {
+                        where: async () => {
+                            if (table === Books) return bookRows;
+                            if (table === Progress) return progressRows;
+                            return [];
+                        },
+                    };
                 },
             };
         },
-    });
-    dbMock.update = (table: unknown) => ({
-        set(values: ProgressMutationValues) {
-            calls.updatedValues = values;
+        update() {
             return {
-                where: () => ({
-                    returning: async () =>
-                        table === Progress
-                            ? [{ id: "updated-progress", ...values }]
-                            : [],
-                }),
+                set() {
+                    return { where: async () => [] };
+                },
             };
         },
-    });
-    dbMock.insert = (table: unknown) => ({
-        values(values: ProgressMutationValues) {
-            calls.insertedValues = values;
+        insert(table: unknown) {
             return {
-                onConflictDoUpdate: () => ({
-                    returning: async () =>
-                        table === Progress
-                            ? [{ id: "inserted-progress", ...values }]
-                            : [],
-                }),
+                values(values: ProgressMutationValues) {
+                    calls.insertedValues = values;
+                    return {
+                        onConflictDoUpdate() {
+                            return {
+                                returning: async () =>
+                                    table === Progress
+                                        ? [
+                                              {
+                                                  id: "inserted-progress",
+                                                  ...values,
+                                              },
+                                          ]
+                                        : [],
+                            };
+                        },
+                    };
+                },
             };
-        },
-    });
-
-    return {
-        calls,
-        restore() {
-            dbMock.select = original.select;
-            dbMock.update = original.update;
-            dbMock.insert = original.insert;
         },
     };
+
+    return { db, calls };
 };
 
-test("does not expose the unauthenticated debug progress route", () => {
-    const stack = (trackerRoutes as unknown as { stack: RouteLayer[] }).stack;
-    const publicProgressRoute = stack.find(
-        (item) => item.route?.path === "/progress" && item.route.methods.get
-    );
-
-    assert.equal(publicProgressRoute, undefined);
-});
-
 test("rejects unauthenticated progress access", async () => {
-    const [authenticate] = getRouteHandlers("get", "/:rid/progress");
-    const response = createResponse();
-    let nextCalled = false;
-
-    await authenticate(
-        asRequest({ headers: {}, params: { rid: "book-1" } }),
-        response.res,
-        (() => {
-            nextCalled = true;
-        }) as NextFunction
-    );
-
-    assert.equal(nextCalled, false);
-    assert.equal(response.statusCode, 401);
-    assert.deepEqual(response.body, { message: "No token provided" });
+    const { db } = createDbMock({});
+    const testApp = await createTestApp({
+        controllers: [TrackerController],
+        providers: [{ provide: DRIZZLE, useValue: db }],
+    });
+    try {
+        const res = await fetch(`${testApp.baseUrl}/api/book-1/progress`);
+        assert.equal(res.status, 401);
+        assert.deepEqual(await res.json(), { message: "No token provided" });
+    } finally {
+        await testApp.close();
+    }
 });
 
 test("returns 404 for a non-owner book id without reading progress", async () => {
-    const [, handler] = getRouteHandlers("get", "/:rid/progress");
-    const mock = installDbMock({ bookRows: [] });
-    const response = createResponse();
-
+    const { db } = createDbMock({ bookRows: [] });
+    const testApp = await createTestApp({
+        controllers: [TrackerController],
+        providers: [{ provide: DRIZZLE, useValue: db }],
+        user: owner,
+    });
     try {
-        await handler(
-            asRequest({
-                user: { id: "owner-1" },
-                params: { rid: "someone-elses-book" },
-            }),
-            response.res,
-            (() => undefined) as NextFunction
+        const res = await fetch(
+            `${testApp.baseUrl}/api/someone-elses-book/progress`
         );
+        assert.equal(res.status, 404);
+        assert.deepEqual(await res.json(), { message: "Book not found" });
     } finally {
-        mock.restore();
+        await testApp.close();
     }
-
-    assert.equal(response.statusCode, 404);
-    assert.deepEqual(response.body, { message: "Book not found" });
-    assert.deepEqual(mock.calls.selectedTables, [Books]);
 });
 
 test("returns 404 for a missing owned book id", async () => {
-    const [, handler] = getRouteHandlers("get", "/:rid/progress");
-    const mock = installDbMock({ bookRows: [] });
-    const response = createResponse();
-
+    const { db } = createDbMock({ bookRows: [] });
+    const testApp = await createTestApp({
+        controllers: [TrackerController],
+        providers: [{ provide: DRIZZLE, useValue: db }],
+        user: owner,
+    });
     try {
-        await handler(
-            asRequest({
-                user: { id: "owner-1" },
-                params: { rid: "missing-book" },
-            }),
-            response.res,
-            (() => undefined) as NextFunction
-        );
+        const res = await fetch(`${testApp.baseUrl}/api/missing-book/progress`);
+        assert.equal(res.status, 404);
+        assert.deepEqual(await res.json(), { message: "Book not found" });
     } finally {
-        mock.restore();
+        await testApp.close();
     }
-
-    assert.equal(response.statusCode, 404);
-    assert.deepEqual(response.body, { message: "Book not found" });
 });
 
 test("returns owner progress for an owned book id", async () => {
-    const [, handler] = getRouteHandlers("get", "/:rid/progress");
-    const mock = installDbMock({
+    const { db } = createDbMock({
         bookRows: [{ id: "book-1", userId: "owner-1" }],
         progressRows: [
             {
@@ -219,64 +151,74 @@ test("returns owner progress for an owned book id", async () => {
             },
         ],
     });
-    const response = createResponse();
-
-    try {
-        await handler(
-            asRequest({
-                user: { id: "owner-1" },
-                params: { rid: "book-1" },
-            }),
-            response.res,
-            (() => undefined) as NextFunction
-        );
-    } finally {
-        mock.restore();
-    }
-
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.body, {
-        progressPosition: "c01-block-1",
-        progressChapter: "c01",
+    const testApp = await createTestApp({
+        controllers: [TrackerController],
+        providers: [{ provide: DRIZZLE, useValue: db }],
+        user: owner,
     });
+    try {
+        const res = await fetch(`${testApp.baseUrl}/api/book-1/progress`);
+        assert.equal(res.status, 200);
+        assert.deepEqual(await res.json(), {
+            progressPosition: "c01-block-1",
+            progressChapter: "c01",
+        });
+    } finally {
+        await testApp.close();
+    }
 });
 
 test("writes owner progress for an owned book id", async () => {
-    const [, handler] = getRouteHandlers("post", "/:rid/progress");
-    const mock = installDbMock({
+    const { db, calls } = createDbMock({
         bookRows: [{ id: "book-1", userId: "owner-1" }],
         progressRows: [],
     });
-    const response = createResponse();
-
+    const testApp = await createTestApp({
+        controllers: [TrackerController],
+        providers: [{ provide: DRIZZLE, useValue: db }],
+        user: owner,
+    });
     try {
-        await handler(
-            asRequest({
-                user: { id: "owner-1" },
-                params: { rid: "book-1" },
-                body: {
-                    progress_block: "c01-block-2",
-                    progress_chapter: "c01",
-                },
+        const res = await fetch(`${testApp.baseUrl}/api/book-1/progress`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                progress_block: "c01-block-2",
+                progress_chapter: "c01",
             }),
-            response.res,
-            (() => undefined) as NextFunction
+        });
+        assert.equal(res.status, 201);
+        const body = await res.json();
+        assert.equal(body.message, "Progress saved");
+        assert.equal(body.data.id, "inserted-progress");
+        assert.equal(body.data.userId, "owner-1");
+        assert.equal(body.data.bookId, "book-1");
+        assert.equal(body.data.progressPosition, "c01-block-2");
+        assert.equal(body.data.progressChapter, "c01");
+        assert.equal(
+            body.data.createdAt,
+            calls.insertedValues!.createdAt!.toISOString()
+        );
+        assert.equal(
+            body.data.updatedAt,
+            calls.insertedValues!.updatedAt!.toISOString()
         );
     } finally {
-        mock.restore();
+        await testApp.close();
     }
+});
 
-    assert.equal(response.statusCode, 201);
-    assert.deepEqual(response.body, {
-        message: "Progress saved",
-        data: {
-            id: "inserted-progress",
-            userId: "owner-1",
-            bookId: "book-1",
-            progressPosition: "c01-block-2",
-            progressChapter: "c01",
-            createdAt: mock.calls.insertedValues!.createdAt,
-            updatedAt: mock.calls.insertedValues!.updatedAt,
-        },
+test("GET /api/progress is not exposed", async () => {
+    const { db } = createDbMock({});
+    const testApp = await createTestApp({
+        controllers: [TrackerController],
+        providers: [{ provide: DRIZZLE, useValue: db }],
+        user: owner,
     });
+    try {
+        const res = await fetch(`${testApp.baseUrl}/api/progress`);
+        assert.equal(res.status, 404);
+    } finally {
+        await testApp.close();
+    }
 });

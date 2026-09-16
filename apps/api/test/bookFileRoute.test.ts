@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request, Response } from "express";
-import { handleGetBookFile } from "../src/routes/Book.routes";
+import { handleGetBookFile } from "../src/books/book-file.handler";
 
 type TestResponse = {
     statusCode: number;
