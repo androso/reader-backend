@@ -60,6 +60,7 @@ export async function createApp(): Promise<NestExpressApplication> {
             "Mentarie API Documentation to provide all the endpoints, and how to use it to interact with the application"
         )
         .addServer("http://localhost:3000")
+        .addBearerAuth()
         .build();
     SwaggerModule.setup(
         "api-docs",
