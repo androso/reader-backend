@@ -63,7 +63,7 @@ export const handleGetBookFile = async (
     res: Response,
     dependencies: BookFileDependencies = bookFileDependencies
 ) => {
-    const bookId = req.params.id;
+    const bookId = req.params.id as string;
 
     try {
         const book = await dependencies.findBookById(bookId);
@@ -393,7 +393,7 @@ router.post(
         const [book] = await db
             .select()
             .from(Books)
-            .where(eq(Books.id, req.params.id));
+            .where(eq(Books.id, req.params.id as string));
         if (!book || book.userId !== req.user.id) {
             res.status(404).json({ error: "Book was not found" });
             return;
@@ -434,7 +434,7 @@ router.get("/:id/status", authenticate, async (req, res) => {
         const [book] = await db
             .select()
             .from(Books)
-            .where(eq(Books.id, req.params.id));
+            .where(eq(Books.id, req.params.id as string));
 
         if (!book) {
             res.status(404).json({ error: "Book was not found" });
@@ -516,7 +516,7 @@ router.get("/:id", authenticate, (req, res) => {
 });
 // working
 router.delete("/:id", authenticate, async (req, res) => {
-    const bookId = req.params.id;
+    const bookId = req.params.id as string;
     log.info("Book delete request received", { bookId, userId: req.user.id });
 
     try {

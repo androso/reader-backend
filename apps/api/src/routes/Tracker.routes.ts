@@ -12,7 +12,7 @@ router.get(
     async (req: Request, res: Response) => {
         try {
             const user_id = req.user.id;
-            const book_id = req.params.rid;
+            const book_id = req.params.rid as string;
 
             const [book] = await db
                 .select()
@@ -58,7 +58,7 @@ router.post(
     async (req: Request, res: Response) => {
         try {
             const user_id = req.user.id;
-            const book_id = req.params.rid;
+            const book_id = req.params.rid as string;
             const { progress_block, progress_chapter } = req.body;
 
             if (!progress_block) {

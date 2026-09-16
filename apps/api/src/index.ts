@@ -1,20 +1,18 @@
 import "./observability/bootstrap";
-import app from "./app";
+import "reflect-metadata";
+import { createApp } from "./bootstrap";
 import { shutdownLangfuseTracing } from "./observability/langfuse";
-import swaggerdocs from "./utils/swagger";
 import { closeRagRerankShadowQueue } from "./services/RagShadowQueue";
 
 const PORT = process.env.PORT || 3000;
 const SHUTDOWN_TIMEOUT_MS = 10000;
 
-const server = app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    swaggerdocs(app, PORT);
-});
-
 let isShuttingDown = false;
 
-const shutdown = (signal: NodeJS.Signals) => {
+const shutdown = (
+    signal: NodeJS.Signals,
+    app: { close: () => Promise<void> }
+) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
 
@@ -26,19 +24,31 @@ const shutdown = (signal: NodeJS.Signals) => {
     }, SHUTDOWN_TIMEOUT_MS);
     timeout.unref();
 
-    server.close(async (error) => {
-        if (error) {
+    app.close()
+        .then(async () => {
+            await Promise.all([
+                shutdownLangfuseTracing(),
+                closeRagRerankShadowQueue(),
+            ]);
+            clearTimeout(timeout);
+            process.exit(0);
+        })
+        .catch(async (error) => {
             console.error("Error closing API server", error);
-        }
-
-        await Promise.all([
-            shutdownLangfuseTracing(),
-            closeRagRerankShadowQueue(),
-        ]);
-        clearTimeout(timeout);
-        process.exit(error ? 1 : 0);
-    });
+            await Promise.all([
+                shutdownLangfuseTracing(),
+                closeRagRerankShadowQueue(),
+            ]);
+            clearTimeout(timeout);
+            process.exit(1);
+        });
 };
 
-process.once("SIGTERM", shutdown);
-process.once("SIGINT", shutdown);
+createApp().then((app) => {
+    app.listen(PORT).then(() => {
+        console.log(`Server running on port ${PORT}`);
+    });
+
+    process.once("SIGTERM", (signal) => shutdown(signal, app));
+    process.once("SIGINT", (signal) => shutdown(signal, app));
+});

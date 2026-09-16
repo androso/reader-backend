@@ -1,0 +1,70 @@
+import { NestFactory, HttpAdapterHost } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { enforceTrustedOrigin } from "./common/middleware/csrf";
+import { logger } from "./common/middleware/request-logger";
+import { mountLegacyRouters } from "./legacy/legacy-express";
+
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    ...(process.env.NODE_ENV === "production"
+        ? []
+        : [
+              "http://localhost:5173",
+              "http://127.0.0.1:5173",
+              "http://localhost:3001",
+              "http://127.0.0.1:3001",
+          ]),
+].filter(Boolean);
+
+if (allowedOrigins.length === 0) {
+    console.warn("No CORS origins configured");
+}
+
+export const corsOptions = {
+    origin: (
+        origin: string | undefined,
+        callback: (err: Error | null, allow?: boolean) => void
+    ) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+            return;
+        }
+
+        callback(new Error(`CORS origin not allowed: ${origin}`));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+};
+
+export async function createApp(): Promise<NestExpressApplication> {
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+        bodyParser: false,
+    });
+    app.enableCors(corsOptions);
+    app.useBodyParser("json");
+    app.useBodyParser("urlencoded", { extended: false });
+    app.use(logger);
+    app.use(enforceTrustedOrigin);
+    app.useGlobalFilters(
+        new AllExceptionsFilter(app.get(HttpAdapterHost).httpAdapter)
+    );
+    mountLegacyRouters(app);
+    const config = new DocumentBuilder()
+        .setTitle("Mentarie API")
+        .setVersion("1.0.0")
+        .setDescription(
+            "Mentarie API Documentation to provide all the endpoints, and how to use it to interact with the application"
+        )
+        .addServer("http://localhost:3000")
+        .build();
+    SwaggerModule.setup(
+        "api-docs",
+        app,
+        SwaggerModule.createDocument(app, config)
+    );
+    return app;
+}

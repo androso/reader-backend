@@ -1,6 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+overrides:
+  "@types/express": "^5.0.6"
 onlyBuiltDependencies:
   - esbuild
   - protobufjs

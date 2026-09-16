@@ -557,8 +557,8 @@ router.post(
                 return;
             }
             const creation = await createAuthorizedChatConversation({
-                resourceType: req.params.resourceType,
-                resourceId: req.params.id,
+                resourceType: req.params.resourceType as string,
+                resourceId: req.params.id as string,
                 userId: req.user.id,
                 title: message.substring(0, 50) + "...",
                 repository: chatResourceRepository,
@@ -590,8 +590,8 @@ router.post(
 
             await runBookChatTraceIfNeeded(
                 {
-                    resourceType: req.params.resourceType,
-                    resourceId: req.params.id,
+                    resourceType: req.params.resourceType as string,
+                    resourceId: req.params.id as string,
                     conversationId: conversation.id,
                     userId: req.user.id,
                     routeName: "create_conversation",
@@ -601,8 +601,8 @@ router.post(
                 },
                 (trace) =>
                     runChatCompletion({
-                        resourceType: req.params.resourceType,
-                        resourceId: req.params.id,
+                        resourceType: req.params.resourceType as string,
+                        resourceId: req.params.id as string,
                         conversationId: conversation.id,
                         userId: req.user.id,
                         messages,
@@ -634,8 +634,8 @@ router.get(
     async (req: Request, res) => {
         try {
             const authorization = await authorizeRequestResource({
-                resourceType: req.params.resourceType,
-                resourceId: req.params.id,
+                resourceType: req.params.resourceType as string,
+                resourceId: req.params.id as string,
                 userId: req.user.id,
                 res,
             });
@@ -651,7 +651,7 @@ router.get(
                             Conversations.resourceType,
                             authorization.resourceType
                         ),
-                        eq(Conversations.resourceId, req.params.id)
+                        eq(Conversations.resourceId, req.params.id as string)
                     )
                 )
                 .orderBy(desc(Conversations.lastMessageAt));
@@ -679,7 +679,11 @@ router.post(
                 resourceType,
                 rid: resourceId,
                 cid: conversationId,
-            } = req.params;
+            } = req.params as {
+                resourceType: string;
+                rid: string;
+                cid: string;
+            };
             if (
                 !resourceType ||
                 !resourceId ||
@@ -795,19 +799,19 @@ router.get(
     async (req: Request, res) => {
         try {
             const authorization = await authorizeRequestResource({
-                resourceType: req.params.resourceType,
-                resourceId: req.params.id,
+                resourceType: req.params.resourceType as string,
+                resourceId: req.params.id as string,
                 userId: req.user.id,
                 res,
             });
             if (!authorization) return;
 
-            const conversationId = req.params.conversationId;
+            const conversationId = req.params.conversationId as string;
             const conversation = await findScopedConversation({
                 conversationId,
                 userId: req.user.id,
                 resourceType: authorization.resourceType,
-                resourceId: req.params.id,
+                resourceId: req.params.id as string,
             });
 
             if (!conversation) {
