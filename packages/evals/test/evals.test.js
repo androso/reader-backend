@@ -494,14 +494,8 @@ test("Langfuse publication links traces and scores and flushes both clients", as
         observations[0].input.metadata.aggregateAnswerUsage,
         "unknown"
     );
-    assert.equal(
-        observations[0].input.metadata.aggregateJudgeUsage,
-        "unknown"
-    );
-    assert.equal(
-        observations[0].input.metadata.absoluteQualityPassed,
-        "false"
-    );
+    assert.equal(observations[0].input.metadata.aggregateJudgeUsage, "unknown");
+    assert.equal(observations[0].input.metadata.absoluteQualityPassed, "false");
     assert.equal(
         observations[0].input.metadata.baselineRegressionPassed,
         "true"
@@ -651,54 +645,128 @@ test("correct refusals do not require supporting citations", async () => {
     assert.equal(result.summary.passed, true);
 });
 
-test("judge cost uses the concrete response model", async () => {
+test("judge structured output uses the concrete response model", async () => {
+    const scores = {
+        groundedness: 1,
+        citationCoverage: 1,
+        refusalCorrectness: 1,
+        hallucinationRate: 0,
+        rationale: "Supported",
+    };
+    let capturedRequest;
     const judge = new OpenAIJudgeClient({
-        chat: {
-            completions: {
-                async create() {
-                    return {
-                        model: "gpt-4o-mini-2024-07-18",
-                        choices: [
-                            {
-                                message: {
-                                    content: JSON.stringify({
-                                        groundedness: 1,
-                                        citationCoverage: 1,
-                                        refusalCorrectness: 1,
-                                        hallucinationRate: 0,
-                                        rationale: "Supported",
-                                    }),
+        beta: {
+            chat: {
+                completions: {
+                    async parse(request) {
+                        capturedRequest = request;
+                        return {
+                            model: "gpt-4o-mini-2024-07-18",
+                            choices: [
+                                {
+                                    message: {
+                                        parsed: scores,
+                                        refusal: null,
+                                    },
                                 },
+                            ],
+                            usage: {
+                                prompt_tokens: 100,
+                                completion_tokens: 20,
+                                total_tokens: 120,
                             },
-                        ],
-                        usage: {
-                            prompt_tokens: 100,
-                            completion_tokens: 20,
-                            total_tokens: 120,
-                        },
-                    };
+                        };
+                    },
                 },
             },
         },
     });
 
-    const judged = await judge.score(
-        {
-            id: "resolved-judge-model",
-            question: "question",
-            expectedAnswer: "answer",
-            answerModel: "gpt-4o-mini",
-            resolvedAnswerModel: "gpt-4o-mini-2024-07-18",
-            candidateAnswer: "answer",
-            sources: [],
-            vectorResultIds: [],
-            vectorIdsAligned: true,
-        },
-        "custom-judge-alias"
-    );
+    const testCase = {
+        id: "resolved-judge-model",
+        question: "question",
+        expectedAnswer: "answer",
+        answerModel: "gpt-4o-mini",
+        resolvedAnswerModel: "gpt-4o-mini-2024-07-18",
+        candidateAnswer: "answer",
+        sources: [],
+        vectorResultIds: [],
+        vectorIdsAligned: true,
+    };
+    const judged = await judge.score(testCase, "custom-judge-alias");
 
+    assert.ok(capturedRequest);
+    assert.equal(capturedRequest.response_format.type, "json_schema");
+    assert.equal(
+        capturedRequest.response_format.json_schema.name,
+        "answer_judge_scores"
+    );
+    assert.equal(capturedRequest.response_format.json_schema.strict, true);
+    assert.deepEqual(
+        capturedRequest.response_format.$parseRaw(JSON.stringify(scores)),
+        scores
+    );
+    assert.throws(() =>
+        capturedRequest.response_format.$parseRaw(
+            JSON.stringify({ ...scores, rationale: undefined })
+        )
+    );
+    assert.throws(() =>
+        capturedRequest.response_format.$parseRaw(
+            JSON.stringify({ ...scores, groundedness: 1.1 })
+        )
+    );
+    assert.deepEqual(judged.scores, scores);
     assert.equal(judged.estimatedCost?.amount, 0.000027);
     assert.equal(judged.modelVersion, "gpt-4o-mini-2024-07-18");
+
+    const refusalJudge = new OpenAIJudgeClient({
+        beta: {
+            chat: {
+                completions: {
+                    async parse() {
+                        return {
+                            choices: [
+                                {
+                                    message: {
+                                        parsed: null,
+                                        refusal: "no",
+                                    },
+                                },
+                            ],
+                        };
+                    },
+                },
+            },
+        },
+    });
+    await assert.rejects(refusalJudge.score(testCase, "judge"), {
+        message: "OpenAI judge refused the request",
+    });
+
+    const emptyJudge = new OpenAIJudgeClient({
+        beta: {
+            chat: {
+                completions: {
+                    async parse() {
+                        return {
+                            choices: [
+                                {
+                                    message: {
+                                        parsed: null,
+                                        refusal: null,
+                                    },
+                                },
+                            ],
+                        };
+                    },
+                },
+            },
+        },
+    });
+    await assert.rejects(emptyJudge.score(testCase, "judge"), {
+        message: "OpenAI judge returned no structured output",
+    });
 });
 
 test("dataset validation rejects duplicate IDs", async () => {
@@ -1067,14 +1135,8 @@ test("execution summary preserves unknown costs", () => {
     assert.match(markdown, /Pipeline versions: baseline-rag-v1/);
     assert.match(markdown, /Absolute quality passed: true/);
     assert.match(markdown, /Baseline regression passed: n\/a/);
-    assert.match(
-        markdown,
-        /Resolved answer models: answer-model-2026-07-01/
-    );
-    assert.match(
-        markdown,
-        /Resolved judge models: judge-model-2026-07-01/
-    );
+    assert.match(markdown, /Resolved answer models: answer-model-2026-07-01/);
+    assert.match(markdown, /Resolved judge models: judge-model-2026-07-01/);
     assert.match(markdown, /Answer\/judge tokens: unknown\/unknown/);
     assert.match(markdown, /Estimated answer cost: unknown/);
     assert.match(markdown, /Estimated total cost: unknown/);
@@ -1307,9 +1369,7 @@ test("comparison requires cost for every successful reranker call", () => {
 
     assert.equal(report.promotionPassed, false);
     assert.equal(report.promotion.checks.rerankerCostAtMost0015, false);
-    assert.ok(
-        report.promotion.failedChecks.includes("rerankerCostAtMost0015")
-    );
+    assert.ok(report.promotion.failedChecks.includes("rerankerCostAtMost0015"));
 });
 
 test("comparison reports retrieval and answer promotion regressions", () => {

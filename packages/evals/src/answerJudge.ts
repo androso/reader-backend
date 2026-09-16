@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from "zod";
 import type {
     AnswerCaseResult,
     AnswerSummary,
@@ -20,28 +22,18 @@ const mean = (values: number[]) =>
         ? values.reduce((total, value) => total + value, 0) / values.length
         : 0;
 
-const clampScore = (value: unknown, fallback: number) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.max(0, Math.min(1, parsed));
-};
-
 const encodeUntrustedJson = (value: unknown) =>
     JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
 
-const parseJudgeJson = (content: string): JudgeScores => {
-    const parsed = JSON.parse(content) as Partial<JudgeScores>;
-    return {
-        groundedness: clampScore(parsed.groundedness, 0),
-        citationCoverage: clampScore(parsed.citationCoverage, 0),
-        refusalCorrectness: clampScore(parsed.refusalCorrectness, 0),
-        hallucinationRate: clampScore(parsed.hallucinationRate, 1),
-        rationale:
-            typeof parsed.rationale === "string"
-                ? parsed.rationale
-                : "Judge did not provide a rationale.",
-    };
-};
+const judgeScoresSchema = z
+    .object({
+        groundedness: z.number().min(0).max(1),
+        citationCoverage: z.number().min(0).max(1),
+        refusalCorrectness: z.number().min(0).max(1),
+        hallucinationRate: z.number().min(0).max(1),
+        rationale: z.string(),
+    })
+    .strict() satisfies z.ZodType<JudgeScores>;
 
 export const buildJudgePrompt = (testCase: PreparedEvalCase) => {
     const sources = testCase.sources
@@ -57,7 +49,7 @@ export const buildJudgePrompt = (testCase: PreparedEvalCase) => {
 
     return [
         "Score this RAG answer using only the provided sources.",
-        "Return strict JSON with groundedness, citationCoverage, refusalCorrectness, hallucinationRate, and rationale.",
+        "Return groundedness, citationCoverage, refusalCorrectness, hallucinationRate, and rationale using the supplied response schema.",
         "All numeric fields must be 0 to 1. Higher groundedness, citationCoverage, and refusalCorrectness are better. Lower hallucinationRate is better.",
         "citationCoverage measures whether the returned Reader source excerpts support the answer; the prose answer does not need inline citation markers.",
         "For a no-answer case, citationCoverage should be high when the sources support the decision to refuse and the answer makes no unsupported claim.",
@@ -93,10 +85,10 @@ export interface JudgeClient {
 }
 
 export class OpenAIJudgeClient implements JudgeClient {
-    private readonly client: OpenAI;
+    private readonly client: Pick<OpenAI, "beta">;
 
     constructor(
-        client = new OpenAI({
+        client: Pick<OpenAI, "beta"> = new OpenAI({
             apiKey: process.env.OPENAI_API_KEY,
             maxRetries: 2,
             timeout: 30_000,
@@ -116,7 +108,7 @@ export class OpenAIJudgeClient implements JudgeClient {
         durationMs: number;
     }> {
         const startedAt = Date.now();
-        const response = await this.client.chat.completions.create({
+        const response = await this.client.beta.chat.completions.parse({
             model,
             messages: [
                 {
@@ -129,17 +121,23 @@ export class OpenAIJudgeClient implements JudgeClient {
                     content: buildJudgePrompt(testCase),
                 },
             ],
-            response_format: { type: "json_object" },
+            response_format: zodResponseFormat(
+                judgeScoresSchema,
+                "answer_judge_scores"
+            ),
             max_completion_tokens: 400,
         });
-        const content = response.choices[0]?.message?.content;
-        if (!content) {
-            throw new Error("OpenAI judge returned an empty response");
+        const message = response.choices[0]?.message;
+        if (typeof message?.refusal === "string" && message.refusal) {
+            throw new Error("OpenAI judge refused the request");
+        }
+        if (message?.parsed == null) {
+            throw new Error("OpenAI judge returned no structured output");
         }
         const usage = normalizeModelUsage(response.usage);
 
         return {
-            scores: parseJudgeJson(content),
+            scores: message.parsed,
             usage,
             estimatedCost: estimateModelCost(response.model, usage),
             modelVersion: response.model,

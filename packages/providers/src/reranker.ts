@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from "zod";
 
 export const RERANKER_MODEL = "gpt-5.4-mini-2026-03-17" as const;
 export const RERANKER_PROMPT_VERSION = "rerank-documents-v1" as const;
@@ -43,6 +45,40 @@ export const RERANKER_DEVELOPER_INSTRUCTION = [
     "Return one score from 0 through 1 for every supplied document alias.",
 ].join(" ");
 
+type RerankerResponse = {
+    rankings: Array<{
+        alias: string;
+        score: number;
+    }>;
+};
+
+const buildRerankerResponseSchema = (
+    aliases: string[],
+    topN: number
+): z.ZodType<RerankerResponse> => {
+    const aliasTuple = aliases as [string, ...string[]];
+    return z
+        .object({
+            rankings: z
+                .array(
+                    z
+                        .object({
+                            alias: z.enum(aliasTuple),
+                            score: z.number().min(0).max(1),
+                        })
+                        .strict()
+                )
+                .length(topN),
+        })
+        .strict();
+};
+
+// OpenAI 4.77 predates GPT-5's supported "none" value in its type.
+const RERANKER_REASONING_EFFORT = "none" as unknown as
+    | "low"
+    | "medium"
+    | "high";
+
 export const buildRerankerRequest = (
     query: string,
     candidates: RerankerCandidate[],
@@ -67,39 +103,11 @@ export const buildRerankerRequest = (
                 }),
             },
         ],
-        response_format: {
-            type: "json_schema" as const,
-            json_schema: {
-                name: "reranked_documents",
-                strict: true,
-                schema: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                        rankings: {
-                            type: "array",
-                            minItems: topN,
-                            maxItems: topN,
-                            items: {
-                                type: "object",
-                                additionalProperties: false,
-                                properties: {
-                                    alias: { type: "string", enum: aliases },
-                                    score: {
-                                        type: "number",
-                                        minimum: 0,
-                                        maximum: 1,
-                                    },
-                                },
-                                required: ["alias", "score"],
-                            },
-                        },
-                    },
-                    required: ["rankings"],
-                },
-            },
-        },
-        reasoning_effort: "none" as const,
+        response_format: zodResponseFormat(
+            buildRerankerResponseSchema(aliases, topN),
+            "reranked_documents"
+        ),
+        reasoning_effort: RERANKER_REASONING_EFFORT,
         max_completion_tokens: RERANKER_MAX_COMPLETION_TOKENS,
     };
 };
@@ -131,71 +139,32 @@ const assertTopN = (topN: number, candidateCount: number) => {
     }
 };
 
-export const parseRerankerResponse = (
-    content: unknown,
-    candidates: RerankerCandidate[],
-    topN = candidates.length
+const normalizeRerankerResponse = (
+    parsed: RerankerResponse,
+    candidates: RerankerCandidate[]
 ): RerankerRanking[] => {
-    if (typeof content !== "string") {
-        throw new Error("Reranker returned no structured content");
-    }
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(content);
-    } catch {
-        throw new Error("Reranker returned invalid JSON");
-    }
-    if (!parsed || typeof parsed !== "object") {
-        throw new Error("Reranker response does not match the schema");
-    }
-    const rankings = (parsed as { rankings?: unknown }).rankings;
-    if (!Array.isArray(rankings) || rankings.length !== topN) {
-        throw new Error(
-            `Reranker response returned the wrong number of rankings: expected ${topN}, received ${Array.isArray(rankings) ? rankings.length : "non-array"}`
-        );
-    }
     const candidatesByAlias = new Map(
         candidates.map((candidate, index) => [rerankerAlias(index), candidate])
     );
     const seen = new Set<string>();
-    const normalized = rankings.map((ranking, index) => {
-        if (!ranking || typeof ranking !== "object") {
-            throw new Error(
-                `Reranker ranking at index ${index} is not an object`
-            );
-        }
-        const { alias, score } = ranking as {
-            alias?: unknown;
-            score?: unknown;
-        };
-        if (typeof alias !== "string")
-            throw new Error(
-                `Reranker ranking at index ${index} has a non-string alias`
-            );
-        const candidate = candidatesByAlias.get(alias);
-        if (!candidate)
+    return parsed.rankings.map((ranking, index) => {
+        const candidate = candidatesByAlias.get(ranking.alias);
+        if (!candidate) {
             throw new Error(
                 `Reranker ranking at index ${index} has an unknown alias`
             );
-        if (seen.has(alias))
+        }
+        if (seen.has(ranking.alias)) {
             throw new Error(
                 `Reranker ranking at index ${index} has a duplicate alias`
             );
-        if (typeof score !== "number" || !Number.isFinite(score))
-            throw new Error(
-                `Reranker ranking at index ${index} has a non-finite score`
-            );
-        if (score < 0 || score > 1)
-            throw new Error(
-                `Reranker ranking at index ${index} has an out-of-range score`
-            );
-        seen.add(alias);
-        return { id: candidate.id, score, rank: index + 1 };
+        }
+        seen.add(ranking.alias);
+        return { id: candidate.id, score: ranking.score, rank: index + 1 };
     });
-    return normalized;
 };
 
-type RerankerClient = Pick<OpenAI, "chat">;
+type RerankerClient = Pick<OpenAI, "beta">;
 
 export class OpenAIChatReranker implements RerankerProvider {
     private readonly client: RerankerClient;
@@ -223,27 +192,20 @@ export class OpenAIChatReranker implements RerankerProvider {
         const requestSignal = signal
             ? AbortSignal.any([signal, timeoutSignal])
             : timeoutSignal;
-        const response = await this.client.chat.completions.create(
-            buildRerankerRequest(query, documents, topN) as never,
+        const response = await this.client.beta.chat.completions.parse(
+            buildRerankerRequest(query, documents, topN),
             { signal: requestSignal }
         );
         const choice = response.choices[0];
-        const message = choice?.message as
-            | { content?: unknown; refusal?: unknown }
-            | undefined;
+        const message = choice?.message;
         if (typeof message?.refusal === "string" && message.refusal) {
             throw new Error("Reranker refused the request");
         }
-        if (
-            typeof choice?.finish_reason === "string" &&
-            choice.finish_reason !== "stop"
-        ) {
-            throw new Error(
-                `Reranker response incomplete: finish reason ${choice.finish_reason}, content characters ${typeof message?.content === "string" ? message.content.length : 0}`
-            );
+        if (message?.parsed == null) {
+            throw new Error("Reranker returned no structured content");
         }
         return {
-            rankings: parseRerankerResponse(message?.content, documents, topN),
+            rankings: normalizeRerankerResponse(message.parsed, documents),
             requestedModel: RERANKER_MODEL,
             resolvedModel:
                 typeof response.model === "string" && response.model
