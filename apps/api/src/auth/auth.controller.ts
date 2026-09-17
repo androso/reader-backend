@@ -16,18 +16,18 @@ import { eq } from "drizzle-orm";
 import { AuthRateLimitGuard } from "../common/guards/rate-limit.guard";
 import { DRIZZLE, type Database } from "../database/database.module";
 import { Users } from "../db/schema";
-import {
-    generateToken,
-    getOrCreateDevUser,
-    verifyGoogleToken,
-} from "../services/AuthService";
 import { clearAuthCookies, setAuthCookie } from "../utils/authCookie";
+import { AUTH_OPERATIONS, type AuthOperations } from "./auth.operations";
 
 @ApiTags("Auth")
 @Controller("api/auth")
 @UseGuards(AuthRateLimitGuard)
 export class AuthController {
-    constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+    constructor(
+        @Inject(DRIZZLE) private readonly db: Database,
+        @Inject(AUTH_OPERATIONS)
+        private readonly operations: AuthOperations
+    ) {}
 
     @Post("google")
     @HttpCode(200)
@@ -57,7 +57,9 @@ export class AuthController {
     ) {
         try {
             const { idToken } = body;
-            const payload = await verifyGoogleToken(idToken as string);
+            const payload = await this.operations.verifyGoogleToken(
+                idToken as string
+            );
             const [existingUser] = await this.db
                 .select()
                 .from(Users)
@@ -81,7 +83,7 @@ export class AuthController {
                     .returning();
             }
 
-            const jwtToken = generateToken(user);
+            const jwtToken = this.operations.generateToken(user);
             setAuthCookie(res, jwtToken);
             return { user };
         } catch (e) {
@@ -100,8 +102,8 @@ export class AuthController {
         }
 
         try {
-            const user = await getOrCreateDevUser();
-            const token = generateToken(user);
+            const user = await this.operations.getOrCreateDevUser();
+            const token = this.operations.generateToken(user);
             setAuthCookie(res, token);
             return { user };
         } catch (error) {

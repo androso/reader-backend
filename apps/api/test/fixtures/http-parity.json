@@ -1,0 +1,5353 @@
+{
+  "meta": {
+    "referenceCommit": "56ae8954",
+    "capturedAt": "2026-09-16T19:20:54.602Z",
+    "runtime": "reference Express 4 worktree, transpile-only ts-node child",
+    "environments": [
+      "test",
+      "production"
+    ],
+    "syntheticEnv": {
+      "JWT_SECRET": "reader-api-test-secret",
+      "FRONTEND_URL": "http://localhost:5173",
+      "GOOGLE_CLIENT_ID": "parity-test-google-client-id",
+      "LANGFUSE_SAMPLE_RATE": "0"
+    },
+    "capturedHeaders": [
+      "content-type",
+      "cache-control",
+      "x-content-type-options",
+      "access-control-allow-origin",
+      "access-control-allow-credentials",
+      "access-control-allow-methods",
+      "access-control-allow-headers",
+      "vary",
+      "retry-after"
+    ],
+    "normalization": {
+      "generatedUuids": "<UUIDn> by first appearance per capture",
+      "runtimeTimestamps": "<NOW> (within 120s of capture)",
+      "loginJwt": "<JWT> (HS256, userId=owner-1, exp-iat=604800)",
+      "loginExpires": "<LOGIN_EXPIRY> (Max-Age=604800, within 2s of capture+7d)"
+    },
+    "requestTimeoutMs": 5000,
+    "batches": [
+      {
+        "id": "initial",
+        "capturedAt": "2026-09-16T19:20:54.602Z",
+        "scenarioIds": [
+          "root-get",
+          "health-get",
+          "unknown-get",
+          "unknown-post",
+          "api-progress-get",
+          "cors-health-allowed-origin",
+          "cors-health-disallowed-origin",
+          "cors-preflight-books",
+          "csrf-logout-missing-origin",
+          "csrf-logout-local-origin",
+          "cors-logout-disallowed-origin",
+          "auth-logout-trusted",
+          "auth-logout-prod",
+          "user-get-no-cookie",
+          "user-get-expired-cookie",
+          "user-get-tampered-cookie",
+          "user-get-valid-cookie",
+          "user-get-prod-cookie-priority",
+          "user-get-prod-tampered-priority",
+          "auth-google-existing-user",
+          "auth-google-new-user",
+          "auth-google-invalid-token",
+          "auth-dev-existing-user",
+          "auth-dev-prod",
+          "progress-post-no-body",
+          "progress-post-empty-json-body",
+          "progress-post-text-plain",
+          "progress-post-empty-object",
+          "progress-post-empty-block",
+          "progress-post-urlencoded-empty",
+          "auth-google-no-body",
+          "auth-google-empty-json-body",
+          "auth-google-empty-object",
+          "auth-google-text-plain",
+          "auth-google-urlencoded-empty",
+          "progress-post-malformed-json",
+          "progress-post-malformed-json-no-origin",
+          "progress-post-oversized-json",
+          "progress-post-oversized-urlencoded"
+        ],
+        "scenarioSet": "SCENARIOS"
+      },
+      {
+        "id": "batch-2",
+        "label": "deferred scenarios + json progress insert/update",
+        "capturedAt": "2026-09-16T19:44:26.051Z",
+        "scenarioIds": [
+          "progress-post-urlencoded",
+          "progress-post-extra-field",
+          "progress-post-json-insert",
+          "progress-post-json-update",
+          "progress-post-urlencoded-no-chapter",
+          "books-post-unauthenticated",
+          "books-post-no-file",
+          "books-post-invalid-file",
+          "books-post-unexpected-field",
+          "books-post-truncated-multipart",
+          "books-list",
+          "books-status-ready",
+          "books-status-missing",
+          "books-status-nonowner",
+          "books-retry-ready",
+          "books-retry-missing",
+          "books-retry-nonowner",
+          "books-file-pdf",
+          "books-file-epub",
+          "books-file-null-type",
+          "books-file-missing",
+          "books-file-nonowner",
+          "books-file-storage-error",
+          "books-file-head",
+          "books-file-conditional-etag",
+          "progress-get-missing-book",
+          "progress-get-nonowner",
+          "progress-get-none",
+          "progress-get-existing",
+          "progress-get-db-error",
+          "progress-post-db-error",
+          "chat-create-empty-body",
+          "chat-create-blank-message",
+          "chat-create-unsupported-model",
+          "chat-append-unsupported-resource",
+          "chat-list-missing-book",
+          "chat-list-nonowner",
+          "chat-details-missing",
+          "chat-details-wrong-scope"
+        ],
+        "scenarioSet": "SUPPLEMENTAL_SCENARIOS"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "root-get",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/"
+      },
+      "db": [],
+      "capture": {
+        "id": "root-get",
+        "status": 200,
+        "headers": {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": "Hello World",
+        "effects": []
+      }
+    },
+    {
+      "id": "health-get",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/health"
+      },
+      "db": [],
+      "capture": {
+        "id": "health-get",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "status": "ok"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "unknown-get",
+      "env": "test",
+      "intentionalDifference": "unknown-route-json",
+      "request": {
+        "method": "GET",
+        "path": "/does-not-exist"
+      },
+      "db": [],
+      "capture": {
+        "id": "unknown-get",
+        "status": 404,
+        "headers": {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": "nosniff",
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /does-not-exist</pre>\n</body>\n</html>\n",
+        "effects": []
+      }
+    },
+    {
+      "id": "unknown-post",
+      "env": "test",
+      "intentionalDifference": "unknown-route-json",
+      "request": {
+        "method": "POST",
+        "path": "/does-not-exist",
+        "body": {
+          "kind": "json",
+          "value": {}
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "unknown-post",
+        "status": 404,
+        "headers": {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": "nosniff",
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /does-not-exist</pre>\n</body>\n</html>\n",
+        "effects": []
+      }
+    },
+    {
+      "id": "api-progress-get",
+      "env": "test",
+      "intentionalDifference": "unknown-route-json",
+      "request": {
+        "method": "GET",
+        "path": "/api/progress"
+      },
+      "db": [],
+      "capture": {
+        "id": "api-progress-get",
+        "status": 404,
+        "headers": {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": "nosniff",
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /api/progress</pre>\n</body>\n</html>\n",
+        "effects": []
+      }
+    },
+    {
+      "id": "cors-health-allowed-origin",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/health",
+        "origin": "trusted"
+      },
+      "db": [],
+      "capture": {
+        "id": "cors-health-allowed-origin",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "status": "ok"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "cors-health-disallowed-origin",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/health",
+        "origin": "untrusted"
+      },
+      "db": [],
+      "capture": {
+        "id": "cors-health-disallowed-origin",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": null,
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": null,
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "cors-preflight-books",
+      "env": "test",
+      "request": {
+        "method": "OPTIONS",
+        "path": "/api/books",
+        "origin": "trusted",
+        "headers": {
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type"
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "cors-preflight-books",
+        "status": 204,
+        "headers": {
+          "content-type": null,
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+          "access-control-allow-headers": "Content-Type,Authorization",
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": null,
+        "effects": []
+      }
+    },
+    {
+      "id": "csrf-logout-missing-origin",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/logout",
+        "origin": "none"
+      },
+      "db": [],
+      "capture": {
+        "id": "csrf-logout-missing-origin",
+        "status": 403,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Untrusted request origin"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "csrf-logout-local-origin",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/logout",
+        "origin": "local"
+      },
+      "db": [],
+      "capture": {
+        "id": "csrf-logout-local-origin",
+        "status": 403,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://127.0.0.1:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Untrusted request origin"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "cors-logout-disallowed-origin",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/logout",
+        "origin": "untrusted"
+      },
+      "db": [],
+      "capture": {
+        "id": "cors-logout-disallowed-origin",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": null,
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": null,
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "auth-logout-trusted",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/logout",
+        "origin": "trusted"
+      },
+      "db": [],
+      "capture": {
+        "id": "auth-logout-trusted",
+        "status": 204,
+        "headers": {
+          "content-type": null,
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [
+          "__Host-reader_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=None",
+          "reader_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"
+        ],
+        "body": null,
+        "effects": []
+      }
+    },
+    {
+      "id": "auth-logout-prod",
+      "env": "production",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/logout",
+        "origin": "trusted"
+      },
+      "db": [],
+      "capture": {
+        "id": "auth-logout-prod",
+        "status": 204,
+        "headers": {
+          "content-type": null,
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [
+          "__Host-reader_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=None",
+          "reader_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"
+        ],
+        "body": null,
+        "effects": []
+      }
+    },
+    {
+      "id": "user-get-no-cookie",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/user"
+      },
+      "db": [],
+      "capture": {
+        "id": "user-get-no-cookie",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "No token provided"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "user-get-expired-cookie",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/user",
+        "cookies": [
+          "expired"
+        ]
+      },
+      "db": [],
+      "capture": {
+        "id": "user-get-expired-cookie",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Invalid token"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "user-get-tampered-cookie",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/user",
+        "cookies": [
+          "tampered"
+        ]
+      },
+      "db": [],
+      "capture": {
+        "id": "user-get-tampered-cookie",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Invalid token"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "user-get-valid-cookie",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/user",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "user-get-valid-cookie",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "user": {
+            "id": "owner-1",
+            "email": "owner@example.com",
+            "name": "Owner",
+            "image": null,
+            "googleId": "google-owner",
+            "password": null,
+            "username": "owner",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "user-get-prod-cookie-priority",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/user",
+        "cookies": [
+          "validProd",
+          "tampered"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "user-get-prod-cookie-priority",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "user": {
+            "id": "owner-1",
+            "email": "owner@example.com",
+            "name": "Owner",
+            "image": null,
+            "googleId": "google-owner",
+            "password": null,
+            "username": "owner",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "user-get-prod-tampered-priority",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/user",
+        "cookies": [
+          "tamperedProd",
+          "valid"
+        ]
+      },
+      "db": [],
+      "capture": {
+        "id": "user-get-prod-tampered-priority",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Invalid token"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "auth-google-existing-user",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/google",
+        "body": {
+          "kind": "json",
+          "value": {
+            "idToken": "valid-google"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "update",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "stubs": {
+        "google": {
+          "sub": "google-owner",
+          "email": "owner@example.com",
+          "name": "Owner"
+        }
+      },
+      "capture": {
+        "id": "auth-google-existing-user",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [
+          "reader_session=<JWT>; Max-Age=604800; Path=/; Expires=<LOGIN_EXPIRY>; HttpOnly; SameSite=Lax"
+        ],
+        "body": {
+          "user": {
+            "id": "owner-1",
+            "email": "owner@example.com",
+            "name": "Owner",
+            "image": null,
+            "googleId": "google-owner",
+            "password": null,
+            "username": "owner",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "external",
+            "target": "google.verifyIdToken",
+            "idToken": "valid-google",
+            "audience": "parity-test-google-client-id"
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"google_id\" = $1",
+            "params": [
+              "google-owner"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "update",
+            "table": "users",
+            "sql": "update \"users\" set \"updated_at\" = $1 where \"users\".\"google_id\" = $2 returning \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\"",
+            "params": [
+              "<NOW>",
+              "google-owner"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "auth-google-new-user",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/google",
+        "body": {
+          "kind": "json",
+          "value": {
+            "idToken": "valid-google"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": []
+        },
+        {
+          "op": "insert",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "stubs": {
+        "google": {
+          "sub": "google-owner",
+          "email": "owner@example.com",
+          "name": "Owner"
+        }
+      },
+      "capture": {
+        "id": "auth-google-new-user",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [
+          "reader_session=<JWT>; Max-Age=604800; Path=/; Expires=<LOGIN_EXPIRY>; HttpOnly; SameSite=Lax"
+        ],
+        "body": {
+          "user": {
+            "id": "owner-1",
+            "email": "owner@example.com",
+            "name": "Owner",
+            "image": null,
+            "googleId": "google-owner",
+            "password": null,
+            "username": "owner",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "external",
+            "target": "google.verifyIdToken",
+            "idToken": "valid-google",
+            "audience": "parity-test-google-client-id"
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"google_id\" = $1",
+            "params": [
+              "google-owner"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "insert",
+            "table": "users",
+            "sql": "insert into \"users\" (\"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\") values (default, $1, $2, default, $3, default, default, default, default) returning \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\"",
+            "params": [
+              "owner@example.com",
+              "Owner",
+              "google-owner"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "auth-google-invalid-token",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/google",
+        "body": {
+          "kind": "json",
+          "value": {
+            "idToken": "invalid-google"
+          }
+        }
+      },
+      "db": [],
+      "stubs": {
+        "google": "reject"
+      },
+      "capture": {
+        "id": "auth-google-invalid-token",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Authentication failed"
+        },
+        "effects": [
+          {
+            "type": "external",
+            "target": "google.verifyIdToken",
+            "idToken": "invalid-google",
+            "audience": "parity-test-google-client-id"
+          }
+        ]
+      }
+    },
+    {
+      "id": "auth-dev-existing-user",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/dev",
+        "origin": "trusted"
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "auth-dev-existing-user",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [
+          "reader_session=<JWT>; Max-Age=604800; Path=/; Expires=<LOGIN_EXPIRY>; HttpOnly; SameSite=Lax"
+        ],
+        "body": {
+          "user": {
+            "id": "owner-1",
+            "email": "owner@example.com",
+            "name": "Owner",
+            "image": null,
+            "googleId": "google-owner",
+            "password": null,
+            "username": "owner",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1",
+            "params": [
+              "dev@example.com"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "auth-dev-prod",
+      "env": "production",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/dev",
+        "origin": "trusted"
+      },
+      "db": [],
+      "capture": {
+        "id": "auth-dev-prod",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Not found"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "progress-post-no-body",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-no-body",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress Block is required"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-empty-json-body",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "raw",
+          "text": "",
+          "contentType": "application/json"
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-empty-json-body",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress Block is required"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-text-plain",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "raw",
+          "text": "{}",
+          "contentType": "text/plain"
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-text-plain",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress Block is required"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-empty-object",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {}
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-empty-object",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress Block is required"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-empty-block",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {
+            "progress_block": ""
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-empty-block",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress Block is required"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-urlencoded-empty",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "urlencoded",
+          "fields": {}
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-urlencoded-empty",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress Block is required"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "auth-google-no-body",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/google"
+      },
+      "db": [],
+      "capture": {
+        "id": "auth-google-no-body",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Authentication failed"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "auth-google-empty-json-body",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/google",
+        "body": {
+          "kind": "raw",
+          "text": "",
+          "contentType": "application/json"
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "auth-google-empty-json-body",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Authentication failed"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "auth-google-empty-object",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/google",
+        "body": {
+          "kind": "json",
+          "value": {}
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "auth-google-empty-object",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Authentication failed"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "auth-google-text-plain",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/google",
+        "body": {
+          "kind": "raw",
+          "text": "{}",
+          "contentType": "text/plain"
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "auth-google-text-plain",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Authentication failed"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "auth-google-urlencoded-empty",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/google",
+        "body": {
+          "kind": "urlencoded",
+          "fields": {}
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "auth-google-urlencoded-empty",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Authentication failed"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "progress-post-malformed-json",
+      "env": "production",
+      "intentionalDifference": "parser-error-status",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "raw",
+          "text": "{",
+          "contentType": "application/json"
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "progress-post-malformed-json",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "progress-post-malformed-json-no-origin",
+      "env": "production",
+      "intentionalDifference": "parser-error-status",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "origin": "none",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "raw",
+          "text": "{",
+          "contentType": "application/json"
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "progress-post-malformed-json-no-origin",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "progress-post-oversized-json",
+      "env": "production",
+      "intentionalDifference": "parser-error-status",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "padded",
+          "contentType": "application/json",
+          "prefix": "{\"progress_block\":\"",
+          "suffix": "\"}",
+          "padChar": "x",
+          "length": 110000
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "progress-post-oversized-json",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "progress-post-oversized-urlencoded",
+      "env": "production",
+      "intentionalDifference": "parser-error-status",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "padded",
+          "contentType": "application/x-www-form-urlencoded",
+          "prefix": "progress_block=",
+          "suffix": "",
+          "padChar": "x",
+          "length": 110000
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "progress-post-oversized-urlencoded",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "progress-post-urlencoded",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "urlencoded",
+          "fields": {
+            "progress_block": "p1",
+            "progress_chapter": "c1"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "insert",
+          "table": "progress",
+          "rows": [
+            {
+              "user_id": "owner-1",
+              "book_id": "book-1",
+              "progress_position": "p1",
+              "progress_chapter": "c1",
+              "last_read_at": "2024-01-01 00:00:00+00",
+              "created_at": "2024-01-01 00:00:00+00",
+              "updated_at": "2024-01-01 00:00:00+00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-urlencoded",
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress saved",
+          "data": {
+            "userId": "owner-1",
+            "bookId": "book-1",
+            "progressPosition": "p1",
+            "progressChapter": "c1",
+            "lastReadAt": "2024-01-01T00:00:00.000Z",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "insert",
+            "table": "progress",
+            "sql": "insert into \"progress\" (\"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\") values ($1, $2, $3, $4, default, $5, $6) on conflict (\"user_id\",\"book_id\") do update set \"progress_position\" = $7, \"progress_chapter\" = $8, \"updated_at\" = $9 returning \"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\"",
+            "params": [
+              "owner-1",
+              "book-1",
+              "p1",
+              "c1",
+              "<NOW>",
+              "<NOW>",
+              "p1",
+              "c1",
+              "<NOW>"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-extra-field",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {
+            "progress_block": "p1",
+            "extra": "ignored"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "insert",
+          "table": "progress",
+          "rows": [
+            {
+              "user_id": "owner-1",
+              "book_id": "book-1",
+              "progress_position": "p1",
+              "progress_chapter": null,
+              "last_read_at": "2024-01-01 00:00:00+00",
+              "created_at": "2024-01-01 00:00:00+00",
+              "updated_at": "2024-01-01 00:00:00+00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-extra-field",
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress saved",
+          "data": {
+            "userId": "owner-1",
+            "bookId": "book-1",
+            "progressPosition": "p1",
+            "progressChapter": null,
+            "lastReadAt": "2024-01-01T00:00:00.000Z",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "insert",
+            "table": "progress",
+            "sql": "insert into \"progress\" (\"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\") values ($1, $2, $3, default, default, $4, $5) on conflict (\"user_id\",\"book_id\") do update set \"progress_position\" = $6, \"updated_at\" = $7 returning \"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\"",
+            "params": [
+              "owner-1",
+              "book-1",
+              "p1",
+              "<NOW>",
+              "<NOW>",
+              "p1",
+              "<NOW>"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-json-insert",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {
+            "progress_block": "p1",
+            "progress_chapter": "c1"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "insert",
+          "table": "progress",
+          "rows": [
+            {
+              "user_id": "owner-1",
+              "book_id": "book-1",
+              "progress_position": "p1",
+              "progress_chapter": "c1",
+              "last_read_at": "2024-01-01 00:00:00+00",
+              "created_at": "2024-01-01 00:00:00+00",
+              "updated_at": "2024-01-01 00:00:00+00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-json-insert",
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress saved",
+          "data": {
+            "userId": "owner-1",
+            "bookId": "book-1",
+            "progressPosition": "p1",
+            "progressChapter": "c1",
+            "lastReadAt": "2024-01-01T00:00:00.000Z",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "insert",
+            "table": "progress",
+            "sql": "insert into \"progress\" (\"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\") values ($1, $2, $3, $4, default, $5, $6) on conflict (\"user_id\",\"book_id\") do update set \"progress_position\" = $7, \"progress_chapter\" = $8, \"updated_at\" = $9 returning \"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\"",
+            "params": [
+              "owner-1",
+              "book-1",
+              "p1",
+              "c1",
+              "<NOW>",
+              "<NOW>",
+              "p1",
+              "c1",
+              "<NOW>"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-json-update",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {
+            "progress_block": "p1",
+            "progress_chapter": "c1"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "insert",
+          "table": "progress",
+          "rows": [
+            {
+              "user_id": "owner-1",
+              "book_id": "book-1",
+              "progress_position": "p1",
+              "progress_chapter": "c1",
+              "last_read_at": "2024-01-01 00:00:00+00",
+              "created_at": "2024-01-01 00:00:00+00",
+              "updated_at": "2024-01-01 00:00:00+00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-json-update",
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress saved",
+          "data": {
+            "userId": "owner-1",
+            "bookId": "book-1",
+            "progressPosition": "p1",
+            "progressChapter": "c1",
+            "lastReadAt": "2024-01-01T00:00:00.000Z",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "insert",
+            "table": "progress",
+            "sql": "insert into \"progress\" (\"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\") values ($1, $2, $3, $4, default, $5, $6) on conflict (\"user_id\",\"book_id\") do update set \"progress_position\" = $7, \"progress_chapter\" = $8, \"updated_at\" = $9 returning \"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\"",
+            "params": [
+              "owner-1",
+              "book-1",
+              "p1",
+              "c1",
+              "<NOW>",
+              "<NOW>",
+              "p1",
+              "c1",
+              "<NOW>"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-urlencoded-no-chapter",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "urlencoded",
+          "fields": {
+            "progress_block": "p1"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "insert",
+          "table": "progress",
+          "rows": [
+            {
+              "user_id": "owner-1",
+              "book_id": "book-1",
+              "progress_position": "p1",
+              "progress_chapter": null,
+              "last_read_at": "2024-01-01 00:00:00+00",
+              "created_at": "2024-01-01 00:00:00+00",
+              "updated_at": "2024-01-01 00:00:00+00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-post-urlencoded-no-chapter",
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress saved",
+          "data": {
+            "userId": "owner-1",
+            "bookId": "book-1",
+            "progressPosition": "p1",
+            "progressChapter": null,
+            "lastReadAt": "2024-01-01T00:00:00.000Z",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "insert",
+            "table": "progress",
+            "sql": "insert into \"progress\" (\"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\") values ($1, $2, $3, default, default, $4, $5) on conflict (\"user_id\",\"book_id\") do update set \"progress_position\" = $6, \"updated_at\" = $7 returning \"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\"",
+            "params": [
+              "owner-1",
+              "book-1",
+              "p1",
+              "<NOW>",
+              "<NOW>",
+              "p1",
+              "<NOW>"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-post-unauthenticated",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/books",
+        "body": {
+          "kind": "multipart",
+          "parts": [
+            {
+              "name": "file",
+              "filename": "Example.pdf",
+              "contentType": "application/pdf",
+              "text": "%PDF-synthetic\n"
+            }
+          ]
+        }
+      },
+      "db": [],
+      "capture": {
+        "id": "books-post-unauthenticated",
+        "status": 401,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "No token provided"
+        },
+        "effects": []
+      }
+    },
+    {
+      "id": "books-post-no-file",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/books",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "multipart",
+          "parts": [
+            {
+              "name": "title",
+              "text": "no file here"
+            }
+          ]
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-post-no-file",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "No file uploaded"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-post-invalid-file",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/books",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "multipart",
+          "parts": [
+            {
+              "name": "file",
+              "filename": "notabook.bin",
+              "contentType": "application/octet-stream",
+              "text": "this is not a pdf or epub"
+            }
+          ]
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-post-invalid-file",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Invalid PDF or EPUB file"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-post-unexpected-field",
+      "env": "production",
+      "intentionalDifference": "multipart-error-status",
+      "request": {
+        "method": "POST",
+        "path": "/api/books",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "multipart",
+          "parts": [
+            {
+              "name": "notfile",
+              "filename": "Example.pdf",
+              "contentType": "application/pdf",
+              "text": "%PDF-synthetic\n"
+            }
+          ]
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-post-unexpected-field",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-post-truncated-multipart",
+      "env": "production",
+      "intentionalDifference": "multipart-error-status",
+      "request": {
+        "method": "POST",
+        "path": "/api/books",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "multipart",
+          "truncateAt": 170,
+          "parts": [
+            {
+              "name": "file",
+              "filename": "Example.pdf",
+              "contentType": "application/pdf",
+              "text": "%PDF-synthetic\n"
+            }
+          ]
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-post-truncated-multipart",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "process",
+            "event": "uncaughtException",
+            "message": "Unexpected end of form"
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-list",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-list",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "books": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "userId": "owner-1",
+              "fileKey": "file-1",
+              "fileType": "pdf",
+              "collectionName": "collection-1",
+              "processingStatus": "ready",
+              "processingError": null,
+              "createdAt": "2024-01-01T00:00:00.000Z"
+            }
+          ]
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"user_id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-status-ready",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/book-1/status",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-status-ready",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "bookId": "book-1",
+          "fileType": "pdf",
+          "ready": true,
+          "status": "ready",
+          "error": null
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-status-missing",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/missing-book/status",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "books-status-missing",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Book was not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "missing-book"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-status-nonowner",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/book-1/status",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "other-user-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-status-nonowner",
+        "status": 403,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Not authorized"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-retry-ready",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/books/book-1/retry",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-retry-ready",
+        "status": 409,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Book is not retryable"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-retry-missing",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/books/missing-book/retry",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "books-retry-missing",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Book was not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "missing-book"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-retry-nonowner",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/books/book-1/retry",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "other-user-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-retry-nonowner",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Book was not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-file-pdf",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/book-1",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "stubs": {
+        "getFile": {
+          "base64": "JVBERi1zeW50aGV0aWMK"
+        }
+      },
+      "capture": {
+        "id": "books-file-pdf",
+        "status": 200,
+        "headers": {
+          "content-type": "application/pdf",
+          "cache-control": "private",
+          "x-content-type-options": "nosniff",
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "encoding": "base64",
+          "data": "JVBERi1zeW50aGV0aWMK"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          },
+          {
+            "type": "external",
+            "target": "storage.getFile",
+            "key": "file-1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-file-epub",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/book-1",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "epub",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "stubs": {
+        "getFile": {
+          "base64": "JVBERi1zeW50aGV0aWMK"
+        }
+      },
+      "capture": {
+        "id": "books-file-epub",
+        "status": 200,
+        "headers": {
+          "content-type": "application/epub+zip",
+          "cache-control": "private",
+          "x-content-type-options": "nosniff",
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "encoding": "base64",
+          "data": "JVBERi1zeW50aGV0aWMK"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          },
+          {
+            "type": "external",
+            "target": "storage.getFile",
+            "key": "file-1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-file-null-type",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/book-1",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": null,
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "stubs": {
+        "getFile": {
+          "base64": "JVBERi1zeW50aGV0aWMK"
+        }
+      },
+      "capture": {
+        "id": "books-file-null-type",
+        "status": 200,
+        "headers": {
+          "content-type": "application/octet-stream",
+          "cache-control": "private",
+          "x-content-type-options": "nosniff",
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "encoding": "base64",
+          "data": "JVBERi1zeW50aGV0aWMK"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          },
+          {
+            "type": "external",
+            "target": "storage.getFile",
+            "key": "file-1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-file-missing",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/missing-book",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "books-file-missing",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Book was not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "missing-book"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-file-nonowner",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/book-1",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "other-user-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "books-file-nonowner",
+        "status": 403,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Not authorized"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-file-storage-error",
+      "env": "production",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/book-1",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "stubs": {
+        "getFile": {
+          "error": "storage backend unavailable"
+        }
+      },
+      "capture": {
+        "id": "books-file-storage-error",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Internal server error"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          },
+          {
+            "type": "external",
+            "target": "storage.getFile",
+            "key": "file-1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-file-head",
+      "env": "test",
+      "request": {
+        "method": "HEAD",
+        "path": "/api/books/book-1",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "stubs": {
+        "getFile": {
+          "base64": "JVBERi1zeW50aGV0aWMK"
+        }
+      },
+      "capture": {
+        "id": "books-file-head",
+        "status": 200,
+        "headers": {
+          "content-type": "application/pdf",
+          "cache-control": "private",
+          "x-content-type-options": "nosniff",
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": null,
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          },
+          {
+            "type": "external",
+            "target": "storage.getFile",
+            "key": "file-1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "books-file-conditional-etag",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/books/book-1",
+        "cookies": [
+          "valid"
+        ],
+        "ifNoneMatchFrom": "books-file-pdf"
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "stubs": {
+        "getFile": {
+          "base64": "JVBERi1zeW50aGV0aWMK"
+        }
+      },
+      "capture": {
+        "id": "books-file-conditional-etag",
+        "status": 304,
+        "headers": {
+          "content-type": null,
+          "cache-control": "private",
+          "x-content-type-options": "nosniff",
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": null,
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          },
+          {
+            "type": "external",
+            "target": "storage.getFile",
+            "key": "file-1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-get-missing-book",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "progress-get-missing-book",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Book not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-get-nonowner",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "progress-get-nonowner",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Book not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-get-none",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "progress",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "progress-get-none",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "progressPosition": null
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "progress",
+            "sql": "select \"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\" from \"progress\" where (\"progress\".\"user_id\" = $1 and \"progress\".\"book_id\" = $2)",
+            "params": [
+              "owner-1",
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-get-existing",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "progress",
+          "rows": [
+            {
+              "user_id": "owner-1",
+              "book_id": "book-1",
+              "progress_position": "p1",
+              "progress_chapter": "c1",
+              "last_read_at": "2024-01-01 00:00:00+00",
+              "created_at": "2024-01-01 00:00:00+00",
+              "updated_at": "2024-01-01 00:00:00+00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "progress-get-existing",
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "progressPosition": "p1",
+          "progressChapter": "c1"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "progress",
+            "sql": "select \"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\" from \"progress\" where (\"progress\".\"user_id\" = $1 and \"progress\".\"book_id\" = $2)",
+            "params": [
+              "owner-1",
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-get-db-error",
+      "env": "production",
+      "request": {
+        "method": "GET",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "error": "connection reset"
+        }
+      ],
+      "capture": {
+        "id": "progress-get-db-error",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Internal server error"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ],
+            "error": "connection reset"
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-post-db-error",
+      "env": "production",
+      "request": {
+        "method": "POST",
+        "path": "/api/book-1/progress",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "urlencoded",
+          "fields": {
+            "progress_block": "p1",
+            "progress_chapter": "c1"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "insert",
+          "table": "progress",
+          "error": "connection reset"
+        }
+      ],
+      "capture": {
+        "id": "progress-post-db-error",
+        "status": 500,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "message": "Progress wasn't saved"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where (\"books\".\"id\" = $1 and \"books\".\"user_id\" = $2)",
+            "params": [
+              "book-1",
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "insert",
+            "table": "progress",
+            "sql": "insert into \"progress\" (\"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\") values ($1, $2, $3, $4, default, $5, $6) on conflict (\"user_id\",\"book_id\") do update set \"progress_position\" = $7, \"progress_chapter\" = $8, \"updated_at\" = $9 returning \"user_id\", \"book_id\", \"progress_position\", \"progress_chapter\", \"last_read_at\", \"created_at\", \"updated_at\"",
+            "params": [
+              "owner-1",
+              "book-1",
+              "p1",
+              "c1",
+              "<NOW>",
+              "<NOW>",
+              "p1",
+              "c1",
+              "<NOW>"
+            ],
+            "error": "connection reset"
+          }
+        ]
+      }
+    },
+    {
+      "id": "chat-create-empty-body",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book/book-1/conversations",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {}
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "chat-create-empty-body",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Message is required"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "chat-create-blank-message",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book/book-1/conversations",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {
+            "message": "   "
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "chat-create-blank-message",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Message is required"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "chat-create-unsupported-model",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/book/book-1/conversations",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {
+            "message": "hello",
+            "model": "gpt-99-turbo"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "chat-create-unsupported-model",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Unsupported chat model"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "chat-append-unsupported-resource",
+      "env": "test",
+      "request": {
+        "method": "POST",
+        "path": "/api/widget/book-1/conversations/conv-1/messages",
+        "cookies": [
+          "valid"
+        ],
+        "body": {
+          "kind": "json",
+          "value": {
+            "message": "hello"
+          }
+        }
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "chat-append-unsupported-resource",
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": "http://localhost:5173",
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Invalid request"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "chat-list-missing-book",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/book/missing-book/conversations",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "chat-list-missing-book",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Book not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"user_id\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "missing-book"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "chat-list-nonowner",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/book/book-1/conversations",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "user_id": "other-user-1"
+            }
+          ]
+        }
+      ],
+      "capture": {
+        "id": "chat-list-nonowner",
+        "status": 403,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Book access denied"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"user_id\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "chat-details-missing",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/book/book-1/conversations/conv-missing",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "user_id": "owner-1"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "conversations",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "chat-details-missing",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Conversation not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"user_id\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "conversations",
+            "sql": "select \"id\", \"user_id\", \"title\", \"created_at\", \"last_message_at\", \"resource_type\", \"resource_id\" from \"conversations\" where (\"conversations\".\"id\" = $1 and \"conversations\".\"user_id\" = $2 and \"conversations\".\"resource_type\" = $3 and \"conversations\".\"resource_id\" = $4)",
+            "params": [
+              "conv-missing",
+              "owner-1",
+              "book",
+              "book-1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "chat-details-wrong-scope",
+      "env": "test",
+      "request": {
+        "method": "GET",
+        "path": "/api/book/book-1/conversations/conv-other",
+        "cookies": [
+          "valid"
+        ]
+      },
+      "db": [
+        {
+          "op": "select",
+          "table": "users",
+          "rows": [
+            {
+              "id": "owner-1",
+              "email": "owner@example.com",
+              "name": "Owner",
+              "image": null,
+              "google_id": "google-owner",
+              "password": null,
+              "username": "owner",
+              "created_at": "2024-01-01 00:00:00",
+              "updated_at": "2024-01-01 00:00:00"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "user_id": "owner-1"
+            }
+          ]
+        },
+        {
+          "op": "select",
+          "table": "conversations",
+          "rows": []
+        }
+      ],
+      "capture": {
+        "id": "chat-details-wrong-scope",
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": null,
+          "x-content-type-options": null,
+          "access-control-allow-origin": null,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-methods": null,
+          "access-control-allow-headers": null,
+          "vary": "Origin",
+          "retry-after": null
+        },
+        "cookies": [],
+        "body": {
+          "error": "Conversation not found"
+        },
+        "effects": [
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "users",
+            "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
+            "params": [
+              "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"user_id\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "conversations",
+            "sql": "select \"id\", \"user_id\", \"title\", \"created_at\", \"last_message_at\", \"resource_type\", \"resource_id\" from \"conversations\" where (\"conversations\".\"id\" = $1 and \"conversations\".\"user_id\" = $2 and \"conversations\".\"resource_type\" = $3 and \"conversations\".\"resource_id\" = $4)",
+            "params": [
+              "conv-other",
+              "owner-1",
+              "book",
+              "book-1"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

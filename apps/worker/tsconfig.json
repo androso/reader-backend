@@ -4,6 +4,8 @@
     "compilerOptions": {
         "target": "es2019",
         "moduleResolution": "node",
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
         "rootDir": "./src",
         "outDir": "./build"
     }

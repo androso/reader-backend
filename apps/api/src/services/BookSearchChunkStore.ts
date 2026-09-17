@@ -22,16 +22,18 @@ const normalizeChunk = (
         ? { content: chunk, metadata: null }
         : { content: chunk.content, metadata: chunk.metadata };
 
-export const bookSearchChunkStore: SearchIndexStore & {
+export const createBookSearchChunkStore = (
+    database = db
+): SearchIndexStore & {
     getCollectionChunks(collectionName: string): Promise<BookSearchChunk[]>;
     deleteCollectionChunks(collectionName: string): Promise<void>;
-} = {
+} => ({
     async replaceCollectionChunks(collectionName, chunks) {
         log.info("Replacing collection chunks in DB", {
             collectionName,
             chunkCount: chunks.length,
         });
-        await db.transaction(async (tx) => {
+        await database.transaction(async (tx) => {
             await tx
                 .delete(BookSearchChunks)
                 .where(eq(BookSearchChunks.collectionName, collectionName));
@@ -59,7 +61,7 @@ export const bookSearchChunkStore: SearchIndexStore & {
 
     async getCollectionChunks(collectionName) {
         log.debug("Fetching collection chunks from DB", { collectionName });
-        const chunks = await db
+        const chunks = await database
             .select()
             .from(BookSearchChunks)
             .where(eq(BookSearchChunks.collectionName, collectionName))
@@ -73,9 +75,11 @@ export const bookSearchChunkStore: SearchIndexStore & {
 
     async deleteCollectionChunks(collectionName) {
         log.info("Deleting collection chunks from DB", { collectionName });
-        await db
+        await database
             .delete(BookSearchChunks)
             .where(eq(BookSearchChunks.collectionName, collectionName));
         log.info("Deleted collection chunks from DB", { collectionName });
     },
-};
+});
+
+export const bookSearchChunkStore = createBookSearchChunkStore();

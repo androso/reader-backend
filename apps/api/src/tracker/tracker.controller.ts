@@ -72,7 +72,7 @@ export class TrackerController {
         try {
             const user_id = user.id;
             const book_id = rid;
-            const { progress_block, progress_chapter } = body;
+            const { progress_block, progress_chapter } = body ?? {};
 
             if (!progress_block) {
                 throw new BadRequestException({

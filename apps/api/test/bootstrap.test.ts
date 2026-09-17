@@ -6,24 +6,59 @@ import { createTestApp } from "./helpers/nestApp";
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "reader-api-test-secret";
 process.env.FRONTEND_URL = "http://localhost:5173";
 
-const { createApp } =
-    require("../src/bootstrap") as typeof import("../src/bootstrap");
+const { RATE_LIMIT_CLIENT } =
+    require("../src/common/rate-limit.module") as typeof import("../src/common/rate-limit.module");
 
-type NestApp = Awaited<ReturnType<typeof createApp>>;
+const throwingDb = new Proxy(
+    {},
+    {
+        get: (_target, prop) => {
+            if (
+                typeof prop === "symbol" ||
+                prop === "then" ||
+                prop === "catch" ||
+                prop === "finally" ||
+                prop === "onModuleInit" ||
+                prop === "onApplicationBootstrap" ||
+                prop === "onModuleDestroy" ||
+                prop === "beforeApplicationShutdown" ||
+                prop === "onApplicationShutdown"
+            ) {
+                return undefined;
+            }
+            return () => {
+                throw new Error(
+                    "unexpected database access in bootstrap tests"
+                );
+            };
+        },
+    }
+);
+
+type NestApp = Awaited<ReturnType<typeof createTestApp>>["app"];
 
 let app: NestApp;
 let baseUrl: string;
+let closeApp: () => Promise<void>;
 
 before(async () => {
-    app = await createApp();
-    await app.listen(0);
-    const address = app.getHttpServer().address();
-    const port = typeof address === "object" && address ? address.port : 0;
-    baseUrl = `http://127.0.0.1:${port}`;
+    const testApp = await createTestApp({
+        fullStack: true,
+        db: throwingDb,
+        overrides: [
+            {
+                token: RATE_LIMIT_CLIENT,
+                useValue: { get: () => null, close: async () => {} },
+            },
+        ],
+    });
+    app = testApp.app;
+    baseUrl = testApp.baseUrl;
+    closeApp = testApp.close;
 });
 
 after(async () => {
-    await app.close();
+    await closeApp();
 });
 
 test("GET /health reaches the legacy router through Nest", async () => {

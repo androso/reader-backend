@@ -3,7 +3,6 @@ import { HttpAdapterHost } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { ModuleMetadata, Provider, Type } from "@nestjs/common";
 import type { Request } from "express";
-import { AuthGuard } from "../../src/common/guards/auth.guard";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { DRIZZLE } from "../../src/database/database.module";
 import type { User } from "../../src/types";
@@ -14,16 +13,31 @@ export type TestAppOptions = {
     imports?: ModuleMetadata["imports"];
     user?: User;
     db?: unknown;
+    fullStack?: boolean;
+    overrides?: Array<{
+        token: string | symbol | Type<unknown>;
+        useValue: unknown;
+    }>;
 };
 
 export const createTestApp = async (options: TestAppOptions) => {
+    const imports = options.fullStack
+        ? (options.imports ?? [
+              (
+                  require("../../src/app.module") as typeof import("../../src/app.module")
+              ).AppModule,
+          ])
+        : (options.imports ?? []);
+
     let builder = Test.createTestingModule({
-        imports: options.imports ?? [],
+        imports,
         controllers: options.controllers ?? [],
         providers: options.providers ?? [],
     });
 
     if (options.user !== undefined) {
+        const { AuthGuard } =
+            require("../../src/common/guards/auth.guard") as typeof import("../../src/common/guards/auth.guard");
         builder = builder.overrideGuard(AuthGuard).useValue({
             canActivate: (context: {
                 switchToHttp: () => { getRequest: <T>() => T };
@@ -37,12 +51,28 @@ export const createTestApp = async (options: TestAppOptions) => {
     if (options.db !== undefined) {
         builder = builder.overrideProvider(DRIZZLE).useValue(options.db);
     }
+    for (const override of options.overrides ?? []) {
+        builder = builder
+            .overrideProvider(override.token)
+            .useValue(override.useValue);
+    }
 
     const moduleRef = await builder.compile();
-    const app = moduleRef.createNestApplication<NestExpressApplication>();
-    app.useGlobalFilters(
-        new AllExceptionsFilter(app.get(HttpAdapterHost).httpAdapter)
-    );
+    const app = options.fullStack
+        ? moduleRef.createNestApplication<NestExpressApplication>({
+              bodyParser: false,
+          })
+        : moduleRef.createNestApplication<NestExpressApplication>();
+
+    if (options.fullStack) {
+        const { configureApp } =
+            require("../../src/bootstrap") as typeof import("../../src/bootstrap");
+        configureApp(app);
+    } else {
+        app.useGlobalFilters(
+            new AllExceptionsFilter(app.get(HttpAdapterHost).httpAdapter)
+        );
+    }
     await app.listen(0);
 
     const address = app.getHttpServer().address();

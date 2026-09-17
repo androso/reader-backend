@@ -48,7 +48,7 @@ export const generateToken = (user: any) => {
     return tk;
 };
 
-export const getOrCreateDevUser = async () => {
+export const getOrCreateDevUser = async (database = db) => {
     if (process.env.NODE_ENV === "production") {
         throw new Error("Dev auth is not available in production");
     }
@@ -56,14 +56,14 @@ export const getOrCreateDevUser = async () => {
     const email = process.env.DEV_USER_EMAIL || "dev@example.com";
     const name = process.env.DEV_USER_NAME || "Dev User";
 
-    const [existingUser] = await db
+    const [existingUser] = await database
         .select()
         .from(Users)
         .where(eq(Users.email, email));
 
     if (existingUser) return existingUser;
 
-    const [user] = await db
+    const [user] = await database
         .insert(Users)
         .values({
             email,
@@ -75,13 +75,13 @@ export const getOrCreateDevUser = async () => {
     return user;
 };
 
-export const verifyToken = async (token: any) => {
+export const verifyToken = async (token: any, database = db) => {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
             userId: string;
         };
 
-        const [user] = await db
+        const [user] = await database
             .select()
             .from(Users)
             .where(eq(Users.id, decoded.userId));

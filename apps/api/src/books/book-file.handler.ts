@@ -9,7 +9,7 @@ type BookFileRecord = Pick<
     "id" | "userId" | "fileKey" | "fileType"
 >;
 
-type BookFileDependencies = {
+export type BookFileDependencies = {
     findBookById(bookId: string): Promise<BookFileRecord | undefined>;
     getFile(fileKey: string): Promise<Buffer>;
 };

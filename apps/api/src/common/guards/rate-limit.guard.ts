@@ -2,24 +2,17 @@ import {
     CanActivate,
     ExecutionContext,
     HttpException,
+    Inject,
     Injectable,
     Type,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
-import Redis from "ioredis";
+import {
+    RATE_LIMIT_CLIENT,
+    type RateLimitClientOwner,
+} from "../rate-limit.module";
 
-let redis: Redis | null = null;
-const getRedis = () => {
-    if (!process.env.REDIS_URL) return null;
-    redis ??= new Redis(process.env.REDIS_URL, {
-        lazyConnect: true,
-        maxRetriesPerRequest: 1,
-        enableOfflineQueue: false,
-    });
-    return redis;
-};
-
-const fixedWindowScript = `
+export const fixedWindowScript = `
 local count = redis.call("INCR", KEYS[1])
 if count == 1 then redis.call("EXPIRE", KEYS[1], ARGV[1]) end
 return {count, redis.call("TTL", KEYS[1])}
@@ -33,10 +26,15 @@ export const createRateLimitGuard = (
 ): Type<CanActivate> => {
     @Injectable()
     class RateLimitGuard implements CanActivate {
+        constructor(
+            @Inject(RATE_LIMIT_CLIENT)
+            private readonly rateLimitClient: RateLimitClientOwner
+        ) {}
+
         async canActivate(context: ExecutionContext): Promise<boolean> {
             const req = context.switchToHttp().getRequest<Request>();
             const res = context.switchToHttp().getResponse<Response>();
-            const client = getRedis();
+            const client = this.rateLimitClient.get();
             if (!client) return true;
             try {
                 if (client.status === "wait") await client.connect();

@@ -26,10 +26,12 @@ export class BookProcessingQueueUnavailableError extends Error {
 const getErrorMessage = (error: unknown) =>
     error instanceof Error ? error.message : "Unknown error";
 
-const bookProcessingEnqueueRepository: BookProcessingEnqueueRepository = {
+export const createBookProcessingEnqueueRepository = (
+    database = db
+): BookProcessingEnqueueRepository => ({
     async markQueueFailed(bookId, error) {
         log.error("Marking book queue failed", { bookId, error });
-        await db
+        await database
             .update(Books)
             .set({
                 processingStatus: "queue_failed",
@@ -38,7 +40,9 @@ const bookProcessingEnqueueRepository: BookProcessingEnqueueRepository = {
             .where(eq(Books.id, bookId));
         log.error("Book queue marked failed", { bookId, error });
     },
-};
+});
+
+const bookProcessingEnqueueRepository = createBookProcessingEnqueueRepository();
 
 export const handleBookProcessingEnqueue = async (
     payload: BookProcessingJobData,

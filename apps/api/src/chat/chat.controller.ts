@@ -30,16 +30,7 @@ import {
 } from "../services/ChatServerHistory";
 import { normalizeHighlightContext } from "../services/HighlightContext";
 import type { User } from "../types";
-import {
-    authorizeRequestResource,
-    chatResourceRepository,
-    findScopedConversation,
-    loadConversationHistory,
-    resolveChatModel,
-    runBookChatTraceIfNeeded,
-    runChatCompletion,
-    touchConversation,
-} from "./chat-stream";
+import { CHAT_OPERATIONS, type ChatOperations } from "./chat-stream";
 
 type ChatRequestBody = {
     model?: unknown;
@@ -49,7 +40,10 @@ type ChatRequestBody = {
 @Controller("api")
 @UseGuards(AuthGuard)
 export class ChatController {
-    constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+    constructor(
+        @Inject(DRIZZLE) private readonly db: Database,
+        @Inject(CHAT_OPERATIONS) private readonly operations: ChatOperations
+    ) {}
 
     @Post(":resourceType/:id/conversations")
     @HttpCode(200)
@@ -69,7 +63,7 @@ export class ChatController {
             const highlightContext = normalizeHighlightContext(
                 body?.highlightContext
             );
-            const chatModel = resolveChatModel(body?.model);
+            const chatModel = this.operations.resolveChatModel(body?.model);
             if (!chatModel) {
                 throw new HttpException(
                     { error: "Unsupported chat model" },
@@ -81,7 +75,7 @@ export class ChatController {
                 resourceId,
                 userId: req.user.id,
                 title: message.substring(0, 50) + "...",
-                repository: chatResourceRepository,
+                repository: this.operations.chatResourceRepository,
             });
             if (!creation.ok) {
                 throw new HttpException(
@@ -105,12 +99,12 @@ export class ChatController {
                 .insert(Messages)
                 .values(buildUserMessageInsert(conversation.id, message))
                 .returning({ id: Messages.id });
-            await touchConversation(conversation.id);
+            await this.operations.touchConversation(conversation.id);
 
             const abortController = new AbortController();
             req.once("aborted", () => abortController.abort());
 
-            await runBookChatTraceIfNeeded(
+            await this.operations.runBookChatTraceIfNeeded(
                 {
                     resourceType,
                     resourceId,
@@ -122,7 +116,7 @@ export class ChatController {
                     hasHighlightContext: Boolean(highlightContext),
                 },
                 (trace) =>
-                    runChatCompletion({
+                    this.operations.runChatCompletion({
                         resourceType,
                         resourceId,
                         conversationId: conversation.id,
@@ -157,11 +151,12 @@ export class ChatController {
         @CurrentUser() user: User
     ) {
         try {
-            const authorization = await authorizeRequestResource({
-                resourceType,
-                resourceId,
-                userId: user.id,
-            });
+            const authorization =
+                await this.operations.authorizeRequestResource({
+                    resourceType,
+                    resourceId,
+                    userId: user.id,
+                });
 
             const conversations = await this.db
                 .select()
@@ -216,20 +211,21 @@ export class ChatController {
             const highlightContext = normalizeHighlightContext(
                 body?.highlightContext
             );
-            const chatModel = resolveChatModel(body?.model);
+            const chatModel = this.operations.resolveChatModel(body?.model);
             if (!chatModel) {
                 throw new HttpException(
                     { error: "Unsupported chat model" },
                     400
                 );
             }
-            const authorization = await authorizeRequestResource({
-                resourceType,
-                resourceId,
-                userId: req.user.id,
-            });
+            const authorization =
+                await this.operations.authorizeRequestResource({
+                    resourceType,
+                    resourceId,
+                    userId: req.user.id,
+                });
 
-            const conversation = await findScopedConversation({
+            const conversation = await this.operations.findScopedConversation({
                 conversationId,
                 userId: req.user.id,
                 resourceType: authorization.resourceType,
@@ -248,19 +244,19 @@ export class ChatController {
             res.setHeader("Connection", "keep-alive");
 
             const messages = appendSubmittedUserMessage(
-                await loadConversationHistory(conversationId),
+                await this.operations.loadConversationHistory(conversationId),
                 message
             );
             const [userMessage] = await this.db
                 .insert(Messages)
                 .values(buildUserMessageInsert(conversationId, message))
                 .returning({ id: Messages.id });
-            await touchConversation(conversationId);
+            await this.operations.touchConversation(conversationId);
 
             const abortController = new AbortController();
             req.once("aborted", () => abortController.abort());
 
-            await runBookChatTraceIfNeeded(
+            await this.operations.runBookChatTraceIfNeeded(
                 {
                     resourceType,
                     resourceId,
@@ -272,7 +268,7 @@ export class ChatController {
                     hasHighlightContext: Boolean(highlightContext),
                 },
                 (trace) =>
-                    runChatCompletion({
+                    this.operations.runChatCompletion({
                         resourceType,
                         resourceId,
                         conversationId,
@@ -308,13 +304,14 @@ export class ChatController {
         @CurrentUser() user: User
     ) {
         try {
-            const authorization = await authorizeRequestResource({
-                resourceType,
-                resourceId,
-                userId: user.id,
-            });
+            const authorization =
+                await this.operations.authorizeRequestResource({
+                    resourceType,
+                    resourceId,
+                    userId: user.id,
+                });
 
-            const conversation = await findScopedConversation({
+            const conversation = await this.operations.findScopedConversation({
                 conversationId,
                 userId: user.id,
                 resourceType: authorization.resourceType,

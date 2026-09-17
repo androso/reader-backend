@@ -1,86 +1,74 @@
-import { Worker } from "bullmq";
-import {
-    BOOK_PROCESSING_QUEUE_NAME,
-    RAG_RERANK_SHADOW_CONCURRENCY,
-    RAG_RERANK_SHADOW_MAX_STARTED_ATTEMPTS,
-    RAG_RERANK_SHADOW_QUEUE_NAME,
-    getRedisConnectionOptions,
-    parseRagRerankShadowRateLimit,
-    type BookProcessingJobData,
-    type RagRerankShadowJobData,
-} from "@reader/jobs";
-import {
-    getRagShadowFailureMetadata,
-    processBookProcessingJob,
-    processRagRerankShadowJob,
-} from "./processor";
-import {
-    closeDatabasePool,
-    shutdownLangfuseTracing,
-    startLangfuseTracing,
-} from "@reader/api/rag-shadow";
+import "reflect-metadata";
+import type { INestApplicationContext } from "@nestjs/common";
+import { createWorkerApp } from "./bootstrap";
 
-startLangfuseTracing("reader-worker");
+export interface WorkerProcessSignals {
+    on(signal: NodeJS.Signals, listener: () => void): void;
+    removeListener(signal: NodeJS.Signals, listener: () => void): void;
+}
 
-const worker = new Worker<BookProcessingJobData>(
-    BOOK_PROCESSING_QUEUE_NAME,
-    (job) => processBookProcessingJob(job),
-    {
-        connection: getRedisConnectionOptions(),
-    }
-);
+export interface WorkerProcessDependencies {
+    createApp: () => Promise<Pick<INestApplicationContext, "close">>;
+    signals: WorkerProcessSignals;
+    exit: (code: number) => void;
+    logError: (...args: unknown[]) => void;
+}
 
-const shadowWorker = new Worker<RagRerankShadowJobData>(
-    RAG_RERANK_SHADOW_QUEUE_NAME,
-    (job) => processRagRerankShadowJob(job),
-    {
-        connection: getRedisConnectionOptions(),
-        concurrency: RAG_RERANK_SHADOW_CONCURRENCY,
-        maxStartedAttempts: RAG_RERANK_SHADOW_MAX_STARTED_ATTEMPTS,
-        limiter: {
-            max: parseRagRerankShadowRateLimit(
-                process.env.RAG_RERANK_SHADOW_RATE_LIMIT_PER_MINUTE
-            ),
-            duration: 60_000,
-        },
-    }
-);
+export const runWorkerProcess = (
+    deps: WorkerProcessDependencies
+): Promise<void> => {
+    let finished = false;
+    let closing: Promise<void> | undefined;
+    let resolveFinished!: () => void;
+    const finishedPromise = new Promise<void>((resolve) => {
+        resolveFinished = resolve;
+    });
 
-worker.on("completed", (job) => {
-    console.log(`Book processing job ${job.id} completed`);
-});
+    const finish = (code: number, error?: unknown) => {
+        if (finished) return;
+        finished = true;
+        if (error !== undefined) deps.logError(error);
+        deps.signals.removeListener("SIGINT", onSignal);
+        deps.signals.removeListener("SIGTERM", onSignal);
+        deps.exit(code);
+        resolveFinished();
+    };
 
-worker.on("failed", (job, error) => {
-    console.error(`Book processing job ${job?.id ?? "unknown"} failed`, error);
-});
+    const appPromise = Promise.resolve().then(() => deps.createApp());
 
-shadowWorker.on("completed", (job) => {
-    console.log(`RAG shadow job ${job.id} completed`);
-});
+    const onSignal = () => {
+        closing ??= appPromise.then((app) => app.close());
+        void closing.then(
+            () => finish(0),
+            (error: unknown) => finish(1, error)
+        );
+    };
 
-shadowWorker.on("failed", (job, error) => {
-    console.error(
-        "RAG shadow job failed",
-        getRagShadowFailureMetadata(job, error)
+    deps.signals.on("SIGINT", onSignal);
+    deps.signals.on("SIGTERM", onSignal);
+
+    void appPromise.then(
+        () => undefined,
+        (error: unknown) => finish(1, error)
     );
-});
 
-const shutdown = async () => {
-    console.log("Shutting down book processing worker");
-    await Promise.all([worker.close(), shadowWorker.close()]);
-    await Promise.all([shutdownLangfuseTracing(), closeDatabasePool()]);
-    process.exit(0);
+    return finishedPromise;
 };
 
-process.on("SIGTERM", () => {
-    void shutdown();
-});
+const defaultWorkerProcessDependencies: WorkerProcessDependencies = {
+    createApp: createWorkerApp,
+    signals: {
+        on: (signal, listener) => {
+            process.on(signal, listener);
+        },
+        removeListener: (signal, listener) => {
+            process.removeListener(signal, listener);
+        },
+    },
+    exit: (code) => process.exit(code),
+    logError: (...args) => console.error(...args),
+};
 
-process.on("SIGINT", () => {
-    void shutdown();
-});
-
-console.log(
-    `Book processing worker listening on ${BOOK_PROCESSING_QUEUE_NAME}`
-);
-console.log(`RAG shadow worker listening on ${RAG_RERANK_SHADOW_QUEUE_NAME}`);
+if (require.main === module) {
+    void runWorkerProcess(defaultWorkerProcessDependencies);
+}

@@ -1,8 +1,10 @@
 import { NestFactory, HttpAdapterHost } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { attachApiLifecycle, defaultApiResources } from "./api-lifecycle";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { handleBodyParserError } from "./common/middleware/body-errors";
 import { enforceTrustedOrigin } from "./common/middleware/csrf";
 import { logger } from "./common/middleware/request-logger";
 
@@ -39,13 +41,11 @@ export const corsOptions = {
     credentials: true,
 };
 
-export async function createApp(): Promise<NestExpressApplication> {
-    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-        bodyParser: false,
-    });
+export function configureApp(app: NestExpressApplication): void {
     app.enableCors(corsOptions);
     app.useBodyParser("json");
     app.useBodyParser("urlencoded", { extended: false });
+    app.use(handleBodyParserError);
     app.use(logger);
     app.use(enforceTrustedOrigin);
     app.useGlobalFilters(
@@ -65,5 +65,29 @@ export async function createApp(): Promise<NestExpressApplication> {
         app,
         SwaggerModule.createDocument(app, config)
     );
-    return app;
+}
+
+export async function createApp(): Promise<NestExpressApplication> {
+    let app: NestExpressApplication | undefined;
+    try {
+        app = await NestFactory.create<NestExpressApplication>(AppModule, {
+            bodyParser: false,
+            abortOnError: false,
+        });
+        attachApiLifecycle(app, defaultApiResources);
+        configureApp(app);
+        return app;
+    } catch (error) {
+        const errors: unknown[] = [error];
+        try {
+            if (app) {
+                await app.close();
+            } else {
+                await defaultApiResources.close();
+            }
+        } catch (cleanupError) {
+            errors.push(cleanupError);
+        }
+        throw new AggregateError(errors, "API startup failed");
+    }
 }

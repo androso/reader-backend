@@ -275,6 +275,7 @@ export const shutdownLangfuseTracing = async () => {
         log.warn("Error shutting down Langfuse tracing", {
             error: getErrorMessage(error),
         });
+        throw error;
     }
 };
 

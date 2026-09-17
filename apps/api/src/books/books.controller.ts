@@ -26,12 +26,7 @@ import {
 } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import { randomUUID } from "node:crypto";
-import {
-    createLogger,
-    deleteFile,
-    uploadFile,
-    vectorStore,
-} from "@reader/providers";
+import { createLogger } from "@reader/providers";
 import { createBookCollectionName } from "@reader/processing";
 import { eq, sql } from "drizzle-orm";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -39,12 +34,10 @@ import { AuthGuard } from "../common/guards/auth.guard";
 import { UploadRateLimitGuard } from "../common/guards/rate-limit.guard";
 import { DRIZZLE, type Database } from "../database/database.module";
 import { Books } from "../db/schema";
-import { bookSearchChunkStore } from "../services/BookSearchChunkStore";
-import { hybridBookSearchService } from "../services/HybridBookSearchService";
-import { handleBookProcessingEnqueue } from "../services/BookProcessingEnqueueService";
 import { createOriginalUploadKey } from "../utils/uploadKeys";
 import { validateBookUpload } from "../utils/validateBookUpload";
 import { handleGetBookFile } from "./book-file.handler";
+import { BOOKS_PORTS, type BooksPorts } from "./books.ports";
 import type { User } from "../types";
 
 const log = createLogger("books");
@@ -54,7 +47,10 @@ const log = createLogger("books");
 @Controller("api/books")
 @UseGuards(AuthGuard)
 export class BooksController {
-    constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+    constructor(
+        @Inject(DRIZZLE) private readonly db: Database,
+        @Inject(BOOKS_PORTS) private readonly ports: BooksPorts
+    ) {}
 
     @Post()
     @HttpCode(202)
@@ -129,7 +125,7 @@ export class BooksController {
                 fileKey,
                 mimeType,
             });
-            await uploadFile(fileKey, fileBuffer);
+            await this.ports.uploadFile(fileKey, fileBuffer);
             log.info("File uploaded to storage", {
                 userId: user.id,
                 fileKey,
@@ -154,7 +150,7 @@ export class BooksController {
             });
 
             try {
-                await handleBookProcessingEnqueue({
+                await this.ports.enqueueBookProcessing({
                     bookId: book.id,
                     userId: book.userId,
                     fileKey: book.fileKey,
@@ -241,7 +237,7 @@ export class BooksController {
             })
             .where(eq(Books.id, book.id));
         try {
-            await handleBookProcessingEnqueue({
+            await this.ports.enqueueBookProcessing({
                 bookId: book.id,
                 userId: book.userId,
                 fileKey: book.fileKey,
@@ -293,8 +289,8 @@ export class BooksController {
     @ApiResponse({ status: 200, description: "Book successfully fetched" })
     @ApiResponse({ status: 401, description: "Authentication failed" })
     @ApiResponse({ status: 500, description: "Internal server error" })
-    getBookFile(@Req() req: Request, @Res() res: Response) {
-        void handleGetBookFile(req, res);
+    async getBookFile(@Req() req: Request, @Res() res: Response) {
+        await handleGetBookFile(req, res, this.ports.bookFile);
     }
 
     @Delete(":id")
@@ -334,7 +330,7 @@ export class BooksController {
                     fileKey: book.fileKey,
                     collectionName: book.collectionName,
                 });
-                await deleteFile(book.fileKey);
+                await this.ports.deleteFile(book.fileKey);
             } else {
                 log.debug("Skipping cleanup, file still referenced", {
                     fileKey: book.fileKey,
@@ -344,9 +340,9 @@ export class BooksController {
 
             const collectionName =
                 book.collectionName ?? createBookCollectionName(book.id);
-            await vectorStore.deleteCollection(collectionName);
-            await bookSearchChunkStore.deleteCollectionChunks(collectionName);
-            hybridBookSearchService.clearCollectionCache(collectionName);
+            await this.ports.deleteVectorCollection(collectionName);
+            await this.ports.deleteCollectionChunks(collectionName);
+            this.ports.clearCollectionCache(collectionName);
 
             await this.db.delete(Books).where(eq(Books.id, bookId));
             log.info("Book record deleted after cleanup", { bookId });
