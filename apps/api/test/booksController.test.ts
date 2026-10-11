@@ -22,7 +22,7 @@ const { DRIZZLE, DatabaseModule } =
     require("../src/database/database.module") as typeof import("../src/database/database.module");
 const { BOOKS_PORTS } =
     require("../src/books/books.ports") as typeof import("../src/books/books.ports");
-const { BooksModule } =
+const { BooksModule, BOOKS_USE_CASE_PROVIDERS } =
     require("../src/books/books.module") as typeof import("../src/books/books.module");
 const { createBookProcessingEnqueueRepository, handleBookProcessingEnqueue } =
     require("../src/services/BookProcessingEnqueueService") as typeof import("../src/services/BookProcessingEnqueueService");
@@ -251,6 +251,7 @@ const createBooksTestApp = (scripted: { db: unknown }, ports: BooksPorts) =>
     createTestApp({
         controllers: [BooksController],
         providers: [
+            ...BOOKS_USE_CASE_PROVIDERS,
             { provide: DRIZZLE, useValue: scripted.db },
             { provide: BOOKS_PORTS, useValue: ports },
             { provide: RATE_LIMIT_CLIENT, useValue: INERT_RATE_LIMIT },

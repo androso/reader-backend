@@ -28,3 +28,9 @@ NestJS 11 on `@nestjs/platform-express` (Express 5). Entry point stays `src/inde
 
 - `node --test` against `tsc` output — no jest/supertest. Use `test/helpers/nestApp.ts` `createTestApp()` + global `fetch`.
 - No live Postgres/Redis in tests: mock the `DRIZZLE` provider (`overrideProvider`/`useValue`), rate-limit guards no-op without `REDIS_URL`, and set `process.env.JWT_SECRET ??=` before importing anything that pulls in `AuthService` (env must precede `require()` since imports hoist).
+
+## Clean Architecture (book processing slice)
+
+- The dependency direction is `apps/api` and `apps/worker` → `@reader/application` → `@reader/domain`. Infrastructure adapters live in `apps/api/src/infrastructure/books`; core packages do not import app infrastructure, frameworks, or SDKs.
+- Run `pnpm check:architecture` to enforce the domain/application import boundaries.
+- Compatibility exports remain available from the existing `@reader/api/*` modules. The worker continues to load book processing through `@reader/api/book-processing`.

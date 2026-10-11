@@ -20,6 +20,8 @@ const { DRIZZLE } =
     require("../src/database/database.module") as typeof import("../src/database/database.module");
 const { BOOKS_PORTS, createBookFileDependencies } =
     require("../src/books/books.ports") as typeof import("../src/books/books.ports");
+const { BOOKS_USE_CASE_PROVIDERS } =
+    require("../src/books/books.module") as typeof import("../src/books/books.module");
 const { RATE_LIMIT_CLIENT } =
     require("../src/common/rate-limit.module") as typeof import("../src/common/rate-limit.module");
 const { createTestApp } =
@@ -150,6 +152,7 @@ const createFileRouteTestApp = (
     return createTestApp({
         controllers: [BooksController],
         providers: [
+            ...BOOKS_USE_CASE_PROVIDERS,
             { provide: DRIZZLE, useValue: scripted.db },
             { provide: BOOKS_PORTS, useValue: ports },
             {
