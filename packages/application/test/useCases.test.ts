@@ -3,7 +3,7 @@ import test from "node:test";
 import {
     BookDeletedDuringProcessingError,
     BookFileTypeMismatchError,
-    BookNotFoundError,
+    BookProcessingSkippedError,
     BookProcessingQueueUnavailableError,
     InvalidBookFileError,
     MissingBookFileError,
@@ -204,8 +204,9 @@ const enqueueDeps = (
         },
     },
     repository: {
-        markQueueFailed: async (id, error) => {
+        markQueueFailed: async (id, _userId, error) => {
             calls.push(`failed:${id}:${error}`);
+            return true;
         },
     },
     ...overrides,
@@ -269,8 +270,9 @@ const processDeps = (
             calls.push("ready");
             return true;
         },
-        markFailed: async (_id, error) => {
+        markFailed: async (_id, _userId, error) => {
             calls.push(`failed:${error}`);
+            return true;
         },
     },
     ingestion: {
@@ -286,6 +288,13 @@ const processDeps = (
     },
     cache: {
         clearCollection: (name) => calls.push(`cache:${name}`),
+    },
+    references: {
+        countLiveFileReferences: async () => 0,
+        countLiveCollectionReferences: async () => 0,
+    },
+    lock: {
+        withLock: async (_bookId, fn) => fn(),
     },
     ...overrides,
 });
@@ -304,7 +313,7 @@ for (const fileType of ["pdf", "epub"] as const) {
                         calls.push("ready");
                         return true;
                     },
-                    markFailed: async () => {},
+                    markFailed: async () => true,
                 },
             })
         ).execute({ ...request, fileType });
@@ -313,7 +322,7 @@ for (const fileType of ["pdf", "epub"] as const) {
     });
 }
 
-test("ProcessUploadedBook marks a missing book failed", async () => {
+test("ProcessUploadedBook skips a missing book without marking it failed", async () => {
     const calls: string[] = [];
     await assert.rejects(
         new ProcessUploadedBook(
@@ -321,16 +330,13 @@ test("ProcessUploadedBook marks a missing book failed", async () => {
                 repository: {
                     findBookForProcessing: async () => null,
                     markReady: async () => true,
-                    markFailed: async (_id, error) => {
-                        calls.push(`failed:${error}`);
-                    },
+                    markFailed: async () => true,
                 },
             })
         ).execute(request),
-        BookNotFoundError
+        BookProcessingSkippedError
     );
-    assert.equal(calls.length, 1);
-    assert.match(calls[0], /^failed:Book book-1 was not found$/);
+    assert.deepEqual(calls, []);
 });
 
 test("ProcessUploadedBook rejects a file type mismatch", async () => {
@@ -344,8 +350,9 @@ test("ProcessUploadedBook rejects a file type mismatch", async () => {
                         fileType: "epub",
                     }),
                     markReady: async () => true,
-                    markFailed: async (_id, error) => {
+                    markFailed: async (_id, _userId, error) => {
                         calls.push(`failed:${error}`);
+                        return true;
                     },
                 },
             })
@@ -393,7 +400,7 @@ test("ProcessUploadedBook marks final-attempt errors failed", async () => {
     assert.deepEqual(calls, ["find", "ingest", "failed:permanent"]);
 });
 
-test("ProcessUploadedBook cleans rejected publication and persists its error", async () => {
+test("ProcessUploadedBook cleans rejected publication without failure writes", async () => {
     const calls: string[] = [];
     await assert.rejects(
         new ProcessUploadedBook(
@@ -404,20 +411,13 @@ test("ProcessUploadedBook cleans rejected publication and persists its error", a
                         return processingRecord;
                     },
                     markReady: async () => false,
-                    markFailed: async (_id, error) => {
-                        calls.push(`failed:${error}`);
-                    },
+                    markFailed: async () => true,
                 },
             })
         ).execute(request),
         BookDeletedDuringProcessingError
     );
-    assert.deepEqual(calls, [
-        "find",
-        "ingest",
-        "cleanup:book_collection",
-        "failed:Book book-1 was deleted during processing",
-    ]);
+    assert.deepEqual(calls, ["find", "ingest", "cleanup:book_collection"]);
 });
 
 test("ProcessUploadedBook marks ingestion errors failed", async () => {

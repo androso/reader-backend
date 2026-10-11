@@ -2,3 +2,7 @@ export * from "./books/ports";
 export * from "./books/UploadBook";
 export * from "./books/EnqueueBookProcessing";
 export * from "./books/ProcessUploadedBook";
+export * from "./books/ListOwnedBooks";
+export * from "./books/GetBookStatus";
+export * from "./books/RetryBookProcessing";
+export * from "./books/DeleteOwnedBook";

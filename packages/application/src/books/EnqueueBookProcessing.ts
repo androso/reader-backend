@@ -42,7 +42,11 @@ export class EnqueueBookProcessing implements BookProcessingScheduler {
                 bookId: request.bookId,
                 error: message,
             });
-            await this.deps.repository.markQueueFailed(request.bookId, message);
+            await this.deps.repository.markQueueFailed(
+                request.bookId,
+                request.userId,
+                message
+            );
             throw new BookProcessingQueueUnavailableError(message);
         }
     };

@@ -6,6 +6,7 @@ import type {
     BookProcessingRecord,
     BookProcessingRequest,
     NewBook,
+    RETRYABLE_BOOK_STATUSES,
 } from "@reader/domain";
 
 export interface Logger {
@@ -48,7 +49,11 @@ export interface BookProcessingQueue {
 }
 
 export interface BookQueueStateRepository {
-    markQueueFailed(bookId: string, error: string): Promise<void>;
+    markQueueFailed(
+        bookId: string,
+        userId: string,
+        error: string
+    ): Promise<boolean>;
 }
 
 export interface BookProcessingRepository {
@@ -56,8 +61,69 @@ export interface BookProcessingRepository {
         bookId: string,
         userId: string
     ): Promise<BookProcessingRecord | null>;
-    markReady(bookId: string, collectionName: string): Promise<boolean>;
-    markFailed(bookId: string, error: string): Promise<void>;
+    markReady(
+        bookId: string,
+        userId: string,
+        collectionName: string
+    ): Promise<boolean>;
+    markFailed(bookId: string, userId: string, error: string): Promise<boolean>;
+}
+
+export type RetryableBookStatus = (typeof RETRYABLE_BOOK_STATUSES)[number];
+
+export interface BookReadRepository {
+    findById(bookId: string): Promise<Book | null>;
+    findOwned(bookId: string, userId: string): Promise<Book | null>;
+    listByOwner(userId: string): Promise<Book[]>;
+}
+
+export interface BookRetryStateRepository {
+    claimRetry(
+        bookId: string,
+        userId: string,
+        expectedStatus: RetryableBookStatus
+    ): Promise<Book | null>;
+    restoreRetryable(
+        bookId: string,
+        userId: string,
+        status: RetryableBookStatus,
+        error: string | null
+    ): Promise<boolean>;
+}
+
+export interface BookDeletionRepository {
+    markDeleting(bookId: string, userId: string): Promise<boolean>;
+    deleteDeletingRow(bookId: string, userId: string): Promise<boolean>;
+}
+
+export interface BookArtifactReferences {
+    countLiveFileReferences(
+        fileKey: string,
+        excludingBookId: string
+    ): Promise<number>;
+    countLiveCollectionReferences(
+        collectionName: string,
+        excludingBookId: string
+    ): Promise<number>;
+}
+
+export interface BookArtifactCleanup {
+    deleteFile(fileKey: string): Promise<void>;
+    deleteVectorCollection(collectionName: string): Promise<void>;
+    deleteSearchChunks(collectionName: string): Promise<void>;
+    clearCache(collectionName: string): void;
+    defaultCollectionName(bookId: string): string;
+}
+
+export interface BookQueueControl {
+    retryOrEnqueue(
+        request: BookProcessingRequest
+    ): Promise<"retried" | "enqueued">;
+    removePending(bookId: string): Promise<void>;
+}
+
+export interface BookLifecycleLock {
+    withLock<T>(bookId: string, fn: () => Promise<T>): Promise<T>;
 }
 
 export interface BookIngestion {
