@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { BookProcessingSkippedError } from "@reader/domain";
 import {
     getRagShadowFailureMetadata,
     processBookProcessingJob,
@@ -99,6 +100,23 @@ test("worker processor rethrows processing errors for BullMQ retry", async () =>
     );
 });
 
+test("worker acknowledges typed lifecycle skips", async () => {
+    const payload = {
+        bookId: "book-1",
+        userId: "user-1",
+        fileKey: "epub-key",
+        fileType: "epub" as const,
+    };
+    await assert.doesNotReject(
+        processBookProcessingJob(
+            { attemptsMade: 0, data: payload, opts: { attempts: 3 } },
+            async () => {
+                throw new BookProcessingSkippedError("book-1", "ready");
+            }
+        )
+    );
+});
+
 test("worker delegates the identifier-only RAG shadow payload", async () => {
     const payload = {
         assistantMessageId: "assistant-1",
@@ -158,5 +176,8 @@ test("shadow failure event metadata excludes error messages", () => {
         jobId: "shadow-job-1",
         errorName: "Error",
     });
-    assert.equal(JSON.stringify(metadata).includes("private user query"), false);
+    assert.equal(
+        JSON.stringify(metadata).includes("private user query"),
+        false
+    );
 });

@@ -319,6 +319,9 @@ importers:
       '@reader/api':
         specifier: workspace:*
         version: link:../api
+      '@reader/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@reader/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs

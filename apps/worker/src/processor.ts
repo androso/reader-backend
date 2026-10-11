@@ -3,6 +3,7 @@ import type { BookProcessingJobData } from "@reader/jobs";
 import type { RagRerankShadowJobData } from "@reader/jobs";
 import type { ProcessBookResult } from "@reader/processing";
 import { createLogger } from "@reader/providers";
+import { BookProcessingSkippedError } from "@reader/domain";
 
 const log = createLogger("worker");
 
@@ -58,6 +59,15 @@ export const processBookProcessingJob = async (
         });
     } catch (error) {
         const duration = Date.now() - start;
+        if (error instanceof BookProcessingSkippedError) {
+            log.warn("Book job acknowledged without processing", {
+                jobId: job.id,
+                bookId: job.data.bookId,
+                reason: error.reason,
+                durationMs: duration,
+            });
+            return;
+        }
         log.error("Book job failed", {
             jobId: job.id,
             bookId: job.data.bookId,
