@@ -11,6 +11,7 @@ import {
 import {
     processBookProcessingJob,
     processRagRerankShadowJob,
+    type ProcessUploadedBook,
 } from "./processor";
 import {
     defaultWorkerFactory,
@@ -28,6 +29,15 @@ export interface WorkerResourceDependencies {
     shutdownLangfuseTracing: () => Promise<unknown>;
     startLangfuseTracing: (serviceName?: string) => void;
 }
+
+export const PROCESS_UPLOADED_BOOK = "PROCESS_UPLOADED_BOOK";
+
+const loadProcessUploadedBook = (): ProcessUploadedBook => {
+    const module = require("@reader/api/book-processing") as {
+        processUploadedBook: ProcessUploadedBook;
+    };
+    return module.processUploadedBook;
+};
 
 export const createWorkerResources = (
     deps: WorkerResourceDependencies = {
@@ -69,15 +79,23 @@ export const defaultWorkerResources = createWorkerResources();
 @Module({
     providers: [
         {
+            provide: PROCESS_UPLOADED_BOOK,
+            inject: [],
+            useFactory: loadProcessUploadedBook,
+        },
+        {
             provide: WORKER_FACTORY,
             inject: [],
             useFactory: (): WorkerFactory => defaultWorkerFactory,
         },
         {
             provide: WORKER_RUNTIME_DEPENDENCIES,
-            inject: [],
-            useFactory: (): WorkerRuntimeDependencies => ({
-                processBookProcessingJob,
+            inject: [PROCESS_UPLOADED_BOOK],
+            useFactory: (
+                processUploadedBook: ProcessUploadedBook
+            ): WorkerRuntimeDependencies => ({
+                processBookProcessingJob: (job) =>
+                    processBookProcessingJob(job, processUploadedBook),
                 processRagRerankShadowJob,
                 getRedisConnectionOptions,
                 getRagRerankShadowRateLimit: () =>

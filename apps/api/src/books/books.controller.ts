@@ -25,19 +25,23 @@ import {
     ApiTags,
 } from "@nestjs/swagger";
 import type { Request, Response } from "express";
-import { randomUUID } from "node:crypto";
 import { createLogger } from "@reader/providers";
 import { createBookCollectionName } from "@reader/processing";
 import { eq, sql } from "drizzle-orm";
+import { UploadBook } from "@reader/application";
+import {
+    BookProcessingQueueUnavailableError,
+    InvalidBookFileError,
+    MissingBookFileError,
+} from "@reader/domain";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthGuard } from "../common/guards/auth.guard";
 import { UploadRateLimitGuard } from "../common/guards/rate-limit.guard";
 import { DRIZZLE, type Database } from "../database/database.module";
 import { Books } from "../db/schema";
-import { createOriginalUploadKey } from "../utils/uploadKeys";
-import { validateBookUpload } from "../utils/validateBookUpload";
 import { handleGetBookFile } from "./book-file.handler";
 import { BOOKS_PORTS, type BooksPorts } from "./books.ports";
+import { UPLOAD_BOOK } from "./books.tokens";
 import type { User } from "../types";
 
 const log = createLogger("books");
@@ -49,7 +53,8 @@ const log = createLogger("books");
 export class BooksController {
     constructor(
         @Inject(DRIZZLE) private readonly db: Database,
-        @Inject(BOOKS_PORTS) private readonly ports: BooksPorts
+        @Inject(BOOKS_PORTS) private readonly ports: BooksPorts,
+        @Inject(UPLOAD_BOOK) private readonly uploadBookUseCase: UploadBook
     ) {}
 
     @Post()
@@ -96,97 +101,48 @@ export class BooksController {
             mimeType: file?.mimetype,
         });
         try {
-            if (!file) {
+            const result = await this.uploadBookUseCase.execute({
+                userId: user.id,
+                file: file
+                    ? {
+                          originalName: file.originalname,
+                          buffer: file.buffer,
+                      }
+                    : undefined,
+            });
+            const duration = Date.now() - requestStart;
+            log.info("Book upload accepted", {
+                bookId: result.book.id,
+                durationMs: duration,
+                fileKey: result.book.fileKey,
+            });
+            return {
+                message: "File upload accepted for processing",
+                book: result.book,
+                processStatus: "processing",
+                fileType: result.mimeType,
+            };
+        } catch (e) {
+            if (e instanceof MissingBookFileError) {
                 log.warn("Book upload rejected: no file");
                 throw new BadRequestException({ error: "No file uploaded" });
             }
-            const fileBuffer = file.buffer;
-            let fileType: "pdf" | "epub";
-            try {
-                fileType = await validateBookUpload(fileBuffer);
-            } catch (error) {
+            if (e instanceof InvalidBookFileError) {
                 log.warn("Book upload rejected: unsupported file type", {
-                    mimeType: file.mimetype,
+                    mimeType: file?.mimetype,
                     userId: user.id,
-                    error:
-                        error instanceof Error ? error.message : String(error),
+                    error: e.message,
                 });
                 throw new BadRequestException({
                     error: "Invalid PDF or EPUB file",
                 });
             }
-            const mimeType =
-                fileType === "pdf" ? "application/pdf" : "application/epub+zip";
-            const bookId = randomUUID();
-            const fileKey = createOriginalUploadKey(user.id, bookId);
-
-            log.info("Uploading file to storage", {
-                userId: user.id,
-                fileKey,
-                mimeType,
-            });
-            await this.ports.uploadFile(fileKey, fileBuffer);
-            log.info("File uploaded to storage", {
-                userId: user.id,
-                fileKey,
-            });
-            const [book] = await this.db
-                .insert(Books)
-                .values({
-                    id: bookId,
-                    title: file.originalname,
-                    userId: user.id,
-                    fileKey,
-                    fileType,
-                    processingStatus: "processing",
-                    processingError: null,
-                })
-                .returning();
-            log.info("Book record created", {
-                bookId: book.id,
-                userId: user.id,
-                fileKey,
-                fileType,
-            });
-
-            try {
-                await this.ports.enqueueBookProcessing({
-                    bookId: book.id,
-                    userId: book.userId,
-                    fileKey: book.fileKey,
-                    fileType,
-                });
-            } catch (error) {
-                log.error("Book processing enqueue failed", {
-                    bookId: book.id,
-                    error:
-                        error instanceof Error ? error.message : String(error),
-                });
+            if (e instanceof BookProcessingQueueUnavailableError) {
                 throw new HttpException(
                     { error: "Book processing queue is unavailable" },
                     503
                 );
             }
-
-            const [queuedBook] = await this.db
-                .select()
-                .from(Books)
-                .where(eq(Books.id, book.id));
-
-            const duration = Date.now() - requestStart;
-            log.info("Book upload accepted", {
-                bookId: book.id,
-                durationMs: duration,
-                fileKey,
-            });
-            return {
-                message: "File upload accepted for processing",
-                book: queuedBook ?? book,
-                processStatus: "processing",
-                fileType: mimeType,
-            };
-        } catch (e) {
-            if (e instanceof HttpException) throw e;
             const duration = Date.now() - requestStart;
             log.error("Book upload failed", {
                 userId: user.id,

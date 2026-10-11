@@ -1,2 +1,1 @@
-export const createOriginalUploadKey = (userId: string, bookId: string) =>
-    `users/${userId}/books/${bookId}/original`;
+export { createOriginalUploadKey } from "@reader/domain";

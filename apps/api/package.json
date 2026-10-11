@@ -38,9 +38,9 @@
         }
     },
     "scripts": {
-        "predev": "pnpm --filter @reader/jobs --filter @reader/processing --filter @reader/providers build",
-        "prebuild": "pnpm --filter @reader/jobs --filter @reader/processing --filter @reader/providers build",
-        "pretest": "pnpm --filter @reader/jobs --filter @reader/processing --filter @reader/providers build",
+        "predev": "pnpm --filter @reader/jobs --filter @reader/processing --filter @reader/providers --filter @reader/domain --filter @reader/application build",
+        "prebuild": "pnpm --filter @reader/jobs --filter @reader/processing --filter @reader/providers --filter @reader/domain --filter @reader/application build",
+        "pretest": "pnpm --filter @reader/jobs --filter @reader/processing --filter @reader/providers --filter @reader/domain --filter @reader/application build",
         "dev": "DOTENV_CONFIG_PATH=../../.env ts-node-dev -r dotenv/config --respawn --transpile-only --ignore-watch ../../packages src/index.ts",
         "build": "tsc -p tsconfig.json",
         "start": "DOTENV_CONFIG_PATH=../../.env node -r dotenv/config build/index.js",
@@ -59,6 +59,8 @@
         "@opentelemetry/sdk-node": "^0.219.0",
         "@opentelemetry/sdk-trace-base": "^2.8.0",
         "@reader/jobs": "workspace:*",
+        "@reader/domain": "workspace:*",
+        "@reader/application": "workspace:*",
         "@reader/processing": "workspace:*",
         "@reader/providers": "workspace:*",
         "@types/dotenv": "^8.2.3",
