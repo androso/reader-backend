@@ -348,11 +348,10 @@ test("writes progress without a chapter using column defaults", async () => {
         assert.equal(body.data.progressChapter, null);
         const insert = scripted.effects.at(-1);
         assert.equal(insert?.sql, PROGRESS_INSERT_NO_CHAPTER_SQL);
-        assert.deepEqual(insert?.params?.slice(0, 3), [
-            "owner-1",
-            "book-1",
-            "p1",
-        ]);
+        assert.deepEqual(
+            (insert?.params as unknown[] | undefined)?.slice(0, 3),
+            ["owner-1", "book-1", "p1"]
+        );
     } finally {
         await testApp.close();
     }

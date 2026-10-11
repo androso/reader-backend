@@ -583,6 +583,8 @@ test("runApiProcess timeout exits 1 exactly once and blocks a later exit 0", asy
 
 let sseResponse: Response | undefined;
 
+const currentSseResponse = (): Response | undefined => sseResponse;
+
 @Controller("lifecycle-test")
 class SseController {
     @Get("events")
@@ -610,7 +612,8 @@ test(
                 `${testApp.baseUrl}/lifecycle-test/events`
             );
             assert.equal(response.status, 200);
-            assert.ok(sseResponse, "expected the sse response handle");
+            const handle = currentSseResponse();
+            assert.ok(handle, "expected the sse response handle");
             const closing = testApp.app.close();
             let settled = false;
             void closing.then(() => {
@@ -619,13 +622,13 @@ test(
             await flush(12);
             assert.equal(settled, false);
             assert.deepEqual(order, []);
-            sseResponse!.end();
+            handle.end();
             await closing;
             assert.equal(settled, true);
             assert.deepEqual(order, ["resources"]);
             await response.arrayBuffer().catch(() => {});
         } finally {
-            sseResponse?.end();
+            currentSseResponse()?.end();
             await testApp.close();
         }
     }

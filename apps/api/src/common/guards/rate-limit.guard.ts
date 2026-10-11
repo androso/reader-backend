@@ -23,7 +23,11 @@ export const createRateLimitGuard = (
     limit: number,
     windowSeconds: number,
     identity: (req: Request) => string
-): Type<CanActivate> => {
+): Type<
+    Omit<CanActivate, "canActivate"> & {
+        canActivate(context: ExecutionContext): Promise<boolean>;
+    }
+> => {
     @Injectable()
     class RateLimitGuard implements CanActivate {
         constructor(

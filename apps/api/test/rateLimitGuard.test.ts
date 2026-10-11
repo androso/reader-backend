@@ -109,12 +109,13 @@ const withRedisUrl = async <T>(
     fn: () => Promise<T> | T
 ) => {
     const previous = process.env.REDIS_URL;
-    if (value === undefined) delete process.env.REDIS_URL;
+    if (value === undefined) Reflect.deleteProperty(process.env, "REDIS_URL");
     else process.env.REDIS_URL = value;
     try {
         return await fn();
     } finally {
-        if (previous === undefined) delete process.env.REDIS_URL;
+        if (previous === undefined)
+            Reflect.deleteProperty(process.env, "REDIS_URL");
         else process.env.REDIS_URL = previous;
     }
 };

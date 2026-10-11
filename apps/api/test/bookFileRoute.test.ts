@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import test from "node:test";
 import type { Request, Response } from "express";
 import { handleGetBookFile } from "../src/books/book-file.handler";
@@ -34,6 +35,29 @@ const AUTH_COOKIE = `reader_session=${jwt.sign(
     helper.JWT_SECRET
 )}`;
 const FILE_BYTES = Buffer.from("%PDF-synthetic\n", "utf8");
+
+const requestRaw = (
+    url: string,
+    headers: http.OutgoingHttpHeaders
+): Promise<{
+    status: number;
+    headers: http.IncomingHttpHeaders;
+    body: Buffer;
+}> =>
+    new Promise((resolve, reject) => {
+        const req = http.get(url, { headers }, (res) => {
+            const received: Buffer[] = [];
+            res.on("data", (chunk: Buffer) => received.push(chunk));
+            res.on("end", () =>
+                resolve({
+                    status: res.statusCode ?? 0,
+                    headers: res.headers,
+                    body: Buffer.concat(received),
+                })
+            );
+        });
+        req.on("error", reject);
+    });
 
 type ScriptedStep = {
     op: "select" | "insert" | "update" | "delete";
@@ -316,10 +340,14 @@ test("GET /api/books/:id serves a pdf over the real Nest route", async () => {
         assert.equal(res.headers.get("x-content-type-options"), "nosniff");
         assert.ok(res.headers.get("etag"));
         assert.ok(Buffer.from(await res.arrayBuffer()).equals(FILE_BYTES));
-        const select = scripted.effects.at(-1);
+        const select = scripted.effects.find(
+            (effect) =>
+                effect.operation === "select" && effect.table === "books"
+        );
         assert.equal(select?.operation, "select");
         assert.equal(select?.table, "books");
         assert.deepEqual(select?.params, ["book-1"]);
+        assert.equal(scripted.effects.at(-1)?.target, "storage.getFile");
     } finally {
         await testApp.close();
     }
@@ -519,14 +547,15 @@ test("GET /api/books/:id returns 304 when If-None-Match matches the ETag", async
         assert.ok(etag);
         await first.arrayBuffer();
 
-        const res = await fetch(`${testApp.baseUrl}/api/books/book-1`, {
-            headers: { cookie: AUTH_COOKIE, "if-none-match": etag! },
+        const res = await requestRaw(`${testApp.baseUrl}/api/books/book-1`, {
+            cookie: AUTH_COOKIE,
+            "if-none-match": etag!,
         });
         assert.equal(res.status, 304);
-        assert.equal(res.headers.get("cache-control"), "private");
-        assert.equal(res.headers.get("x-content-type-options"), "nosniff");
-        assert.equal(res.headers.get("content-type"), null);
-        assert.equal((await res.arrayBuffer()).byteLength, 0);
+        assert.equal(res.headers["cache-control"], "private");
+        assert.equal(res.headers["x-content-type-options"], "nosniff");
+        assert.equal(res.headers["content-type"], undefined);
+        assert.equal(res.body.length, 0);
     } finally {
         await testApp.close();
     }

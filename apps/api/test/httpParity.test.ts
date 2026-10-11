@@ -64,19 +64,20 @@ const nodePathEntries = [
         .map((entry) => path.resolve(process.cwd(), entry)),
 ].filter((entry, index, list) => list.indexOf(entry) === index);
 
-const childEnv = (envName: string) => ({
-    PATH: process.env.PATH ?? "",
-    NODE_PATH: nodePathEntries.join(path.delimiter),
-    NODE_ENV: envName,
-    JWT_SECRET,
-    FRONTEND_URL,
-    GOOGLE_CLIENT_ID: "parity-test-google-client-id",
-    GOOGLE_CLIENT_SECRET: "parity-test-google-client-secret",
-    LANGFUSE_SAMPLE_RATE: "0",
-    DATABASE_URL: "postgres://test:test@127.0.0.1:1/test",
-    REDIS_URL: "",
-    DOTENV_CONFIG_PATH: "/dev/null",
-});
+const childEnv = (envName: string): NodeJS.ProcessEnv =>
+    ({
+        PATH: process.env.PATH ?? "",
+        NODE_PATH: nodePathEntries.join(path.delimiter),
+        NODE_ENV: envName,
+        JWT_SECRET,
+        FRONTEND_URL,
+        GOOGLE_CLIENT_ID: "parity-test-google-client-id",
+        GOOGLE_CLIENT_SECRET: "parity-test-google-client-secret",
+        LANGFUSE_SAMPLE_RATE: "0",
+        DATABASE_URL: "postgres://test:test@127.0.0.1:1/test",
+        REDIS_URL: "",
+        DOTENV_CONFIG_PATH: "/dev/null",
+    }) as unknown as NodeJS.ProcessEnv;
 
 const CHILD_TIMEOUT_MS = 60_000;
 const TEST_TIMEOUT_MS = 65_000;
