@@ -255,6 +255,54 @@ const main = async () => {
         bookFile: createBookFileDependencies(fakeDb as never, getFileStub),
     };
 
+    const { DeleteOwnedBook, RetryBookProcessing } =
+        require("@reader/application") as typeof import("@reader/application");
+    const { createBookCollectionName } =
+        require("@reader/processing") as typeof import("@reader/processing");
+    const { createDrizzleBookRepository } =
+        require("../../src/infrastructure/books/drizzleBookRepository") as typeof import("../../src/infrastructure/books/drizzleBookRepository");
+    const { DELETE_OWNED_BOOK, RETRY_BOOK_PROCESSING } =
+        require("../../src/books/books.tokens") as typeof import("../../src/books/books.tokens");
+    const lifecycleRepository = createDrizzleBookRepository(fakeDb as never);
+    const lifecycleLock = {
+        withLock: async <T>(_bookId: string, callback: () => Promise<T>) =>
+            callback(),
+    };
+    const retryBookProcessing = new RetryBookProcessing({
+        reads: lifecycleRepository,
+        retryState: lifecycleRepository,
+        queueState: lifecycleRepository,
+        queue: {
+            retryOrEnqueue: async (request) => {
+                await booksPorts.enqueueBookProcessing(request);
+                return "enqueued";
+            },
+            removePending: async () => {},
+        },
+        lock: lifecycleLock,
+    });
+    const deleteOwnedBook = new DeleteOwnedBook({
+        reads: lifecycleRepository,
+        deletion: lifecycleRepository,
+        references: lifecycleRepository,
+        cleanup: {
+            deleteFile: async (fileKey) => {
+                await booksPorts.deleteFile(fileKey);
+            },
+            deleteVectorCollection: async (collectionName) => {
+                await booksPorts.deleteVectorCollection(collectionName);
+            },
+            deleteSearchChunks: async (collectionName) => {
+                await booksPorts.deleteCollectionChunks(collectionName);
+            },
+            clearCache: (collectionName) =>
+                booksPorts.clearCollectionCache(collectionName),
+            defaultCollectionName: createBookCollectionName,
+        },
+        queue: { removePending: async () => {} },
+        lock: lifecycleLock,
+    });
+
     const chatOperations = createChatOperations({
         ...defaultChatStreamDependencies,
         db: fakeDb as never,
@@ -281,6 +329,8 @@ const main = async () => {
                 useValue: { get: () => null, close: async () => undefined },
             },
             { token: BOOKS_PORTS, useValue: booksPorts },
+            { token: RETRY_BOOK_PROCESSING, useValue: retryBookProcessing },
+            { token: DELETE_OWNED_BOOK, useValue: deleteOwnedBook },
             { token: CHAT_OPERATIONS, useValue: chatOperations },
         ],
     });

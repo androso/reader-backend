@@ -26,8 +26,9 @@ const createDependencies = (
             calls.enqueued.push(data);
         },
         repository: {
-            markQueueFailed: async (bookId, error) => {
+            markQueueFailed: async (bookId, _userId, error) => {
                 calls.failed.push({ bookId, error });
+                return true;
             },
         },
         ...overrides,

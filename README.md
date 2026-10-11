@@ -71,6 +71,18 @@ inserts a `processing` book row, enqueues a Redis/BullMQ job, and returns
 immediately while `apps/worker` finishes PDF/EPUB ingestion. Set `REDIS_URL` for
 both the API and worker.
 
+### Book lifecycle API
+
+Authenticated book routes list the caller's books (`GET /api/books`), return
+processing status (`GET /api/books/:id/status`), retry a `failed` or
+`queue_failed` book (`POST /api/books/:id/retry`, accepted with `202`), and
+delete a book (`DELETE /api/books/:id`, completed with `204`). Status and delete
+distinguish a missing book (`404`) from a book owned by another user (`403`);
+retry intentionally returns `404` for both cases. Retry conflicts return
+`409`, while queue or lifecycle-lock unavailability returns `503`. Deletion
+marks the row as `deleting` before cleanup so a failed cleanup can be retried;
+files and collections still referenced by another live book are retained.
+
 ## AWS infrastructure
 
 CloudFormation is the source of truth for a clean AWS rebuild. Follow

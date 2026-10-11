@@ -28,17 +28,28 @@ const createRepository = (
             processingStatus: "processing",
             processingError: null,
         }),
-        markReady: async (_, collectionName) => {
+        markReady: async (_, _userId, collectionName) => {
             calls.ready.push(collectionName);
             return true;
         },
-        markFailed: async (_, error) => {
+        markFailed: async (_, _userId, error) => {
             calls.failed.push(error);
+            return true;
         },
         ...overrides,
     };
 
     return { repository, calls };
+};
+
+const testLifecycle = {
+    lock: {
+        withLock: async <T>(_bookId: string, fn: () => Promise<T>) => fn(),
+    },
+    references: {
+        countLiveFileReferences: async () => 0,
+        countLiveCollectionReferences: async () => 0,
+    },
 };
 
 test("successful synchronous processing marks book ready", async () => {
@@ -51,7 +62,9 @@ test("successful synchronous processing marks book ready", async () => {
             collectionName: "book_collection",
             chunks: 2,
             reusedCollection: false,
-        })
+        }),
+        {},
+        testLifecycle
     );
 
     assert.equal(result.collectionName, "book_collection");
@@ -63,9 +76,15 @@ test("failed synchronous processing marks book failed", async () => {
     const { repository, calls } = createRepository();
 
     await assert.rejects(
-        handleProcessUploadedBook(payload, repository, async () => {
-            throw new Error("extract failed");
-        }),
+        handleProcessUploadedBook(
+            payload,
+            repository,
+            async () => {
+                throw new Error("extract failed");
+            },
+            {},
+            testLifecycle
+        ),
         /extract failed/
     );
 
@@ -83,7 +102,8 @@ test("failed processing can skip failed status for retryable attempts", async ()
             async () => {
                 throw new Error("temporary embedding failure");
             },
-            { markFailedOnError: false }
+            { markFailedOnError: false },
+            testLifecycle
         ),
         /temporary embedding failure/
     );
@@ -102,7 +122,8 @@ test("failed processing marks failed on final attempt option", async () => {
             async () => {
                 throw new Error("final embedding failure");
             },
-            { markFailedOnError: true }
+            { markFailedOnError: true },
+            testLifecycle
         ),
         /final embedding failure/
     );
@@ -137,7 +158,9 @@ test("same file key does not trigger duplicate collection reuse", async () => {
                 chunks: 2,
                 reusedCollection: false,
             };
-        }
+        },
+        {},
+        testLifecycle
     );
 
     assert.equal(seenBookId, "book-1");
@@ -160,11 +183,17 @@ test("file type mismatch fails safely", async () => {
     });
 
     await assert.rejects(
-        handleProcessUploadedBook(payload, repository, async () => ({
-            collectionName: "unexpected",
-            chunks: 1,
-            reusedCollection: false,
-        })),
+        handleProcessUploadedBook(
+            payload,
+            repository,
+            async () => ({
+                collectionName: "unexpected",
+                chunks: 1,
+                reusedCollection: false,
+            }),
+            {},
+            testLifecycle
+        ),
         /file type changed/
     );
 

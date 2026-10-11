@@ -108,10 +108,16 @@ test("Drizzle book repository preserves statements, operation order, and paramet
         'select "id", "title", "user_id", "file_key", "file_type", "collection_name", "processing_status", "processing_error", "created_at" from "books" where "books"."id" = $1'
     );
 
-    assert.equal(await repository.markReady("book-1", "collection-1"), true);
-    assert.equal(await repository.markReady("book-1", "collection-2"), false);
-    await repository.markFailed("book-1", "processing error");
-    await repository.markQueueFailed("book-1", "queue offline");
+    assert.equal(
+        await repository.markReady("book-1", "owner-1", "collection-1"),
+        true
+    );
+    assert.equal(
+        await repository.markReady("book-1", "owner-1", "collection-2"),
+        false
+    );
+    await repository.markFailed("book-1", "owner-1", "processing error");
+    await repository.markQueueFailed("book-1", "owner-1", "queue offline");
 
     assert.deepEqual(
         scripted.queries.map(({ operation, table }) => [operation, table]),
@@ -139,6 +145,7 @@ test("Drizzle book repository preserves statements, operation order, and paramet
         "ready",
         null,
         "book-1",
+        "owner-1",
         "processing",
     ]);
     assert.deepEqual(scripted.queries[3].params, [
@@ -146,17 +153,26 @@ test("Drizzle book repository preserves statements, operation order, and paramet
         "ready",
         null,
         "book-1",
+        "owner-1",
         "processing",
     ]);
     assert.deepEqual(scripted.queries[4].params, [
         "failed",
         "processing error",
         "book-1",
+        "owner-1",
+        "processing",
     ]);
     assert.deepEqual(scripted.queries[5].params, [
         "queue_failed",
         "Book processing queue unavailable: queue offline",
         "book-1",
+        "owner-1",
+        "processing",
     ]);
+    for (const query of scripted.queries.slice(2)) {
+        assert.match(query.sql, /"books"\."user_id"/);
+        assert.match(query.sql, /"books"\."processing_status"/);
+    }
     assert.equal(scripted.remaining(), 0);
 });

@@ -1,0 +1,9 @@
+{
+    "extends": "./tsconfig.test.json",
+    "compilerOptions": {
+        "rootDir": ".",
+        "outDir": "../../.tmp/apps-api-integration",
+        "noEmit": false
+    },
+    "include": ["src/**/*", "test-integration/**/*"]
+}

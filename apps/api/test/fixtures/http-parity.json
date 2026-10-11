@@ -3204,6 +3204,7 @@
     {
       "id": "books-retry-ready",
       "env": "test",
+      "intentionalDifference": "retry-owner-scoped-lookup",
       "request": {
         "method": "POST",
         "path": "/api/books/book-1/retry",
@@ -3290,6 +3291,7 @@
     {
       "id": "books-retry-missing",
       "env": "test",
+      "intentionalDifference": "retry-owner-scoped-lookup",
       "request": {
         "method": "POST",
         "path": "/api/books/missing-book/retry",
@@ -3364,6 +3366,7 @@
     {
       "id": "books-retry-nonowner",
       "env": "test",
+      "intentionalDifference": "retry-owner-scoped-lookup",
       "request": {
         "method": "POST",
         "path": "/api/books/book-1/retry",
@@ -3392,19 +3395,7 @@
         {
           "op": "select",
           "table": "books",
-          "rows": [
-            {
-              "id": "book-1",
-              "title": "Example.pdf",
-              "user_id": "other-user-1",
-              "file_key": "file-1",
-              "file_type": "pdf",
-              "collection_name": "collection-1",
-              "processing_status": "ready",
-              "processing_error": null,
-              "created_at": "2024-01-01 00:00:00"
-            }
-          ]
+          "rows": []
         }
       ],
       "capture": {

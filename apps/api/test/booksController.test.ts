@@ -22,6 +22,12 @@ const { DRIZZLE, DatabaseModule } =
     require("../src/database/database.module") as typeof import("../src/database/database.module");
 const { BOOKS_PORTS } =
     require("../src/books/books.ports") as typeof import("../src/books/books.ports");
+const { DELETE_OWNED_BOOK, RETRY_BOOK_PROCESSING } =
+    require("../src/books/books.tokens") as typeof import("../src/books/books.tokens");
+const { DeleteOwnedBook, RetryBookProcessing } =
+    require("@reader/application") as typeof import("@reader/application");
+const { createDrizzleBookRepository } =
+    require("../src/infrastructure/books/drizzleBookRepository") as typeof import("../src/infrastructure/books/drizzleBookRepository");
 const { BooksModule, BOOKS_USE_CASE_PROVIDERS } =
     require("../src/books/books.module") as typeof import("../src/books/books.module");
 const { createBookProcessingEnqueueRepository, handleBookProcessingEnqueue } =
@@ -167,6 +173,20 @@ const NULL_COLLECTION_BOOK_ROW: Record<string, unknown> = {
     collection_name: null,
 };
 
+const deleteSuccessfulSteps = (
+    book: Record<string, unknown>,
+    fileReferences = 0,
+    collectionReferences = 0
+): ScriptedStep[] => [
+    authUser,
+    bookById(book),
+    { op: "update", table: "books", rows: [{ id: book.id }] },
+    bookById(book),
+    { op: "select", table: "books", rows: [{ count: fileReferences }] },
+    { op: "select", table: "books", rows: [{ count: collectionReferences }] },
+    { op: "delete", table: "books" },
+];
+
 const assertScriptedDbComplete = (scripted: {
     remaining(): number;
     effects: RecordedEffect[];
@@ -252,6 +272,63 @@ const createBooksTestApp = (scripted: { db: unknown }, ports: BooksPorts) =>
         controllers: [BooksController],
         providers: [
             ...BOOKS_USE_CASE_PROVIDERS,
+            {
+                provide: RETRY_BOOK_PROCESSING,
+                useFactory: (database: unknown, testPorts: BooksPorts) => {
+                    const repository = createDrizzleBookRepository(
+                        database as never
+                    );
+                    return new RetryBookProcessing({
+                        reads: repository,
+                        retryState: repository,
+                        queueState: repository,
+                        queue: {
+                            retryOrEnqueue: async (request) => {
+                                await testPorts.enqueueBookProcessing(request);
+                                return "enqueued";
+                            },
+                            removePending: async () => {},
+                        },
+                        lock: {
+                            withLock: async (_bookId, fn) => fn(),
+                        },
+                    });
+                },
+                inject: [DRIZZLE, BOOKS_PORTS],
+            },
+            {
+                provide: DELETE_OWNED_BOOK,
+                useFactory: (database: unknown, testPorts: BooksPorts) => {
+                    const repository = createDrizzleBookRepository(
+                        database as never
+                    );
+                    return new DeleteOwnedBook({
+                        reads: repository,
+                        deletion: repository,
+                        references: repository,
+                        cleanup: {
+                            deleteFile: async (fileKey) => {
+                                await testPorts.deleteFile(fileKey);
+                            },
+                            deleteVectorCollection: async (collectionName) => {
+                                await testPorts.deleteVectorCollection(
+                                    collectionName
+                                );
+                            },
+                            deleteSearchChunks:
+                                testPorts.deleteCollectionChunks,
+                            clearCache: testPorts.clearCollectionCache,
+                            defaultCollectionName: (bookId) =>
+                                `book_${bookId.replace(/-/g, "_")}`,
+                        },
+                        queue: { removePending: async () => {} },
+                        lock: {
+                            withLock: async (_bookId, fn) => fn(),
+                        },
+                    });
+                },
+                inject: [DRIZZLE, BOOKS_PORTS],
+            },
             { provide: DRIZZLE, useValue: scripted.db },
             { provide: BOOKS_PORTS, useValue: ports },
             { provide: RATE_LIMIT_CLIENT, useValue: INERT_RATE_LIMIT },
@@ -846,6 +923,8 @@ test("POST /api/books returns 503 and persists queue_failed via injected service
             "queue_failed",
             "Book processing queue unavailable: queue down",
             bookId,
+            "owner-1",
+            "processing",
         ]);
         assert.deepEqual(effectNames(scripted.effects), [
             "db.select users",
@@ -1044,10 +1123,7 @@ test("POST /api/books/:id/retry returns 404 for a missing book", async () => {
 });
 
 test("POST /api/books/:id/retry returns 404 for a non-owner book", async () => {
-    const scripted = createScriptedDb([
-        authUser,
-        bookById(OTHER_OWNER_BOOK_ROW),
-    ]);
+    const scripted = createScriptedDb([authUser, emptyBookSelect]);
     const testApp = await createBooksTestApp(
         scripted,
         createPorts(scripted.effects)
@@ -1125,7 +1201,17 @@ for (const status of ["failed", "queue_failed"] as const) {
         const scripted = createScriptedDb([
             authUser,
             bookById(row),
-            { op: "update", table: "books" },
+            {
+                op: "update",
+                table: "books",
+                rows: [
+                    {
+                        ...row,
+                        processing_status: "processing",
+                        processing_error: null,
+                    },
+                ],
+            },
         ]);
         const testApp = await createBooksTestApp(
             scripted,
@@ -1152,9 +1238,15 @@ for (const status of ["failed", "queue_failed"] as const) {
             const queued = effects.find(
                 (effect) => effect.target === "queue.book-processing.add"
             );
-            assert.equal(select?.sql, BOOK_SELECT_BY_ID_SQL);
-            assert.deepEqual(select?.params, ["book-1"]);
-            assert.deepEqual(update?.params, ["processing", null, "book-1"]);
+            assert.equal(select?.operation, "select");
+            assert.deepEqual(select?.params, ["book-1", "owner-1"]);
+            assert.deepEqual(update?.params, [
+                "processing",
+                null,
+                "book-1",
+                "owner-1",
+                status,
+            ]);
             assert.deepEqual(queued?.payload, {
                 bookId: "book-1",
                 userId: "owner-1",
@@ -1178,24 +1270,28 @@ test("POST /api/books/:id/retry returns 503 when the queue is unavailable and ma
     const scripted = createScriptedDb([
         authUser,
         bookById(FAILED_BOOK_ROW),
-        { op: "update", table: "books" },
+        {
+            op: "update",
+            table: "books",
+            rows: [
+                {
+                    ...FAILED_BOOK_ROW,
+                    processing_status: "processing",
+                    processing_error: null,
+                },
+            ],
+        },
         { op: "update", table: "books" },
     ]);
     const ports = createPorts(scripted.effects, {
-        enqueueBookProcessing: (payload: unknown) =>
-            handleBookProcessingEnqueue(payload as never, {
-                enqueue: async () => {
-                    scripted.effects.push({
-                        type: "external",
-                        target: "queue.book-processing.add",
-                        payload,
-                    });
-                    throw new Error("queue down");
-                },
-                repository: createBookProcessingEnqueueRepository(
-                    scripted.db as never
-                ),
-            }),
+        enqueueBookProcessing: async (payload: unknown) => {
+            scripted.effects.push({
+                type: "external",
+                target: "queue.book-processing.add",
+                payload,
+            });
+            throw new Error("queue down");
+        },
     });
     const testApp = await createBooksTestApp(scripted, ports);
     try {
@@ -1211,11 +1307,19 @@ test("POST /api/books/:id/retry returns 503 when the queue is unavailable and ma
             (effect) => effect.operation === "update"
         );
         assert.equal(updates.length, 2);
-        assert.deepEqual(updates[0].params, ["processing", null, "book-1"]);
+        assert.deepEqual(updates[0].params, [
+            "processing",
+            null,
+            "book-1",
+            "owner-1",
+            "failed",
+        ]);
         assert.deepEqual(updates[1].params, [
             "queue_failed",
             "Book processing queue unavailable: queue down",
             "book-1",
+            "owner-1",
+            "processing",
         ]);
         assert.deepEqual(effectNames(scripted.effects), [
             "db.select users",
@@ -1277,7 +1381,7 @@ test("GET /api/books/:id/status reports a ready book with a collection", async (
             error: null,
         });
         const select = scripted.effects.at(-1);
-        assert.equal(select?.sql, BOOK_SELECT_BY_ID_SQL);
+        assert.equal(select?.operation, "select");
         assert.deepEqual(select?.params, ["book-1"]);
     } finally {
         await testApp.close();
@@ -1415,13 +1519,7 @@ test("GET /api/books/:id/status returns 500 when the book select fails", async (
 });
 
 test("DELETE /api/books/:id runs the ordered cleanup and returns 204", async () => {
-    const scripted = createScriptedDb([
-        authUser,
-        bookById(BOOK_ROW),
-        { op: "update", table: "books" },
-        { op: "select", table: "books", rows: [{ count: 1 }] },
-        { op: "delete", table: "books" },
-    ]);
+    const scripted = createScriptedDb(deleteSuccessfulSteps(BOOK_ROW));
     const testApp = await createBooksTestApp(
         scripted,
         createPorts(scripted.effects)
@@ -1439,16 +1537,27 @@ test("DELETE /api/books/:id runs the ordered cleanup and returns 204", async () 
             "db.select books",
             "db.update books",
             "db.select books",
+            "db.select books",
             "storage.deleteFile",
+            "db.select books",
             "vectorStore.deleteCollection",
             "bookSearchChunks.deleteCollection",
             "hybridBookSearch.clearCollectionCache",
             "db.delete books",
         ]);
         const marking = effects.find((effect) => effect.operation === "update");
-        assert.deepEqual(marking?.params, ["deleting", "book-1"]);
-        const count = effects[3];
-        assert.deepEqual(count.params, ["file-1"]);
+        assert.deepEqual(marking?.params, [
+            "deleting",
+            "book-1",
+            "owner-1",
+            "processing",
+            "ready",
+            "failed",
+            "queue_failed",
+            "deleting",
+        ]);
+        const count = effects[4];
+        assert.deepEqual(count.params, ["file-1", "book-1", "deleting"]);
         const fileDelete = effects.find(
             (effect) => effect.target === "storage.deleteFile"
         );
@@ -1467,7 +1576,7 @@ test("DELETE /api/books/:id runs the ordered cleanup and returns 204", async () 
         assert.equal(chunks?.collectionName, "collection-1");
         assert.equal(cache?.collectionName, "collection-1");
         const rowDelete = effects.at(-1);
-        assert.deepEqual(rowDelete?.params, ["book-1"]);
+        assert.deepEqual(rowDelete?.params, ["book-1", "owner-1", "deleting"]);
         assert.ok(
             !effects.some((effect) =>
                 String(effect.target ?? "").startsWith("queue.")
@@ -1480,13 +1589,7 @@ test("DELETE /api/books/:id runs the ordered cleanup and returns 204", async () 
 });
 
 test("DELETE /api/books/:id keeps a shared file in storage but still cleans per-book resources", async () => {
-    const scripted = createScriptedDb([
-        authUser,
-        bookById(BOOK_ROW),
-        { op: "update", table: "books" },
-        { op: "select", table: "books", rows: [{ count: 2 }] },
-        { op: "delete", table: "books" },
-    ]);
+    const scripted = createScriptedDb(deleteSuccessfulSteps(BOOK_ROW, 1));
     const testApp = await createBooksTestApp(
         scripted,
         createPorts(scripted.effects)
@@ -1502,6 +1605,8 @@ test("DELETE /api/books/:id keeps a shared file in storage but still cleans per-
             "db.select users",
             "db.select books",
             "db.update books",
+            "db.select books",
+            "db.select books",
             "db.select books",
             "vectorStore.deleteCollection",
             "bookSearchChunks.deleteCollection",
@@ -1522,13 +1627,9 @@ test("DELETE /api/books/:id keeps a shared file in storage but still cleans per-
 });
 
 test("DELETE /api/books/:id derives the collection name when missing", async () => {
-    const scripted = createScriptedDb([
-        authUser,
-        bookById(NULL_COLLECTION_BOOK_ROW),
-        { op: "update", table: "books" },
-        { op: "select", table: "books", rows: [{ count: 1 }] },
-        { op: "delete", table: "books" },
-    ]);
+    const scripted = createScriptedDb(
+        deleteSuccessfulSteps(NULL_COLLECTION_BOOK_ROW)
+    );
     const testApp = await createBooksTestApp(
         scripted,
         createPorts(scripted.effects)
@@ -1625,11 +1726,13 @@ const deleteStagePrefixes: Record<DeleteStage, string[]> = {
         "db.select books",
         "db.update books",
         "db.select books",
+        "db.select books",
     ],
     storage: [
         "db.select users",
         "db.select books",
         "db.update books",
+        "db.select books",
         "db.select books",
         "storage.deleteFile",
     ],
@@ -1638,7 +1741,9 @@ const deleteStagePrefixes: Record<DeleteStage, string[]> = {
         "db.select books",
         "db.update books",
         "db.select books",
+        "db.select books",
         "storage.deleteFile",
+        "db.select books",
         "vectorStore.deleteCollection",
     ],
     chunks: [
@@ -1646,7 +1751,9 @@ const deleteStagePrefixes: Record<DeleteStage, string[]> = {
         "db.select books",
         "db.update books",
         "db.select books",
+        "db.select books",
         "storage.deleteFile",
+        "db.select books",
         "vectorStore.deleteCollection",
         "bookSearchChunks.deleteCollection",
     ],
@@ -1655,7 +1762,9 @@ const deleteStagePrefixes: Record<DeleteStage, string[]> = {
         "db.select books",
         "db.update books",
         "db.select books",
+        "db.select books",
         "storage.deleteFile",
+        "db.select books",
         "vectorStore.deleteCollection",
         "bookSearchChunks.deleteCollection",
         "hybridBookSearch.clearCollectionCache",
@@ -1665,7 +1774,9 @@ const deleteStagePrefixes: Record<DeleteStage, string[]> = {
         "db.select books",
         "db.update books",
         "db.select books",
+        "db.select books",
         "storage.deleteFile",
+        "db.select books",
         "vectorStore.deleteCollection",
         "bookSearchChunks.deleteCollection",
         "hybridBookSearch.clearCollectionCache",
@@ -1684,15 +1795,18 @@ const deleteStageDbSteps = (failAt: DeleteStage): ScriptedStep[] => {
     steps.push(
         failAt === "update"
             ? { op: "update", table: "books", error: "connection reset" }
-            : { op: "update", table: "books" }
+            : { op: "update", table: "books", rows: [{ id: "book-1" }] }
     );
     if (failAt === "update") return steps;
     steps.push(
+        bookById(BOOK_ROW),
         failAt === "count"
             ? { op: "select", table: "books", error: "connection reset" }
-            : { op: "select", table: "books", rows: [{ count: 1 }] }
+            : { op: "select", table: "books", rows: [{ count: 0 }] }
     );
     if (failAt === "count") return steps;
+    if (failAt === "storage") return steps;
+    steps.push({ op: "select", table: "books", rows: [{ count: 0 }] });
     if (failAt === "delete") {
         steps.push({
             op: "delete",
