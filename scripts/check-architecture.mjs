@@ -57,6 +57,18 @@ export const findImportViolations = (sourceText, fileName, rules) => {
             ts.isStringLiteralLike(node.moduleSpecifier)
         ) {
             checkSpecifier(node.moduleSpecifier.text, node.moduleSpecifier);
+        } else if (ts.isImportTypeNode(node)) {
+            if (
+                ts.isLiteralTypeNode(node.argument) &&
+                ts.isStringLiteralLike(node.argument.literal)
+            ) {
+                checkSpecifier(
+                    node.argument.literal.text,
+                    node.argument.literal
+                );
+            } else {
+                addViolation("<non-literal>", node.argument);
+            }
         } else if (
             ts.isImportEqualsDeclaration(node) &&
             ts.isExternalModuleReference(node.moduleReference)
@@ -70,7 +82,13 @@ export const findImportViolations = (sourceText, fileName, rules) => {
         } else if (ts.isCallExpression(node)) {
             const callee = node.expression;
             const isRequire =
-                ts.isIdentifier(callee) && callee.text === "require";
+                (ts.isIdentifier(callee) && callee.text === "require") ||
+                (ts.isPropertyAccessExpression(callee) &&
+                    callee.name.text === "require") ||
+                (ts.isPropertyAccessExpression(callee) &&
+                    ts.isIdentifier(callee.expression) &&
+                    callee.expression.text === "require" &&
+                    callee.name.text === "resolve");
             const isDynamicImport = callee.kind === ts.SyntaxKind.ImportKeyword;
             if (isRequire || isDynamicImport) {
                 const argument = node.arguments[0];

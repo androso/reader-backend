@@ -6,7 +6,7 @@
     "types": "dist/index.d.ts",
     "scripts": {
         "build": "tsc -p tsconfig.json",
-        "test": "tsc -p tsconfig.test.json && node --test ../../.tmp/packages-domain-test/test/*.js"
+        "test": "rm -rf ../../.tmp/packages-domain-test && tsc -p tsconfig.test.json && node --test ../../.tmp/packages-domain-test/test/*.js"
     },
     "devDependencies": {
         "@types/node": "^22.10.2",

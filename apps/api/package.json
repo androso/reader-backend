@@ -44,7 +44,7 @@
         "dev": "DOTENV_CONFIG_PATH=../../.env ts-node-dev -r dotenv/config --respawn --transpile-only --ignore-watch ../../packages src/index.ts",
         "build": "tsc -p tsconfig.json",
         "start": "DOTENV_CONFIG_PATH=../../.env node -r dotenv/config build/index.js",
-        "test": "tsc -p tsconfig.test.json && JWT_SECRET=reader-api-test-secret NODE_PATH=./node_modules:../../packages/processing/node_modules node --test ../../.tmp/apps-api-test/test/*.js"
+        "test": "rm -rf ../../.tmp/apps-api-test && tsc -p tsconfig.test.json && JWT_SECRET=reader-api-test-secret NODE_PATH=./node_modules:../../packages/processing/node_modules node --test ../../.tmp/apps-api-test/test/*.js"
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.723.0",

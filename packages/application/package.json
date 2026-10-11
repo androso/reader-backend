@@ -8,7 +8,7 @@
         "prebuild": "pnpm --filter @reader/domain build",
         "build": "tsc -p tsconfig.json",
         "pretest": "pnpm --filter @reader/domain build",
-        "test": "tsc -p tsconfig.test.json && NODE_PATH=./node_modules node --test ../../.tmp/packages-application-test/test/*.js"
+        "test": "rm -rf ../../.tmp/packages-application-test && tsc -p tsconfig.test.json && NODE_PATH=./node_modules node --test ../../.tmp/packages-application-test/test/*.js"
     },
     "dependencies": {
         "@reader/domain": "workspace:*"

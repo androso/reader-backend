@@ -34,10 +34,36 @@ test("checks imports, re-exports, import equals, require, and dynamic import", (
     );
 });
 
+test("checks inline import types and member require calls", () => {
+    const source = [
+        'export type Bus = import("node:events").EventEmitter;',
+        'type Q = typeof import("bullmq");',
+        'const fs = module.require("node:fs");',
+        'require.resolve("drizzle-orm");',
+    ].join("\n");
+    assert.deepEqual(
+        findImportViolations(source, srcFile, rules).map(
+            (item) => item.specifier
+        ),
+        ["node:events", "bullmq", "node:fs", "drizzle-orm"]
+    );
+});
+
 test("allows imports inside the package and the application domain dependency", () => {
     assert.deepEqual(
         findImportViolations(
             'import { Book } from "./internal";\nimport type { X } from "@reader/domain";',
+            srcFile,
+            rules
+        ),
+        []
+    );
+});
+
+test("allows local and application domain inline import types", () => {
+    assert.deepEqual(
+        findImportViolations(
+            'type B = import("./internal").Book;\ntype D = import("@reader/domain").Book;',
             srcFile,
             rules
         ),
@@ -65,6 +91,18 @@ test("rejects non-literal require and dynamic import arguments", () => {
     assert.deepEqual(
         violations.map((item) => item.specifier),
         ["name", "getModule()"]
+    );
+});
+
+test("rejects a non-literal inline import type", () => {
+    const violations = findImportViolations(
+        "type X = import(name).Y;",
+        srcFile,
+        rules
+    );
+    assert.deepEqual(
+        violations.map((item) => item.specifier),
+        ["<non-literal>"]
     );
 });
 
