@@ -1,7 +1,7 @@
 import type { BookCollectionCleanup } from "@reader/application";
-import { vectorStore } from "@reader/providers";
 import type { Database } from "../../database/database.module";
 import { createBookSearchChunkStore } from "../../services/BookSearchChunkStore";
+import { createBookArtifactCleanup } from "./bookArtifactCleanup";
 
 export const createBookCollectionCleanup = (
     database?: Database
@@ -9,10 +9,13 @@ export const createBookCollectionCleanup = (
     const chunkStore = database
         ? createBookSearchChunkStore(database)
         : createBookSearchChunkStore();
+    const artifactCleanup = createBookArtifactCleanup({
+        deleteSearchChunks: (name) => chunkStore.deleteCollectionChunks(name),
+    });
     return {
-        async deleteCollection(collectionName) {
-            await vectorStore.deleteCollection(collectionName);
-            await chunkStore.deleteCollectionChunks(collectionName);
+        async deleteCollection(name) {
+            await artifactCleanup.deleteVectorCollection(name);
+            await artifactCleanup.deleteSearchChunks(name);
         },
     };
 };

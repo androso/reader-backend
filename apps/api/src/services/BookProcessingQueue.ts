@@ -14,6 +14,8 @@ const getQueue = () => {
     return queue;
 };
 
+export const getBookProcessingQueue = getQueue;
+
 export const enqueueUploadedBookForProcessing = async (
     payload: BookProcessingJobData
 ) => {

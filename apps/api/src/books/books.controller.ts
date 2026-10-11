@@ -6,7 +6,6 @@ import {
     HttpCode,
     HttpException,
     Inject,
-    NotFoundException,
     Param,
     Post,
     Req,
@@ -26,10 +25,19 @@ import {
 } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import { createLogger } from "@reader/providers";
-import { createBookCollectionName } from "@reader/processing";
-import { eq, sql } from "drizzle-orm";
-import { UploadBook } from "@reader/application";
+import type {
+    DeleteOwnedBook,
+    GetBookStatus,
+    ListOwnedBooks,
+    RetryBookProcessing,
+    UploadBook,
+} from "@reader/application";
 import {
+    BookAccessDeniedError,
+    BookLifecycleLockUnavailableError,
+    BookNotFoundError,
+    BookNotRetryableError,
+    BookProcessingBusyError,
     BookProcessingQueueUnavailableError,
     InvalidBookFileError,
     MissingBookFileError,
@@ -37,11 +45,15 @@ import {
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthGuard } from "../common/guards/auth.guard";
 import { UploadRateLimitGuard } from "../common/guards/rate-limit.guard";
-import { DRIZZLE, type Database } from "../database/database.module";
-import { Books } from "../db/schema";
 import { handleGetBookFile } from "./book-file.handler";
 import { BOOKS_PORTS, type BooksPorts } from "./books.ports";
-import { UPLOAD_BOOK } from "./books.tokens";
+import {
+    DELETE_OWNED_BOOK,
+    GET_BOOK_STATUS,
+    LIST_OWNED_BOOKS,
+    RETRY_BOOK_PROCESSING,
+    UPLOAD_BOOK,
+} from "./books.tokens";
 import type { User } from "../types";
 
 const log = createLogger("books");
@@ -52,9 +64,16 @@ const log = createLogger("books");
 @UseGuards(AuthGuard)
 export class BooksController {
     constructor(
-        @Inject(DRIZZLE) private readonly db: Database,
         @Inject(BOOKS_PORTS) private readonly ports: BooksPorts,
-        @Inject(UPLOAD_BOOK) private readonly uploadBookUseCase: UploadBook
+        @Inject(UPLOAD_BOOK) private readonly uploadBookUseCase: UploadBook,
+        @Inject(LIST_OWNED_BOOKS)
+        private readonly listOwnedBooksUseCase: ListOwnedBooks,
+        @Inject(GET_BOOK_STATUS)
+        private readonly getBookStatusUseCase: GetBookStatus,
+        @Inject(RETRY_BOOK_PROCESSING)
+        private readonly retryBookProcessingUseCase: RetryBookProcessing,
+        @Inject(DELETE_OWNED_BOOK)
+        private readonly deleteOwnedBookUseCase: DeleteOwnedBook
     ) {}
 
     @Post()
@@ -161,81 +180,77 @@ export class BooksController {
     @ApiResponse({ status: 200, description: "Books successfully fetched" })
     @ApiResponse({ status: 401, description: "Authentication failed" })
     async listBooks(@CurrentUser() user: User) {
-        const booksList = await this.db
-            .select()
-            .from(Books)
-            .where(eq(Books.userId, user.id));
-
-        return { books: booksList };
+        return this.listOwnedBooksUseCase.execute({ userId: user.id });
     }
 
     @Post(":id/retry")
     @HttpCode(202)
+    @ApiOperation({ summary: "Retry a failed book's processing job" })
+    @ApiResponse({ status: 202, description: "Processing retry accepted" })
+    @ApiResponse({ status: 404, description: "Book was not found" })
+    @ApiResponse({ status: 409, description: "Book is not retryable or busy" })
+    @ApiResponse({ status: 503, description: "Processing queue unavailable" })
     async retryBook(@Param("id") id: string, @CurrentUser() user: User) {
-        const [book] = await this.db
-            .select()
-            .from(Books)
-            .where(eq(Books.id, id));
-        if (!book || book.userId !== user.id) {
-            throw new NotFoundException({ error: "Book was not found" });
-        }
-        if (
-            !book.fileType ||
-            !["queue_failed", "failed"].includes(book.processingStatus)
-        ) {
-            throw new HttpException({ error: "Book is not retryable" }, 409);
-        }
-        await this.db
-            .update(Books)
-            .set({
-                processingStatus: "processing",
-                processingError: null,
-            })
-            .where(eq(Books.id, book.id));
         try {
-            await this.ports.enqueueBookProcessing({
-                bookId: book.id,
-                userId: book.userId,
-                fileKey: book.fileKey,
-                fileType: book.fileType,
+            return await this.retryBookProcessingUseCase.execute({
+                bookId: id,
+                userId: user.id,
             });
-        } catch {
-            throw new HttpException(
-                { error: "Book processing queue is unavailable" },
-                503
-            );
+        } catch (error) {
+            if (error instanceof BookNotFoundError) {
+                throw new HttpException({ error: "Book was not found" }, 404);
+            }
+            if (error instanceof BookNotRetryableError) {
+                throw new HttpException(
+                    { error: "Book is not retryable" },
+                    409
+                );
+            }
+            if (error instanceof BookProcessingBusyError) {
+                throw new HttpException(
+                    { error: "Book processing is already in progress" },
+                    409
+                );
+            }
+            if (
+                error instanceof BookProcessingQueueUnavailableError ||
+                error instanceof BookLifecycleLockUnavailableError
+            ) {
+                throw new HttpException(
+                    { error: "Book processing queue is unavailable" },
+                    503
+                );
+            }
+            throw new HttpException({ error: "Internal server error" }, 500);
         }
-        return { bookId: book.id, status: "processing" };
     }
 
     @Get(":id/status")
+    @ApiOperation({ summary: "Get book processing status" })
+    @ApiResponse({
+        status: 200,
+        description: "Book status successfully fetched",
+    })
+    @ApiResponse({ status: 403, description: "Not authorized" })
+    @ApiResponse({ status: 404, description: "Book was not found" })
+    @ApiResponse({ status: 500, description: "Internal server error" })
     async getBookStatus(@Param("id") id: string, @CurrentUser() user: User) {
         try {
-            const [book] = await this.db
-                .select()
-                .from(Books)
-                .where(eq(Books.id, id));
-
-            if (!book) {
-                throw new NotFoundException({ error: "Book was not found" });
+            return await this.getBookStatusUseCase.execute({
+                bookId: id,
+                userId: user.id,
+            });
+        } catch (error) {
+            if (error instanceof BookNotFoundError) {
+                throw new HttpException({ error: "Book was not found" }, 404);
             }
-
-            if (book.userId !== user.id) {
+            if (error instanceof BookAccessDeniedError) {
                 throw new HttpException({ error: "Not authorized" }, 403);
             }
-
-            return {
-                bookId: book.id,
-                fileType: book.fileType,
-                ready:
-                    book.processingStatus === "ready" &&
-                    Boolean(book.collectionName),
-                status: book.processingStatus,
-                error: book.processingError,
-            };
-        } catch (error) {
-            if (error instanceof HttpException) throw error;
-            console.error("Error fetching book processing status", error);
+            log.error("Error fetching book processing status", {
+                bookId: id,
+                error: error instanceof Error ? error.message : String(error),
+            });
             throw new HttpException({ error: "Internal server error" }, 500);
         }
     }
@@ -251,64 +266,31 @@ export class BooksController {
 
     @Delete(":id")
     @HttpCode(204)
+    @ApiOperation({ summary: "Delete a book and its unshared artifacts" })
+    @ApiResponse({ status: 204, description: "Book deleted" })
+    @ApiResponse({ status: 403, description: "Not authorized" })
+    @ApiResponse({ status: 404, description: "Book was not found" })
+    @ApiResponse({ status: 500, description: "Failed to delete the file" })
     async deleteBook(@Param("id") id: string, @CurrentUser() user: User) {
         const bookId = id;
         log.info("Book delete request received", { bookId, userId: user.id });
 
         try {
-            const [book] = await this.db
-                .select()
-                .from(Books)
-                .where(eq(Books.id, bookId));
-            if (!book) {
-                log.warn("Book delete failed: not found", { bookId });
-                throw new NotFoundException({ error: "Book was not found" });
+            await this.deleteOwnedBookUseCase.execute({
+                bookId,
+                userId: user.id,
+            });
+            log.info("Book delete successful", { bookId });
+        } catch (error) {
+            if (error instanceof BookNotFoundError) {
+                throw new HttpException({ error: "Book was not found" }, 404);
             }
-            if (book.userId !== user.id) {
-                log.warn("Book delete failed: unauthorized", {
-                    bookId,
-                    userId: user.id,
-                    ownerId: book.userId,
-                });
+            if (error instanceof BookAccessDeniedError) {
                 throw new HttpException({ error: "Not authorized" }, 403);
             }
-            await this.db
-                .update(Books)
-                .set({ processingStatus: "deleting" })
-                .where(eq(Books.id, bookId));
-
-            const [remaining] = await this.db
-                .select({ count: sql`count(*)`.mapWith(Number) })
-                .from(Books)
-                .where(eq(Books.fileKey, book.fileKey));
-            if (remaining.count <= 1) {
-                log.info("Deleting orphaned file and collection", {
-                    fileKey: book.fileKey,
-                    collectionName: book.collectionName,
-                });
-                await this.ports.deleteFile(book.fileKey);
-            } else {
-                log.debug("Skipping cleanup, file still referenced", {
-                    fileKey: book.fileKey,
-                    remainingCount: remaining.count,
-                });
-            }
-
-            const collectionName =
-                book.collectionName ?? createBookCollectionName(book.id);
-            await this.ports.deleteVectorCollection(collectionName);
-            await this.ports.deleteCollectionChunks(collectionName);
-            this.ports.clearCollectionCache(collectionName);
-
-            await this.db.delete(Books).where(eq(Books.id, bookId));
-            log.info("Book record deleted after cleanup", { bookId });
-
-            log.info("Book delete successful", { bookId });
-        } catch (e) {
-            if (e instanceof HttpException) throw e;
             log.error("Book delete failed", {
                 bookId,
-                error: e instanceof Error ? e.message : String(e),
+                error: error instanceof Error ? error.message : String(error),
             });
             throw new HttpException(
                 { error: "Failed to delete the file" },

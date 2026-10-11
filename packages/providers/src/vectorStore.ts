@@ -100,7 +100,7 @@ const isRetryableVectorStoreError = (error: unknown) => {
     ].some((retryable) => detail.includes(retryable));
 };
 
-const isCollectionNotFoundError = (error: unknown) => {
+export const isCollectionNotFoundError = (error: unknown) => {
     if (!error || typeof error !== "object") return false;
 
     const details = error as {

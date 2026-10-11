@@ -8,7 +8,11 @@ import { enqueueUploadedBookForProcessing } from "./BookProcessingQueue";
 const log = createLogger("BookProcessingEnqueueService");
 
 export interface BookProcessingEnqueueRepository {
-    markQueueFailed(bookId: string, error: string): Promise<void>;
+    markQueueFailed(
+        bookId: string,
+        userId: string,
+        error: string
+    ): Promise<boolean>;
 }
 
 export interface BookProcessingEnqueueDependencies {

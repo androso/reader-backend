@@ -1,5 +1,9 @@
 import { ProcessUploadedBook } from "@reader/application";
-import type { BookProcessingRepository as BookProcessingRepositoryPort } from "@reader/application";
+import type {
+    BookArtifactReferences,
+    BookLifecycleLock,
+    BookProcessingRepository as BookProcessingRepositoryPort,
+} from "@reader/application";
 import type {
     BookProcessingRecord,
     BookProcessingRequest,
@@ -12,8 +16,11 @@ import {
 } from "@reader/processing";
 import {
     createBookCollectionCleanup,
+    createDrizzleBookRepository,
+    createPostgresBookLifecycleLock,
     createProcessUploadedBook,
 } from "../infrastructure/books";
+import { db, pool } from "../db";
 
 const log = createLogger("BookProcessingService");
 
@@ -22,16 +29,25 @@ export type { BookProcessingRecord, ProcessUploadedBookOptions };
 export type BookProcessingRepository = BookProcessingRepositoryPort;
 export type ProcessBookForSearch = typeof processBookForSearch;
 
+export interface ProcessBookLifecycleDependencies {
+    lock?: BookLifecycleLock;
+    references?: BookArtifactReferences;
+}
+
 export const handleProcessUploadedBook = async (
     payload: ProcessUploadedBookPayload,
     repository: BookProcessingRepository,
     processBook: ProcessBookForSearch,
-    options: ProcessUploadedBookOptions = {}
+    options: ProcessUploadedBookOptions = {},
+    lifecycle: ProcessBookLifecycleDependencies = {}
 ): Promise<ProcessBookResult> => {
+    const bookRepository = createDrizzleBookRepository(db);
     const processor = new ProcessUploadedBook({
         repository,
         ingestion: { ingest: processBook },
         cleanup: createBookCollectionCleanup(),
+        references: lifecycle.references ?? bookRepository,
+        lock: lifecycle.lock ?? createPostgresBookLifecycleLock({ pool }),
         cache: { clearCollection() {} },
         logger: log,
     });

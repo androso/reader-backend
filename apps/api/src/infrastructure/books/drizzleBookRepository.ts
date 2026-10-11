@@ -1,8 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type {
+    BookDeletionRepository,
     BookProcessingRepository,
     BookQueueStateRepository,
+    BookReadRepository,
     BookRepository,
+    BookRetryStateRepository,
+    BookArtifactReferences,
 } from "@reader/application";
 import type { Book, BookProcessingRecord, NewBook } from "@reader/domain";
 import { createLogger } from "@reader/providers";
@@ -26,7 +30,11 @@ const enqueueLog = createLogger("BookProcessingEnqueueService");
 
 export type DrizzleBookRepository = BookRepository &
     BookProcessingRepository &
-    BookQueueStateRepository;
+    BookQueueStateRepository &
+    BookReadRepository &
+    BookRetryStateRepository &
+    BookDeletionRepository &
+    BookArtifactReferences;
 
 export const createDrizzleBookRepository = (
     database: Database
@@ -42,6 +50,18 @@ export const createDrizzleBookRepository = (
             .from(Books)
             .where(eq(Books.id, bookId));
         return book ?? null;
+    },
+
+    async findOwned(bookId, userId) {
+        const [book] = await database
+            .select()
+            .from(Books)
+            .where(and(eq(Books.id, bookId), eq(Books.userId, userId)));
+        return book ?? null;
+    },
+
+    async listByOwner(userId) {
+        return database.select().from(Books).where(eq(Books.userId, userId));
     },
 
     async findBookForProcessing(
@@ -70,8 +90,12 @@ export const createDrizzleBookRepository = (
         return book ?? null;
     },
 
-    async markReady(bookId, collectionName) {
-        serviceLog.info("Marking book as ready", { bookId, collectionName });
+    async markReady(bookId, userId, collectionName) {
+        serviceLog.info("Marking book as ready", {
+            bookId,
+            userId,
+            collectionName,
+        });
         const updated = await database
             .update(Books)
             .set({
@@ -82,35 +106,165 @@ export const createDrizzleBookRepository = (
             .where(
                 and(
                     eq(Books.id, bookId),
+                    eq(Books.userId, userId),
                     eq(Books.processingStatus, "processing")
                 )
             )
             .returning({ id: Books.id });
-        serviceLog.info("Book marked as ready", { bookId, collectionName });
+        serviceLog.info("Book ready publication attempted", {
+            bookId,
+            userId,
+            collectionName,
+            published: updated.length === 1,
+        });
         return updated.length === 1;
     },
 
-    async markFailed(bookId, error) {
-        serviceLog.error("Marking book as failed", { bookId, error });
-        await database
+    async markFailed(bookId, userId, error) {
+        serviceLog.error("Marking book as failed", { bookId, userId, error });
+        const updated = await database
             .update(Books)
             .set({
                 processingStatus: "failed",
                 processingError: error,
             })
-            .where(eq(Books.id, bookId));
-        serviceLog.error("Book marked as failed", { bookId, error });
+            .where(
+                and(
+                    eq(Books.id, bookId),
+                    eq(Books.userId, userId),
+                    eq(Books.processingStatus, "processing")
+                )
+            )
+            .returning({ id: Books.id });
+        serviceLog.error("Book failure publication attempted", {
+            bookId,
+            userId,
+            error,
+            updated: updated.length === 1,
+        });
+        return updated.length === 1;
     },
 
-    async markQueueFailed(bookId, error) {
-        enqueueLog.error("Marking book queue failed", { bookId, error });
-        await database
+    async markQueueFailed(bookId, userId, error) {
+        enqueueLog.error("Marking book queue failed", {
+            bookId,
+            userId,
+            error,
+        });
+        const updated = await database
             .update(Books)
             .set({
                 processingStatus: "queue_failed",
                 processingError: `Book processing queue unavailable: ${error}`,
             })
-            .where(eq(Books.id, bookId));
-        enqueueLog.error("Book queue marked failed", { bookId, error });
+            .where(
+                and(
+                    eq(Books.id, bookId),
+                    eq(Books.userId, userId),
+                    eq(Books.processingStatus, "processing")
+                )
+            )
+            .returning({ id: Books.id });
+        enqueueLog.error("Book queue failure publication attempted", {
+            bookId,
+            userId,
+            error,
+            updated: updated.length === 1,
+        });
+        return updated.length === 1;
+    },
+
+    async claimRetry(bookId, userId, expectedStatus) {
+        const [book] = await database
+            .update(Books)
+            .set({ processingStatus: "processing", processingError: null })
+            .where(
+                and(
+                    eq(Books.id, bookId),
+                    eq(Books.userId, userId),
+                    eq(Books.processingStatus, expectedStatus),
+                    isNotNull(Books.fileType)
+                )
+            )
+            .returning();
+        return book ?? null;
+    },
+
+    async restoreRetryable(bookId, userId, status, error) {
+        const updated = await database
+            .update(Books)
+            .set({ processingStatus: status, processingError: error })
+            .where(
+                and(
+                    eq(Books.id, bookId),
+                    eq(Books.userId, userId),
+                    eq(Books.processingStatus, "processing")
+                )
+            )
+            .returning({ id: Books.id });
+        return updated.length === 1;
+    },
+
+    async markDeleting(bookId, userId) {
+        const updated = await database
+            .update(Books)
+            .set({ processingStatus: "deleting" })
+            .where(
+                and(
+                    eq(Books.id, bookId),
+                    eq(Books.userId, userId),
+                    inArray(Books.processingStatus, [
+                        "processing",
+                        "ready",
+                        "failed",
+                        "queue_failed",
+                        "deleting",
+                    ])
+                )
+            )
+            .returning({ id: Books.id });
+        return updated.length === 1;
+    },
+
+    async deleteDeletingRow(bookId, userId) {
+        const deleted = await database
+            .delete(Books)
+            .where(
+                and(
+                    eq(Books.id, bookId),
+                    eq(Books.userId, userId),
+                    eq(Books.processingStatus, "deleting")
+                )
+            )
+            .returning({ id: Books.id });
+        return deleted.length === 1;
+    },
+
+    async countLiveFileReferences(fileKey, excludingBookId) {
+        const [result] = await database
+            .select({ count: sql<number>`count(*)`.mapWith(Number) })
+            .from(Books)
+            .where(
+                and(
+                    eq(Books.fileKey, fileKey),
+                    ne(Books.id, excludingBookId),
+                    ne(Books.processingStatus, "deleting")
+                )
+            );
+        return result?.count ?? 0;
+    },
+
+    async countLiveCollectionReferences(collectionName, excludingBookId) {
+        const [result] = await database
+            .select({ count: sql<number>`count(*)`.mapWith(Number) })
+            .from(Books)
+            .where(
+                and(
+                    eq(Books.collectionName, collectionName),
+                    ne(Books.id, excludingBookId),
+                    ne(Books.processingStatus, "deleting")
+                )
+            );
+        return result?.count ?? 0;
     },
 });
