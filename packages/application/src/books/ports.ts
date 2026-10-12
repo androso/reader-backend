@@ -135,6 +135,8 @@ export interface BookIngestion {
 
 export interface BookCollectionCleanup {
     deleteCollection(collectionName: string): Promise<void>;
+    defaultCollectionName(bookId: string): string;
+    attemptCollectionName(bookId: string, attemptId: string): string;
 }
 
 export interface BookSearchCache {

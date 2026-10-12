@@ -20,7 +20,13 @@ import {
     enqueueBookProcessingJob,
     getRedisConnectionOptions,
 } from "@reader/jobs";
-import { Books, Users } from "../src/db/schema";
+import {
+    createBookAttemptCollectionName,
+    createBookCollectionName,
+    processBookForSearch,
+} from "@reader/processing";
+import { BookSearchChunks, Books, Users } from "../src/db/schema";
+import { createBookSearchChunkStore } from "../src/services/BookSearchChunkStore";
 import { createDrizzleBookRepository } from "../src/infrastructure/books/drizzleBookRepository";
 import {
     createBullMqBookQueueControl,
@@ -40,6 +46,14 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 const repository = createDrizzleBookRepository(db as never);
 const lifecycleLock = createPostgresBookLifecycleLock({ pool });
+const createProcessingCleanup = (
+    deleteCollection: (name: string) => Promise<void> = async () => {}
+) => ({
+    defaultCollectionName: createBookCollectionName,
+    attemptCollectionName: createBookAttemptCollectionName,
+    deleteCollection,
+});
+const attemptIds = { next: () => "a1b2c3d4" };
 let userId = "";
 
 const deferred = () => {
@@ -48,6 +62,21 @@ const deferred = () => {
         resolve = done;
     });
     return { promise, resolve };
+};
+
+const waitForAbort = (signal: AbortSignal) => {
+    if (signal.aborted) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+            clearTimeout(timer);
+            resolve();
+        };
+        const timer = setTimeout(() => {
+            signal.removeEventListener("abort", onAbort);
+            reject(new Error("Timed out waiting for lifecycle lock loss"));
+        }, 5_000);
+        signal.addEventListener("abort", onAbort, { once: true });
+    });
 };
 
 before(async () => {
@@ -227,14 +256,13 @@ test("ready processing replay does not ingest or delete artifacts", async () => 
                 };
             },
         },
-        cleanup: {
-            deleteCollection: async () => {
-                deleted += 1;
-            },
-        },
+        cleanup: createProcessingCleanup(async () => {
+            deleted += 1;
+        }),
         references: repository,
         lock: lifecycleLock,
         cache: { clearCollection: () => {} },
+        attemptIds,
     });
     await assert.rejects(
         processor.execute({
@@ -265,25 +293,24 @@ test("deletion racing ingestion rejects publication and cleans the produced coll
     const processor = new ProcessUploadedBook({
         repository,
         ingestion: {
-            ingest: async () => {
+            ingest: async (input) => {
                 signalIngestionStarted();
-                artifacts.add("new-collection");
+                artifacts.add(input.collectionName);
                 await ingestionGate;
                 return {
-                    collectionName: "new-collection",
+                    collectionName: input.collectionName,
                     chunks: 1,
                     reusedCollection: false,
                 };
             },
         },
-        cleanup: {
-            deleteCollection: async (name) => {
-                artifacts.delete(name);
-            },
-        },
+        cleanup: createProcessingCleanup(async (name) => {
+            artifacts.delete(name);
+        }),
         references: repository,
         lock: lifecycleLock,
         cache: { clearCollection: () => {} },
+        attemptIds,
     });
     const workerPromise = processor.execute({
         bookId: book.id,
@@ -431,7 +458,10 @@ test("a max-four pool completes concurrent retries and deletions without starvat
         const constrainedRepository = createDrizzleBookRepository(
             constrainedDb as never
         );
-        const constrainedLock = createPostgresBookLifecycleLock({
+        const retryLock = createPostgresBookLifecycleLock({
+            pool: constrainedPool,
+        });
+        const deleteLock = createPostgresBookLifecycleLock({
             pool: constrainedPool,
         });
         const retry = new RetryBookProcessing({
@@ -442,7 +472,7 @@ test("a max-four pool completes concurrent retries and deletions without starvat
                 retryOrEnqueue: async () => "enqueued" as const,
                 removePending: async () => {},
             },
-            lock: constrainedLock,
+            lock: retryLock,
         });
         const deletion = new DeleteOwnedBook({
             reads: constrainedRepository,
@@ -456,7 +486,7 @@ test("a max-four pool completes concurrent retries and deletions without starvat
                 defaultCollectionName: (id) => `book_${id}`,
             },
             queue: { removePending: async () => {} },
-            lock: constrainedLock,
+            lock: deleteLock,
         });
         const retryBooks = await Promise.all(
             Array.from({ length: 8 }, () => createBook("failed"))
@@ -486,10 +516,12 @@ test("processing survives termination of its advisory-lock backend", async () =>
     const book = await createBook("processing");
     const ingestionStarted = deferred();
     const releaseIngestion = deferred();
+    let ingestionSignal: AbortSignal | undefined;
     const processor = new ProcessUploadedBook({
         repository,
         ingestion: {
-            ingest: async () => {
+            ingest: async (input) => {
+                ingestionSignal = input.signal;
                 ingestionStarted.resolve();
                 await releaseIngestion.promise;
                 return {
@@ -499,10 +531,11 @@ test("processing survives termination of its advisory-lock backend", async () =>
                 };
             },
         },
-        cleanup: { deleteCollection: async () => {} },
+        cleanup: createProcessingCleanup(),
         references: repository,
         lock: lifecycleLock,
         cache: { clearCollection: () => {} },
+        attemptIds,
     });
     const processing = processor.execute({
         bookId: book.id,
@@ -522,8 +555,20 @@ test("processing survives termination of its advisory-lock backend", async () =>
             [rows[0].pid]
         );
         assert.equal(termination.rows[0]?.terminated, true);
-        await assert.rejects(processing, BookLifecycleLockLostError);
+        await waitForAbort(ingestionSignal!);
+        let settled = false;
+        void processing.then(
+            () => {
+                settled = true;
+            },
+            () => {
+                settled = true;
+            }
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        assert.equal(settled, false);
         releaseIngestion.resolve();
+        await assert.rejects(processing, BookLifecycleLockLostError);
         await new Promise<void>((resolve) => setImmediate(resolve));
 
         const [stored] = await db
@@ -534,6 +579,172 @@ test("processing survives termination of its advisory-lock backend", async () =>
     } finally {
         releaseIngestion.resolve();
         await processing.catch(() => {});
+    }
+});
+
+test("a stale ingestion attempt cannot overwrite a newer published collection", async () => {
+    const book = await createBook("processing");
+    const oldAttemptId = "aaaaaaaa";
+    const newAttemptId = "bbbbbbbb";
+    const oldCollection = createBookAttemptCollectionName(
+        book.id,
+        oldAttemptId
+    );
+    const newCollection = createBookAttemptCollectionName(
+        book.id,
+        newAttemptId
+    );
+    const oldExtractionStarted = deferred();
+    const releaseOldExtraction = deferred();
+    let oldSignal: AbortSignal | undefined;
+    const chunkStore = createBookSearchChunkStore(db as never);
+    const vectorCollections = new Map<string, string[]>();
+    const vectorStore = {
+        resetCollection: async (name: string) => {
+            vectorCollections.set(name, []);
+        },
+        addDocuments: async (name: string, documents: string[]) => {
+            vectorCollections.set(name, documents);
+        },
+    };
+    const cleanup = createProcessingCleanup(async (name) => {
+        vectorCollections.delete(name);
+        await chunkStore.deleteCollectionChunks(name);
+    });
+    const createProcessor = (
+        attemptId: string,
+        lock: ReturnType<typeof createPostgresBookLifecycleLock>
+    ) =>
+        new ProcessUploadedBook({
+            repository,
+            ingestion: {
+                ingest: (input) => {
+                    if (input.collectionName === oldCollection) {
+                        oldSignal = input.signal;
+                    }
+                    return processBookForSearch(input, {
+                        storage: {
+                            getFile: async () => Buffer.from("integration"),
+                        } as never,
+                        vectorStore: vectorStore as never,
+                        searchIndexStore: {
+                            replaceCollectionChunks: (name, chunks) =>
+                                chunkStore.replaceCollectionChunks(
+                                    name,
+                                    chunks
+                                ),
+                        },
+                        extractPdfChunks: async () => {
+                            if (input.collectionName === oldCollection) {
+                                oldExtractionStarted.resolve();
+                                await releaseOldExtraction.promise;
+                                return ["stale attempt A"];
+                            }
+                            return ["fresh attempt B"];
+                        },
+                    });
+                },
+            },
+            cleanup,
+            references: repository,
+            lock,
+            cache: { clearCollection: () => {} },
+            attemptIds: { next: () => attemptId },
+        });
+    const oldProcessor = createProcessor(
+        oldAttemptId,
+        createPostgresBookLifecycleLock({ pool })
+    );
+    const oldProcessing = oldProcessor.execute({
+        bookId: book.id,
+        userId,
+        fileKey: book.fileKey,
+        fileType: "pdf",
+    });
+
+    try {
+        await oldExtractionStarted.promise;
+        const { rows } = await pool.query<{ pid: number }>(
+            "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND pid <> pg_backend_pid()"
+        );
+        assert.equal(rows.length, 1);
+        const termination = await pool.query<{ terminated: boolean }>(
+            "SELECT pg_terminate_backend($1) AS terminated",
+            [rows[0].pid]
+        );
+        assert.equal(termination.rows[0]?.terminated, true);
+        await waitForAbort(oldSignal!);
+
+        let oldAttemptSettled = false;
+        void oldProcessing.then(
+            () => {
+                oldAttemptSettled = true;
+            },
+            () => {
+                oldAttemptSettled = true;
+            }
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        assert.equal(oldAttemptSettled, false);
+
+        const newProcessor = createProcessor(
+            newAttemptId,
+            createPostgresBookLifecycleLock({ pool })
+        );
+        await newProcessor.execute({
+            bookId: book.id,
+            userId,
+            fileKey: book.fileKey,
+            fileType: "pdf",
+        });
+        const [published] = await db
+            .select()
+            .from(Books)
+            .where(eq(Books.id, book.id));
+        assert.equal(published.processingStatus, "ready");
+        assert.equal(published.collectionName, newCollection);
+        assert.deepEqual(vectorCollections.get(newCollection), [
+            "fresh attempt B",
+        ]);
+        assert.deepEqual(
+            (await chunkStore.getCollectionChunks(newCollection)).map(
+                ({ content }) => content
+            ),
+            ["fresh attempt B"]
+        );
+
+        releaseOldExtraction.resolve();
+        await assert.rejects(oldProcessing, BookLifecycleLockLostError);
+
+        assert.equal(vectorCollections.has(oldCollection), false);
+        assert.deepEqual(
+            await chunkStore.getCollectionChunks(oldCollection),
+            []
+        );
+        const [stillPublished] = await db
+            .select()
+            .from(Books)
+            .where(eq(Books.id, book.id));
+        assert.equal(stillPublished.processingStatus, "ready");
+        assert.equal(stillPublished.collectionName, newCollection);
+        assert.deepEqual(vectorCollections.get(newCollection), [
+            "fresh attempt B",
+        ]);
+        assert.deepEqual(
+            (await chunkStore.getCollectionChunks(newCollection)).map(
+                ({ content }) => content
+            ),
+            ["fresh attempt B"]
+        );
+    } finally {
+        releaseOldExtraction.resolve();
+        await oldProcessing.catch(() => {});
+        await db
+            .delete(BookSearchChunks)
+            .where(eq(BookSearchChunks.collectionName, oldCollection));
+        await db
+            .delete(BookSearchChunks)
+            .where(eq(BookSearchChunks.collectionName, newCollection));
     }
 });
 
@@ -554,10 +765,11 @@ test("a non-owner retry returns not found while the owner's processing lock is h
                 };
             },
         },
-        cleanup: { deleteCollection: async () => {} },
+        cleanup: createProcessingCleanup(),
         references: repository,
         lock: lifecycleLock,
         cache: { clearCollection: () => {} },
+        attemptIds,
     });
     const processing = processor.execute({
         bookId: book.id,

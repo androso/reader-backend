@@ -52,6 +52,16 @@ const makeProcessingRecord = (
     ...overrides,
 });
 
+const attemptIds = { next: () => "a1b2c3d4" };
+const makeProcessingCleanup = (calls: string[] = []) => ({
+    defaultCollectionName: (bookId: string) => `default-${bookId}`,
+    attemptCollectionName: (bookId: string, attemptId: string) =>
+        `attempt-${bookId}-${attemptId}`,
+    deleteCollection: async (collectionName: string) => {
+        calls.push(`delete:${collectionName}`);
+    },
+});
+
 test("ListOwnedBooks delegates to owner-scoped read and preserves rows", async () => {
     const rows = [makeBook(), makeBook({ id: "book-2" })];
     let requestedOwner = "";
@@ -481,7 +491,7 @@ test("ProcessUploadedBook skips replays and ingests the stored file key", async 
                     };
                 },
             },
-            cleanup: { deleteCollection: async () => {} },
+            cleanup: makeProcessingCleanup(calls),
             references: {
                 countLiveFileReferences: async () => 0,
                 countLiveCollectionReferences: async () => 0,
@@ -491,6 +501,7 @@ test("ProcessUploadedBook skips replays and ingests the stored file key", async 
                     fn(new AbortController().signal),
             },
             cache: { clearCollection: () => {} },
+            attemptIds,
         };
         await assert.rejects(
             new ProcessUploadedBook(dependencies).execute({
@@ -507,15 +518,24 @@ test("ProcessUploadedBook skips replays and ingests the stored file key", async 
     }
 
     let ingestedFileKey = "";
+    let ingestedCollectionName = "";
+    let ingestionSignal: AbortSignal | undefined;
+    let readyCollectionName = "";
+    const calls: string[] = [];
     const dependencies: ProcessUploadedBookDependencies = {
         repository: {
             findBookForProcessing: async () => makeProcessingRecord(),
-            markReady: async () => true,
+            markReady: async (_bookId, _userId, collectionName) => {
+                readyCollectionName = collectionName;
+                return true;
+            },
             markFailed: async () => true,
         },
         ingestion: {
             ingest: async (input) => {
                 ingestedFileKey = input.fileKey;
+                ingestedCollectionName = input.collectionName;
+                ingestionSignal = input.signal;
                 return {
                     collectionName: "collection",
                     chunks: 1,
@@ -523,7 +543,7 @@ test("ProcessUploadedBook skips replays and ingests the stored file key", async 
                 };
             },
         },
-        cleanup: { deleteCollection: async () => {} },
+        cleanup: makeProcessingCleanup(calls),
         references: {
             countLiveFileReferences: async () => 0,
             countLiveCollectionReferences: async () => 0,
@@ -532,6 +552,7 @@ test("ProcessUploadedBook skips replays and ingests the stored file key", async 
             withLock: async (_bookId, fn) => fn(new AbortController().signal),
         },
         cache: { clearCollection: () => {} },
+        attemptIds,
     };
     await new ProcessUploadedBook(dependencies).execute({
         bookId: "book-1",
@@ -540,9 +561,13 @@ test("ProcessUploadedBook skips replays and ingests the stored file key", async 
         fileType: "pdf",
     });
     assert.equal(ingestedFileKey, "authoritative-file-key");
+    assert.equal(ingestedCollectionName, "attempt-book-1-a1b2c3d4");
+    assert.ok(ingestionSignal);
+    assert.equal(ingestionSignal.aborted, false);
+    assert.equal(readyCollectionName, "attempt-book-1-a1b2c3d4");
 });
 
-test("ProcessUploadedBook preserves shared collections on rejected publication", async () => {
+test("ProcessUploadedBook cleans its attempt after rejected publication", async () => {
     const calls: string[] = [];
     const dependencies: ProcessUploadedBookDependencies = {
         repository: {
@@ -560,11 +585,7 @@ test("ProcessUploadedBook preserves shared collections on rejected publication",
                 reusedCollection: false,
             }),
         },
-        cleanup: {
-            deleteCollection: async () => {
-                calls.push("delete-collection");
-            },
-        },
+        cleanup: makeProcessingCleanup(calls),
         references: {
             countLiveFileReferences: async () => 0,
             countLiveCollectionReferences: async () => 1,
@@ -573,6 +594,7 @@ test("ProcessUploadedBook preserves shared collections on rejected publication",
             withLock: async (_bookId, fn) => fn(new AbortController().signal),
         },
         cache: { clearCollection: () => calls.push("clear-cache") },
+        attemptIds,
     };
     await assert.rejects(
         new ProcessUploadedBook(dependencies).execute({
@@ -583,7 +605,7 @@ test("ProcessUploadedBook preserves shared collections on rejected publication",
         }),
         BookProcessingSkippedError
     );
-    assert.deepEqual(calls, []);
+    assert.deepEqual(calls, ["delete:attempt-book-1-a1b2c3d4"]);
 });
 
 test("ProcessUploadedBook lock failures do not write lifecycle state", async () => {
@@ -601,7 +623,7 @@ test("ProcessUploadedBook lock failures do not write lifecycle state", async () 
             },
         },
         ingestion: { ingest: async () => assert.fail("must not ingest") },
-        cleanup: { deleteCollection: async () => {} },
+        cleanup: makeProcessingCleanup(calls),
         references: {
             countLiveFileReferences: async () => 0,
             countLiveCollectionReferences: async () => 0,
@@ -612,6 +634,7 @@ test("ProcessUploadedBook lock failures do not write lifecycle state", async () 
             },
         },
         cache: { clearCollection: () => {} },
+        attemptIds,
     };
     await assert.rejects(
         new ProcessUploadedBook(dependencies).execute({
@@ -639,7 +662,10 @@ test("ProcessUploadedBook propagates lock loss during ingestion without publishi
     const calls: string[] = [];
     const dependencies: ProcessUploadedBookDependencies = {
         repository: {
-            findBookForProcessing: async () => makeProcessingRecord(),
+            findBookForProcessing: async () =>
+                makeProcessingRecord({
+                    collectionName: "published-collection",
+                }),
             markReady: async () => {
                 calls.push("mark-ready");
                 return true;
@@ -661,11 +687,7 @@ test("ProcessUploadedBook propagates lock loss during ingestion without publishi
                 };
             },
         },
-        cleanup: {
-            deleteCollection: async () => {
-                calls.push("delete");
-            },
-        },
+        cleanup: makeProcessingCleanup(calls),
         references: {
             countLiveFileReferences: async () => 0,
             countLiveCollectionReferences: async () => 0,
@@ -674,6 +696,7 @@ test("ProcessUploadedBook propagates lock loss during ingestion without publishi
             withLock: async (_bookId, fn) => fn(controller.signal),
         },
         cache: { clearCollection: () => {} },
+        attemptIds,
     };
 
     const processing = new ProcessUploadedBook(dependencies).execute({
@@ -684,8 +707,85 @@ test("ProcessUploadedBook propagates lock loss during ingestion without publishi
     });
     await ingestionStarted;
     controller.abort(lockLost);
+    let settled = false;
+    void processing.then(
+        () => {
+            settled = true;
+        },
+        () => {
+            settled = true;
+        }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(settled, false);
     releaseIngestion();
 
     await assert.rejects(processing, (error: unknown) => error === lockLost);
-    assert.deepEqual(calls, ["ingest"]);
+    assert.deepEqual(calls, ["ingest", "delete:attempt-book-1-a1b2c3d4"]);
+});
+
+test("ProcessUploadedBook removes the previous collection only when unreferenced", async () => {
+    for (const [references, expectedDeletes] of [
+        [0, ["delete:previous-collection"]],
+        [1, []],
+    ] as const) {
+        const calls: string[] = [];
+        const dependencies: ProcessUploadedBookDependencies = {
+            repository: {
+                findBookForProcessing: async () =>
+                    makeProcessingRecord({
+                        collectionName: "previous-collection",
+                    }),
+                markReady: async (_bookId, _userId, collectionName) => {
+                    calls.push(`ready:${collectionName}`);
+                    return true;
+                },
+                markFailed: async () => true,
+            },
+            ingestion: {
+                ingest: async (input) => {
+                    calls.push(`ingest:${input.collectionName}`);
+                    return {
+                        collectionName: input.collectionName,
+                        chunks: 1,
+                        reusedCollection: false,
+                    };
+                },
+            },
+            cleanup: {
+                ...makeProcessingCleanup(calls),
+                defaultCollectionName: (bookId) => `default-${bookId}`,
+            },
+            references: {
+                countLiveFileReferences: async () => 0,
+                countLiveCollectionReferences: async (name, excludingId) => {
+                    assert.equal(name, "previous-collection");
+                    assert.equal(excludingId, "book-1");
+                    return references;
+                },
+            },
+            lock: {
+                withLock: async (_bookId, fn) =>
+                    fn(new AbortController().signal),
+            },
+            cache: { clearCollection: (name) => calls.push(`cache:${name}`) },
+            attemptIds,
+        };
+        await new ProcessUploadedBook(dependencies).execute({
+            bookId: "book-1",
+            userId: "user-1",
+            fileKey: "key",
+            fileType: "pdf",
+        });
+        assert.equal(
+            calls.some((call) => call === "delete:attempt-book-1-a1b2c3d4"),
+            false
+        );
+        assert.deepEqual(
+            calls.filter((call) => call.startsWith("delete:")),
+            expectedDeletes
+        );
+        assert.ok(calls.includes("cache:previous-collection"));
+        assert.ok(calls.includes("cache:attempt-book-1-a1b2c3d4"));
+    }
 });

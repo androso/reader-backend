@@ -8,6 +8,7 @@ import {
     BookProcessingBusyError,
 } from "@reader/domain";
 import { createBookArtifactCleanup } from "../src/infrastructure/books/bookArtifactCleanup";
+import { createBookCollectionCleanup } from "../src/infrastructure/books/bookCollectionCleanup";
 import { createBullMqBookQueueControl } from "../src/infrastructure/books/bullmqBookQueueControl";
 import { createPostgresBookLifecycleLock } from "../src/infrastructure/books/postgresBookLifecycleLock";
 
@@ -25,6 +26,20 @@ const request = {
     fileKey: "file-1",
     fileType: "pdf" as const,
 };
+
+test("book collection cleanup delegates default and attempt names to processing", () => {
+    const cleanup = createBookCollectionCleanup();
+    const bookId = "11111111-1111-1111-1111-111111111111";
+
+    assert.equal(
+        cleanup.defaultCollectionName(bookId),
+        "book_11111111_1111_1111_1111_111111111111"
+    );
+    assert.equal(
+        cleanup.attemptCollectionName(bookId, "a1b2c3d4"),
+        "book_11111111_1111_1111_1111_111111111111_a1b2c3d4"
+    );
+});
 
 test("BullMQ control retries retained terminal jobs with both attempt resets", async () => {
     for (const state of ["failed", "completed"] as const) {
@@ -261,7 +276,64 @@ test("PostgreSQL lifecycle lock retires a client when advisory unlock fails", as
     assert.ok(releasedWith instanceof Error);
 });
 
-test("PostgreSQL lifecycle lock semaphore prevents nested pool starvation", async () => {
+test("separate PostgreSQL lifecycle lock instances share pool capacity", async () => {
+    let lockSessions = 0;
+    let peakLockSessions = 0;
+    const fakePool = {
+        options: { max: 4 },
+        connect: async () => {
+            const client = new EventEmitter() as EventEmitter & {
+                hasLock: boolean;
+                query: (sql: string) => Promise<{ rows: unknown[] }>;
+                release: () => void;
+            };
+            client.hasLock = false;
+            client.query = async (sql) => {
+                if (sql.includes("pg_advisory_lock")) {
+                    client.hasLock = true;
+                    lockSessions += 1;
+                    peakLockSessions = Math.max(peakLockSessions, lockSessions);
+                }
+                return sql.includes("pg_advisory_unlock")
+                    ? { rows: [{ unlocked: true }] }
+                    : { rows: [] };
+            };
+            client.release = () => {
+                if (client.hasLock) lockSessions -= 1;
+            };
+            return client;
+        },
+    };
+    const retryLock = createPostgresBookLifecycleLock({
+        pool: fakePool as never,
+    });
+    const deleteLock = createPostgresBookLifecycleLock({
+        pool: fakePool as never,
+    });
+    const firstEntered = deferred();
+    const releaseFirst = deferred();
+    const first = retryLock.withLock("book-1", async () => {
+        firstEntered.resolve();
+        await releaseFirst.promise;
+    });
+    await firstEntered.promise;
+
+    const rest = Promise.all(
+        Array.from({ length: 5 }, (_, index) =>
+            (index % 2 ? retryLock : deleteLock).withLock(
+                `book-${index + 2}`,
+                async () => {}
+            )
+        )
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(peakLockSessions, 2);
+    releaseFirst.resolve();
+    await Promise.all([first, rest]);
+    assert.equal(lockSessions, 0);
+});
+
+test("separate retry and delete locks prevent nested pool starvation", async () => {
     let checkedOut = 0;
     let peakCheckedOut = 0;
     const connectWaiters: Array<() => void> = [];
@@ -291,15 +363,23 @@ test("PostgreSQL lifecycle lock semaphore prevents nested pool starvation", asyn
             return client;
         },
     };
-    const lock = createPostgresBookLifecycleLock({ pool: fakePool as never });
+    const retryLock = createPostgresBookLifecycleLock({
+        pool: fakePool as never,
+    });
+    const deleteLock = createPostgresBookLifecycleLock({
+        pool: fakePool as never,
+    });
 
     const results = await Promise.all(
         Array.from({ length: 8 }, (_, index) =>
-            lock.withLock(`book-${index}`, async () => {
-                const operationClient = await fakePool.connect();
-                operationClient.release();
-                return `book-${index}`;
-            })
+            (index % 2 ? retryLock : deleteLock).withLock(
+                `book-${index}`,
+                async () => {
+                    const operationClient = await fakePool.connect();
+                    operationClient.release();
+                    return `book-${index}`;
+                }
+            )
         )
     );
 
@@ -384,19 +464,31 @@ test("PostgreSQL lifecycle lock aborts and retires a disconnected lock client", 
         await finishCallback.promise;
         return "resolved";
     });
-
-    await callbackStarted.promise;
-    assert.doesNotThrow(() => client.emit("error", cause));
-    assert.equal(receivedSignal?.aborted, true);
-    finishCallback.resolve();
-
-    await assert.rejects(
+    let settled = false;
+    void operation.then(
+        () => {
+            settled = true;
+        },
+        () => {
+            settled = true;
+        }
+    );
+    const lockLostRejection = assert.rejects(
         operation,
         (error: unknown) =>
             error instanceof BookLifecycleLockLostError &&
             (error as BookLifecycleLockLostError & { cause?: unknown })
                 .cause === cause
     );
+
+    await callbackStarted.promise;
+    assert.doesNotThrow(() => client.emit("error", cause));
+    assert.equal(receivedSignal?.aborted, true);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(settled, false);
+    finishCallback.resolve();
+
+    await lockLostRejection;
     assert.ok(releasedWith instanceof Error);
     assert.equal(
         queries.some((sql) => sql.includes("pg_advisory_unlock")),

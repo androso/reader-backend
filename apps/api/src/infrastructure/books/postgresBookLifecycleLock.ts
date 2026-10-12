@@ -23,7 +23,15 @@ interface SemaphoreWaiter {
     timer?: ReturnType<typeof setTimeout>;
 }
 
-const createFifoSemaphore = (capacity: number) => {
+interface FifoSemaphore {
+    acquire(bookId: string, deadline: number): Promise<ReleaseSlot>;
+    reduceCapacity(capacity: number): void;
+}
+
+const lifecycleSemaphores = new WeakMap<object, FifoSemaphore>();
+
+const createFifoSemaphore = (initialCapacity: number): FifoSemaphore => {
+    let capacity = initialCapacity;
     let active = 0;
     const waiters: SemaphoreWaiter[] = [];
 
@@ -32,17 +40,20 @@ const createFifoSemaphore = (capacity: number) => {
         return () => {
             if (released) return;
             released = true;
-            const waiter = waiters.shift();
-            if (waiter) {
+            active -= 1;
+            if (active < capacity && waiters.length > 0) {
+                const waiter = waiters.shift()!;
                 if (waiter.timer) clearTimeout(waiter.timer);
+                active += 1;
                 waiter.resolve(createRelease());
-            } else {
-                active -= 1;
             }
         };
     };
 
     return {
+        reduceCapacity(requestedCapacity) {
+            capacity = Math.min(capacity, requestedCapacity);
+        },
         acquire(bookId: string, deadline: number): Promise<ReleaseSlot> {
             const remainingMs = deadline - Date.now();
             if (remainingMs <= 0) {
@@ -87,9 +98,15 @@ export const createPostgresBookLifecycleLock = ({
     maxConcurrentLocks = Math.max(1, Math.floor((pool.options?.max ?? 10) / 2)),
     logger = noopLogger,
 }: PostgresBookLifecycleLockOptions): BookLifecycleLock => {
-    const semaphore = createFifoSemaphore(
-        Math.max(1, Math.floor(maxConcurrentLocks))
-    );
+    const requestedCapacity = Math.max(1, Math.floor(maxConcurrentLocks));
+    let semaphore = lifecycleSemaphores.get(pool);
+    if (semaphore) {
+        // Adapters sharing a pool use the most restrictive requested capacity.
+        semaphore.reduceCapacity(requestedCapacity);
+    } else {
+        semaphore = createFifoSemaphore(requestedCapacity);
+        lifecycleSemaphores.set(pool, semaphore);
+    }
 
     return {
         async withLock<T>(
@@ -108,11 +125,6 @@ export const createPostgresBookLifecycleLock = ({
             let retired = false;
             let timeoutConfigured = false;
             let acquired = false;
-            let rejectLockLost!: (error: BookLifecycleLockLostError) => void;
-            const lockLost = new Promise<never>((_, reject) => {
-                rejectLockLost = reject;
-            });
-            void lockLost.catch(() => {});
             const lockKey = `book-lifecycle:${bookId}`;
 
             try {
@@ -145,7 +157,6 @@ export const createPostgresBookLifecycleLock = ({
                             error: errorDetail(error),
                         });
                         abortController.abort(lockLostError);
-                        rejectLockLost(lockLostError);
                     };
                     client.on("error", onError);
 
@@ -180,10 +191,7 @@ export const createPostgresBookLifecycleLock = ({
 
                     if (acquired && !lockLostError) {
                         try {
-                            result = await Promise.race([
-                                fn(abortController.signal),
-                                lockLost,
-                            ]);
+                            result = await fn(abortController.signal);
                         } catch (error) {
                             operationError = error;
                         }

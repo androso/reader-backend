@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { StorageProvider, VectorStoreProvider } from "@reader/providers";
 import {
+    createBookAttemptCollectionName,
     createBookCollectionName,
     processBookForSearch,
     TextChunker,
@@ -106,6 +107,39 @@ test("processes EPUB with mocked storage and vector store", async () => {
     ]);
 });
 
+test("uses an explicitly supplied collection name for all artifacts", async () => {
+    const vector = createMockVectorStore();
+    const searchIndex = createMockSearchIndexStore();
+    const collectionName = "book_attempt_a1b2c3d4";
+
+    const result = await processBookForSearch(
+        {
+            bookId: "11111111-1111-1111-1111-111111111111",
+            fileKey: "epub-key",
+            fileType: "epub",
+            collectionName,
+        },
+        {
+            storage: createMockStorage(),
+            vectorStore: vector.provider,
+            searchIndexStore: searchIndex.provider,
+            extractEpubChunks: async () => ["one"],
+        }
+    );
+
+    assert.equal(result.collectionName, collectionName);
+    assert.deepEqual(vector.calls.resetCollection, [collectionName]);
+    assert.deepEqual(vector.calls.addDocuments, [
+        { collectionName, documents: ["one"] },
+    ]);
+    assert.deepEqual(
+        searchIndex.calls.replaceCollectionChunks.map(
+            ({ collectionName: name }) => name
+        ),
+        [collectionName, collectionName]
+    );
+});
+
 test("processes PDF with mocked storage and vector store", async () => {
     const vector = createMockVectorStore();
 
@@ -198,6 +232,127 @@ test("book collection names are derived only from book id", () => {
         createBookCollectionName("66666666-6666-6666-6666-666666666666"),
         "book_66666666_6666_6666_6666_666666666666"
     );
+});
+
+test("attempt collection names are valid and fit vector-store limits", () => {
+    const name = createBookAttemptCollectionName(
+        "66666666-6666-6666-6666-666666666666",
+        "a1b2c3d4"
+    );
+
+    assert.ok(name.length <= 63);
+    assert.match(name, /^[a-zA-Z0-9_]+$/);
+});
+
+test("aborted signals skip each pending processing artifact write", async () => {
+    const createController = () => new AbortController();
+    const book = {
+        bookId: "77777777-7777-7777-7777-777777777777",
+        fileKey: "epub-key",
+        fileType: "epub" as const,
+    };
+
+    const beforeReset = createController();
+    beforeReset.abort(new Error("before reset"));
+    const resetVector = createMockVectorStore();
+    await assert.rejects(
+        processBookForSearch(
+            { ...book, signal: beforeReset.signal },
+            {
+                storage: createMockStorage(),
+                vectorStore: resetVector.provider,
+                extractEpubChunks: async () => ["one"],
+            }
+        ),
+        /before reset/
+    );
+    assert.deepEqual(resetVector.calls.resetCollection, []);
+
+    const beforeInitialChunkReplace = createController();
+    const initialReplaceVector = createMockVectorStore();
+    const initialReplaceIndex = createMockSearchIndexStore();
+    const initialReplaceReset = initialReplaceVector.provider.resetCollection;
+    initialReplaceVector.provider.resetCollection = async (name) => {
+        await initialReplaceReset(name);
+        beforeInitialChunkReplace.abort(new Error("before initial replace"));
+    };
+    await assert.rejects(
+        processBookForSearch(
+            { ...book, signal: beforeInitialChunkReplace.signal },
+            {
+                storage: createMockStorage(),
+                vectorStore: initialReplaceVector.provider,
+                searchIndexStore: initialReplaceIndex.provider,
+                extractEpubChunks: async () => ["one"],
+            }
+        ),
+        /before initial replace/
+    );
+    assert.deepEqual(initialReplaceVector.calls.resetCollection, [
+        createBookCollectionName(book.bookId),
+    ]);
+    assert.deepEqual(initialReplaceIndex.calls.replaceCollectionChunks, []);
+
+    const beforeFinalChunkReplace = createController();
+    const finalReplaceIndex = createMockSearchIndexStore();
+    const originalReplace = finalReplaceIndex.provider.replaceCollectionChunks;
+    finalReplaceIndex.provider.replaceCollectionChunks = async (
+        collectionName,
+        chunks
+    ) => {
+        await originalReplace(collectionName, chunks);
+        if (chunks.length === 0) {
+            beforeFinalChunkReplace.abort(new Error("before final replace"));
+        }
+    };
+    const finalReplaceVector = createMockVectorStore();
+    await assert.rejects(
+        processBookForSearch(
+            { ...book, signal: beforeFinalChunkReplace.signal },
+            {
+                storage: createMockStorage(),
+                vectorStore: finalReplaceVector.provider,
+                searchIndexStore: finalReplaceIndex.provider,
+                extractEpubChunks: async () => ["one"],
+            }
+        ),
+        /before final replace/
+    );
+    assert.deepEqual(
+        finalReplaceIndex.calls.replaceCollectionChunks.map(
+            ({ chunks }) => chunks
+        ),
+        [[]]
+    );
+    assert.deepEqual(finalReplaceVector.calls.addDocuments, []);
+
+    const beforeAddDocuments = createController();
+    const addDocumentsIndex = createMockSearchIndexStore();
+    const originalChunksWrite =
+        addDocumentsIndex.provider.replaceCollectionChunks;
+    addDocumentsIndex.provider.replaceCollectionChunks = async (
+        collectionName,
+        chunks
+    ) => {
+        await originalChunksWrite(collectionName, chunks);
+        if (chunks.length > 0) {
+            beforeAddDocuments.abort(new Error("before add documents"));
+        }
+    };
+    const addDocumentsVector = createMockVectorStore();
+    await assert.rejects(
+        processBookForSearch(
+            { ...book, signal: beforeAddDocuments.signal },
+            {
+                storage: createMockStorage(),
+                vectorStore: addDocumentsVector.provider,
+                searchIndexStore: addDocumentsIndex.provider,
+                extractEpubChunks: async () => ["one"],
+            }
+        ),
+        /before add documents/
+    );
+    assert.deepEqual(addDocumentsVector.calls.addDocuments, []);
 });
 
 test("text chunker returns bounded chunks", () => {

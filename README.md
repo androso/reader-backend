@@ -82,11 +82,15 @@ retry intentionally returns `404` for both cases. Retry conflicts return
 `409`, while queue or lifecycle-lock unavailability returns `503`. Deletion
 marks the row as `deleting` before cleanup so a failed cleanup can be retried;
 files and collections still referenced by another live book are retained.
-Lifecycle advisory-lock sessions are FIFO-limited to half of the shared
-PostgreSQL pool capacity (at least one; default pool maximum ten), and pool
-connections time out after 10 seconds. If a lock session disconnects, its
-callback is aborted and lifecycle state writes and destructive cleanup are
-stopped; retry and processing use the existing lifecycle-unavailable response.
+Lifecycle advisory-lock sessions share a FIFO capacity limit across all
+adapters using the same PostgreSQL pool (defaulting to half the pool maximum,
+at least one; later adapters can lower the limit). Pool connections time out
+after 10 seconds and use keepalive. If a lock session disconnects, its callback
+is aborted and awaited until in-flight work settles; lifecycle state writes
+stop, then only that attempt's isolated artifacts are cleaned.
+Each processing attempt uses a unique collection. Publication points the book
+at the new collection, clears caches for both old and new names, and best-effort
+removes the previous collection only when no other live book references it.
 
 ## AWS infrastructure
 

@@ -26,6 +26,7 @@ export interface ProcessUploadedBookDependencies {
     references: BookArtifactReferences;
     lock: BookLifecycleLock;
     cache: BookSearchCache;
+    attemptIds: { next(): string };
     logger?: Logger;
 }
 
@@ -46,6 +47,9 @@ export class ProcessUploadedBook {
         return this.deps.lock.withLock(request.bookId, async (signal) => {
             const start = Date.now();
             let fileKey = request.fileKey;
+            let attemptCollectionName: string | undefined;
+            let ingestionStarted = false;
+            let published = false;
             this.logger.info("Handling uploaded book processing", {
                 bookId: request.bookId,
                 userId: request.userId,
@@ -95,43 +99,72 @@ export class ProcessUploadedBook {
                     bookId: request.bookId,
                     fileKey: book.fileKey,
                 });
+                const attemptCollection =
+                    this.deps.cleanup.attemptCollectionName(
+                        request.bookId,
+                        this.deps.attemptIds.next()
+                    );
+                attemptCollectionName = attemptCollection;
+                throwIfLockLost(signal);
+                ingestionStarted = true;
                 const result = await this.deps.ingestion.ingest({
                     bookId: request.bookId,
                     fileKey: book.fileKey,
                     fileType: book.fileType,
+                    collectionName: attemptCollection,
+                    signal,
                 });
 
                 throwIfLockLost(signal);
-                const published = await this.deps.repository.markReady(
+                const didPublish = await this.deps.repository.markReady(
                     request.bookId,
                     request.userId,
-                    result.collectionName
+                    attemptCollection
                 );
-                if (!published) {
+                if (!didPublish) {
                     this.logger.warn(
                         "Book disappeared before ingestion could publish",
                         {
                             bookId: request.bookId,
-                            collectionName: result.collectionName,
+                            collectionName: attemptCollection,
                         }
                     );
-                    const references =
-                        await this.deps.references.countLiveCollectionReferences(
-                            result.collectionName,
-                            request.bookId
-                        );
-                    if (references === 0) {
-                        throwIfLockLost(signal);
-                        await this.deps.cleanup.deleteCollection(
-                            result.collectionName
+                    throw new BookDeletedDuringProcessingError(request.bookId);
+                }
+
+                published = true;
+                const previousCollectionName =
+                    book.collectionName ??
+                    this.deps.cleanup.defaultCollectionName(request.bookId);
+                if (previousCollectionName !== attemptCollection) {
+                    try {
+                        const references =
+                            await this.deps.references.countLiveCollectionReferences(
+                                previousCollectionName,
+                                request.bookId
+                            );
+                        if (references === 0) {
+                            throwIfLockLost(signal);
+                            await this.deps.cleanup.deleteCollection(
+                                previousCollectionName
+                            );
+                        }
+                    } catch (error) {
+                        if (signal.aborted) throwIfLockLost(signal);
+                        this.logger.error(
+                            "Unable to clean up previous book collection",
+                            {
+                                bookId: request.bookId,
+                                collectionName: previousCollectionName,
+                                error: getErrorMessage(error),
+                            }
                         );
                     }
-                    throw new BookDeletedDuringProcessingError(request.bookId);
                 }
 
                 this.logger.info("Uploaded book processing succeeded", {
                     bookId: request.bookId,
-                    collectionName: result.collectionName,
+                    collectionName: attemptCollection,
                     chunkCount: result.chunks,
                     reusedCollection: result.reusedCollection,
                     durationMs: Date.now() - start,
@@ -139,12 +172,46 @@ export class ProcessUploadedBook {
                 this.logger.info(
                     "Clearing hybrid search cache after processing",
                     {
-                        collectionName: result.collectionName,
+                        collectionName: attemptCollection,
                     }
                 );
-                this.deps.cache.clearCollection(result.collectionName);
-                return result;
+                for (const collectionName of new Set([
+                    previousCollectionName,
+                    attemptCollection,
+                ])) {
+                    try {
+                        this.deps.cache.clearCollection(collectionName);
+                    } catch (error) {
+                        this.logger.error(
+                            "Unable to clear hybrid search cache after processing",
+                            {
+                                bookId: request.bookId,
+                                collectionName,
+                                error: getErrorMessage(error),
+                            }
+                        );
+                    }
+                }
+                return { ...result, collectionName: attemptCollection };
             } catch (error) {
+                if (ingestionStarted && !published && attemptCollectionName) {
+                    try {
+                        await this.deps.cleanup.deleteCollection(
+                            attemptCollectionName
+                        );
+                    } catch (cleanupError) {
+                        this.logger.error(
+                            "Unable to clean up failed book processing attempt",
+                            {
+                                bookId: request.bookId,
+                                collectionName: attemptCollectionName,
+                                error: getErrorMessage(cleanupError),
+                            }
+                        );
+                    }
+                }
+                if (error instanceof BookLifecycleLockLostError) throw error;
+                if (signal.aborted) throwIfLockLost(signal);
                 if (error instanceof BookProcessingSkippedError) {
                     this.logger.info("Skipping book processing replay", {
                         bookId: request.bookId,
@@ -152,8 +219,6 @@ export class ProcessUploadedBook {
                     });
                     throw error;
                 }
-                if (error instanceof BookLifecycleLockLostError) throw error;
-                throwIfLockLost(signal);
 
                 this.logger.error("Uploaded book processing failed", {
                     bookId: request.bookId,

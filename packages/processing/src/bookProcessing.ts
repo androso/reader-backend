@@ -11,6 +11,8 @@ export interface ProcessBookInput {
     bookId: string;
     fileKey: string;
     fileType: BookFileType;
+    collectionName?: string;
+    signal?: AbortSignal;
 }
 
 export interface ProcessBookDependencies {
@@ -53,6 +55,11 @@ export interface ProcessBookResult {
 export const createBookCollectionName = (bookId: string) =>
     `book_${bookId.replace(/-/g, "_")}`;
 
+export const createBookAttemptCollectionName = (
+    bookId: string,
+    attemptId: string
+) => `${createBookCollectionName(bookId)}_${attemptId}`;
+
 export const processBookForSearch = async (
     input: ProcessBookInput,
     dependencies: ProcessBookDependencies = {
@@ -88,7 +95,8 @@ export const processBookForSearch = async (
         fileKey: input.fileKey,
         fileType: input.fileType,
     });
-    const collectionName = createBookCollectionName(input.bookId);
+    const collectionName =
+        input.collectionName ?? createBookCollectionName(input.bookId);
     log.info("Collection name generated", {
         bookId: input.bookId,
         fileKey: input.fileKey,
@@ -100,7 +108,9 @@ export const processBookForSearch = async (
         bookId: input.bookId,
         fileKey: input.fileKey,
     });
+    input.signal?.throwIfAborted();
     await dependencies.vectorStore.resetCollection(collectionName);
+    input.signal?.throwIfAborted();
     await dependencies.searchIndexStore?.replaceCollectionChunks(
         collectionName,
         []
@@ -142,6 +152,7 @@ export const processBookForSearch = async (
         collectionName,
         chunkCount: chunks.length,
     });
+    input.signal?.throwIfAborted();
     await dependencies.searchIndexStore?.replaceCollectionChunks(
         collectionName,
         chunks
@@ -155,6 +166,7 @@ export const processBookForSearch = async (
         collectionName,
         chunkCount: chunks.length,
     });
+    input.signal?.throwIfAborted();
     await dependencies.vectorStore.addDocuments(collectionName, documents);
 
     const duration = Date.now() - start;

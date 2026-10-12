@@ -45,6 +45,8 @@ export interface BookIngestionInput {
     bookId: string;
     fileKey: string;
     fileType: BookFileType;
+    collectionName: string;
+    signal?: AbortSignal;
 }
 
 export interface BookIngestionResult {

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
     DeleteOwnedBook,
     EnqueueBookProcessing,
@@ -47,6 +47,7 @@ export const createProcessUploadedBook = (
         references: repository,
         lock: createPostgresBookLifecycleLock({ pool: connectionPool }),
         cache: bookSearchCache,
+        attemptIds: { next: () => randomBytes(4).toString("hex") },
         logger: createLogger("BookProcessingService"),
     });
 };

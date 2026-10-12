@@ -282,6 +282,9 @@ const processDeps = (
         },
     },
     cleanup: {
+        defaultCollectionName: (bookId) => `book_${bookId}`,
+        attemptCollectionName: (bookId, attemptId) =>
+            `book_${bookId}_${attemptId}`,
         deleteCollection: async (name) => {
             calls.push(`cleanup:${name}`);
         },
@@ -296,6 +299,7 @@ const processDeps = (
     lock: {
         withLock: async (_bookId, fn) => fn(new AbortController().signal),
     },
+    attemptIds: { next: () => "a1b2c3d4" },
     ...overrides,
 });
 
@@ -309,16 +313,25 @@ for (const fileType of ["pdf", "epub"] as const) {
                         ...processingRecord,
                         fileType,
                     }),
-                    markReady: async () => {
-                        calls.push("ready");
+                    markReady: async (_id, _userId, collectionName) => {
+                        calls.push(`ready:${collectionName}`);
                         return true;
                     },
                     markFailed: async () => true,
                 },
             })
         ).execute({ ...request, fileType });
-        assert.deepEqual(result, ingestionResult);
-        assert.deepEqual(calls, ["ingest", "ready", "cache:book_collection"]);
+        assert.deepEqual(result, {
+            ...ingestionResult,
+            collectionName: "book_book-1_a1b2c3d4",
+        });
+        assert.deepEqual(calls, [
+            "ingest",
+            "ready:book_book-1_a1b2c3d4",
+            "cleanup:book_book-1",
+            "cache:book_book-1",
+            "cache:book_book-1_a1b2c3d4",
+        ]);
     });
 }
 
@@ -379,7 +392,7 @@ test("ProcessUploadedBook can skip marking retryable errors", async () => {
         ).execute(request, { markFailedOnError: false }),
         /temporary/
     );
-    assert.deepEqual(calls, ["find", "ingest"]);
+    assert.deepEqual(calls, ["find", "ingest", "cleanup:book_book-1_a1b2c3d4"]);
 });
 
 test("ProcessUploadedBook marks final-attempt errors failed", async () => {
@@ -397,7 +410,12 @@ test("ProcessUploadedBook marks final-attempt errors failed", async () => {
         ).execute(request, { markFailedOnError: true }),
         /permanent/
     );
-    assert.deepEqual(calls, ["find", "ingest", "failed:permanent"]);
+    assert.deepEqual(calls, [
+        "find",
+        "ingest",
+        "cleanup:book_book-1_a1b2c3d4",
+        "failed:permanent",
+    ]);
 });
 
 test("ProcessUploadedBook cleans rejected publication without failure writes", async () => {
@@ -417,7 +435,7 @@ test("ProcessUploadedBook cleans rejected publication without failure writes", a
         ).execute(request),
         BookDeletedDuringProcessingError
     );
-    assert.deepEqual(calls, ["find", "ingest", "cleanup:book_collection"]);
+    assert.deepEqual(calls, ["find", "ingest", "cleanup:book_book-1_a1b2c3d4"]);
 });
 
 test("ProcessUploadedBook marks ingestion errors failed", async () => {
@@ -435,5 +453,10 @@ test("ProcessUploadedBook marks ingestion errors failed", async () => {
         ).execute(request),
         /ingestion failed/
     );
-    assert.deepEqual(calls, ["find", "ingest", "failed:ingestion failed"]);
+    assert.deepEqual(calls, [
+        "find",
+        "ingest",
+        "cleanup:book_book-1_a1b2c3d4",
+        "failed:ingestion failed",
+    ]);
 });

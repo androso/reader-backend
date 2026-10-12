@@ -49,6 +49,13 @@ const testLifecycle = {
             fn: (signal: AbortSignal) => Promise<T>
         ) => fn(new AbortController().signal),
     },
+    cleanup: {
+        defaultCollectionName: (bookId: string) => `book_${bookId}`,
+        attemptCollectionName: (bookId: string, attemptId: string) =>
+            `book_${bookId}_${attemptId}`,
+        deleteCollection: async () => {},
+    },
+    attemptIds: { next: () => "a1b2c3d4" },
     references: {
         countLiveFileReferences: async () => 0,
         countLiveCollectionReferences: async () => 0,
@@ -61,8 +68,8 @@ test("successful synchronous processing marks book ready", async () => {
     const result = await handleProcessUploadedBook(
         payload,
         repository,
-        async () => ({
-            collectionName: "book_collection",
+        async (input) => ({
+            collectionName: input.collectionName!,
             chunks: 2,
             reusedCollection: false,
         }),
@@ -70,8 +77,8 @@ test("successful synchronous processing marks book ready", async () => {
         testLifecycle
     );
 
-    assert.equal(result.collectionName, "book_collection");
-    assert.deepEqual(calls.ready, ["book_collection"]);
+    assert.equal(result.collectionName, "book_book-1_a1b2c3d4");
+    assert.deepEqual(calls.ready, ["book_book-1_a1b2c3d4"]);
     assert.deepEqual(calls.failed, []);
 });
 
@@ -157,7 +164,7 @@ test("same file key does not trigger duplicate collection reuse", async () => {
             seenBookId = input.bookId;
             seenFileKey = input.fileKey;
             return {
-                collectionName: "book_new",
+                collectionName: input.collectionName!,
                 chunks: 2,
                 reusedCollection: false,
             };
@@ -169,7 +176,7 @@ test("same file key does not trigger duplicate collection reuse", async () => {
     assert.equal(seenBookId, "book-1");
     assert.equal(seenFileKey, "epub-same-metadata");
     assert.equal(result.reusedCollection, false);
-    assert.deepEqual(calls.ready, ["book_new"]);
+    assert.deepEqual(calls.ready, ["book_book-1_a1b2c3d4"]);
 });
 
 test("file type mismatch fails safely", async () => {

@@ -1,6 +1,8 @@
+import { randomBytes } from "node:crypto";
 import { ProcessUploadedBook } from "@reader/application";
 import type {
     BookArtifactReferences,
+    BookCollectionCleanup,
     BookLifecycleLock,
     BookProcessingRepository as BookProcessingRepositoryPort,
 } from "@reader/application";
@@ -32,6 +34,8 @@ export type ProcessBookForSearch = typeof processBookForSearch;
 export interface ProcessBookLifecycleDependencies {
     lock?: BookLifecycleLock;
     references?: BookArtifactReferences;
+    cleanup?: BookCollectionCleanup;
+    attemptIds?: { next(): string };
 }
 
 export const handleProcessUploadedBook = async (
@@ -45,10 +49,13 @@ export const handleProcessUploadedBook = async (
     const processor = new ProcessUploadedBook({
         repository,
         ingestion: { ingest: processBook },
-        cleanup: createBookCollectionCleanup(),
+        cleanup: lifecycle.cleanup ?? createBookCollectionCleanup(),
         references: lifecycle.references ?? bookRepository,
         lock: lifecycle.lock ?? createPostgresBookLifecycleLock({ pool }),
         cache: { clearCollection() {} },
+        attemptIds: lifecycle.attemptIds ?? {
+            next: () => randomBytes(4).toString("hex"),
+        },
         logger: log,
     });
     return processor.execute(payload, options);
