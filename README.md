@@ -16,32 +16,49 @@ worker, and shared ingestion packages.
 
 ## Setup
 
-Install dependencies from the repository root:
+Use Node.js 22 (matching the production Dockerfiles) and the repository-pinned
+pnpm 10.11.1 through Corepack. From this repository root:
 
 ```bash
-pnpm install
+corepack enable pnpm
+corepack pnpm install --frozen-lockfile
+corepack pnpm dev:env
 ```
 
-Create local environment files:
+Enable the pnpm shim once: workspace scripts invoke `pnpm` internally, so
+calling Corepack alone without the shim is not enough.
+
+`dev:env` creates missing root and web `.env` files, generates a local JWT secret,
+and never overwrites existing files. Configure a dedicated local `reader_dev`
+database and its credentials in the root `.env` before applying migrations.
 
 ```bash
-cp .env.template .env
-cp apps/web/.env.template apps/web/.env
+corepack pnpm dev:services:up
+corepack pnpm db:migrate
+corepack pnpm dev
 ```
 
-Local development expects these services to be available:
-
-- PostgreSQL, matching `DATABASE_URL`.
-- Redis, matching `REDIS_URL`.
-- Chroma, matching `CHROMA_URL`, for vector search.
-- OpenAI credentials, via `OPENAI_API_KEY`, when ingesting books or chatting with document context.
+The application runs locally with code reload. Docker runs pinned Redis and
+Chroma containers with persistent storage and no automatic restart. PostgreSQL
+is an existing shared service, configured through `DATABASE_URL`; the setup
+commands never create, stop, or modify it. OpenAI credentials are needed for
+book ingestion and document chat.
 
 For local auth, the API supports `/api/auth/dev` through `DEV_USER_EMAIL` and
 `DEV_USER_NAME`. Google OAuth values are still required for production.
 
+See [Local development](docs/local-development.md) for database setup,
+manual service control, ports, and troubleshooting.
+
 ## Commands
 
 - `pnpm dev`: run the API, web app, and Redis-backed worker in development mode.
+- `pnpm dev:env`: create missing local environment files without overwriting them.
+- `pnpm dev:services:setup`: create missing pinned Redis/Chroma containers, stopped.
+- `pnpm dev:services:up`: provision and manually start Redis/Chroma, then wait for readiness.
+- `pnpm dev:services:down`: stop Redis/Chroma without deleting containers or data.
+- `pnpm dev:services:status`: report the shared PostgreSQL and Reader container states.
+- `pnpm test:dev`: test setup scripts without Docker or a live database.
 - `pnpm build`: compile the backend packages, API app, and worker app.
 - `pnpm test`: run package, API, and worker tests.
 - `pnpm api:dev`: run only the API app on port `3000`.
