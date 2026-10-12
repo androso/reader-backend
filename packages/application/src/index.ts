@@ -14,3 +14,4 @@ export * from "./chat/AppendBookChat";
 export * from "./chat/RunBookChat";
 export * from "./chat/StartBookChat";
 export * from "./chat/throwIfChatCancelled";
+export * from "./rag/ports";

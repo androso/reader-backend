@@ -1,0 +1,110 @@
+{
+    "empty": {
+        "mode": "vector_only",
+        "ids": []
+    },
+    "vectorOnly": {
+        "mode": "vector_only",
+        "ids": [
+            "v0"
+        ]
+    },
+    "thresholdInclusive": [
+        "at",
+        "above"
+    ],
+    "tieOrder": [
+        "tie-a",
+        "tie-b"
+    ],
+    "hybridTieOrder": {
+        "ids": [
+            "tie-a",
+            "tie-b"
+        ],
+        "equalScores": true
+    },
+    "neighborAtZero": [
+        "c0",
+        "c1"
+    ],
+    "neighborAtLast": [
+        "c2",
+        "c1"
+    ],
+    "budget": {
+        "candidates": 30,
+        "withinLimit": true
+    },
+    "timeout": "timeout",
+    "cancellation": {
+        "category": "timeout",
+        "callerAborted": true
+    },
+    "strictInfrastructureError": "chunk reader unavailable",
+    "malformedReranker": [
+        {
+            "message": "response incomplete",
+            "fallback": "invalid_or_incomplete_ranking"
+        },
+        {
+            "message": "Reranker ranking at index 0 has an unknown alias",
+            "fallback": "invalid_or_incomplete_ranking"
+        },
+        {
+            "message": "Reranker ranking at index 1 has a duplicate alias",
+            "fallback": "invalid_or_incomplete_ranking"
+        }
+    ],
+    "mmr": [
+        "a",
+        "b"
+    ],
+    "diversityGuard": {
+        "engaged": true,
+        "selected": [
+            "a",
+            "c"
+        ],
+        "notEngaged": true
+    },
+    "promptWithHighlight": {
+        "containsHighlight": true,
+        "roles": [
+            "system",
+            "user",
+            "assistant"
+        ],
+        "history": [
+            "Earlier question",
+            "Earlier answer"
+        ],
+        "query": "What happened?\n\nSelected passage:\nSelected passage"
+    },
+    "promptWithoutHighlight": {
+        "containsHighlight": false,
+        "roles": [
+            "system"
+        ]
+    },
+    "completedStream": {
+        "answer": "partial answer",
+        "streamCompleted": true,
+        "transportWarning": "Error ERR_STREAM_PREMATURE_CLOSE Premature close"
+    },
+    "incompleteStream": {
+        "error": "Premature close"
+    },
+    "costs": {
+        "gpt-4o-mini": 0.000315,
+        "gpt-4o-mini-2024-07-18": 0.000315,
+        "gpt-5.4-mini-2026-03-17": 0.001965,
+        "gpt-5.5-2026-04-23": 0.0131
+    },
+    "shadowComparison": {
+        "overlapCount": 1,
+        "sourceSetJaccard": 0.3333333333333333,
+        "exactRankMatches": 0,
+        "identical": false
+    }
+}
