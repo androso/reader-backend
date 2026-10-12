@@ -162,6 +162,8 @@ const main = async () => {
         defaultChatStreamDependencies,
     } =
         require("../../src/chat/chat-stream") as typeof import("../../src/chat/chat-stream");
+    const { APPEND_BOOK_CHAT, START_BOOK_CHAT } =
+        require("../../src/infrastructure/chat/chat.tokens") as typeof import("../../src/infrastructure/chat/chat.tokens");
 
     const client = {
         query: async (queryConfig: unknown, params?: unknown[]) => {
@@ -334,6 +336,11 @@ const main = async () => {
             { token: RETRY_BOOK_PROCESSING, useValue: retryBookProcessing },
             { token: DELETE_OWNED_BOOK, useValue: deleteOwnedBook },
             { token: CHAT_OPERATIONS, useValue: chatOperations },
+            { token: START_BOOK_CHAT, useValue: chatOperations.startBookChat },
+            {
+                token: APPEND_BOOK_CHAT,
+                useValue: chatOperations.appendBookChat,
+            },
         ],
     });
 

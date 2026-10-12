@@ -30,7 +30,9 @@ const {
     CHAT_CONVERSATION_REPOSITORY,
     CHAT_MESSAGE_REPOSITORY,
     CHAT_RESOURCE_ACCESS,
+    APPEND_BOOK_CHAT,
     GET_BOOK_CONVERSATION,
+    START_BOOK_CHAT,
     LIST_BOOK_CONVERSATIONS,
 } =
     require("../src/infrastructure/chat/chat.tokens") as typeof import("../src/infrastructure/chat/chat.tokens");
@@ -120,17 +122,20 @@ const createChatTestApp = (rows: DbRows) => {
         fakeDb as never
     );
     const messages = createDrizzleChatMessageRepository(fakeDb as never);
+    const operations = createChatOperations({
+        ...defaultChatStreamDependencies,
+        db: fakeDb as never,
+    });
     return createTestApp({
         controllers: [ChatController],
         providers: [
             { provide: DRIZZLE, useValue: fakeDb },
             {
                 provide: CHAT_OPERATIONS,
-                useValue: createChatOperations({
-                    ...defaultChatStreamDependencies,
-                    db: fakeDb as never,
-                }),
+                useValue: operations,
             },
+            { provide: START_BOOK_CHAT, useValue: operations.startBookChat },
+            { provide: APPEND_BOOK_CHAT, useValue: operations.appendBookChat },
             {
                 provide: CHAT_RESOURCE_ACCESS,
                 useValue: resourceAccess,
@@ -395,6 +400,14 @@ const createScriptedChatApp = (steps: DbStep[]) => {
                 useValue: { get: () => null, close: async () => undefined },
             },
             { token: CHAT_OPERATIONS, useValue: scriptedChatOperations },
+            {
+                token: START_BOOK_CHAT,
+                useValue: scriptedChatOperations.startBookChat,
+            },
+            {
+                token: APPEND_BOOK_CHAT,
+                useValue: scriptedChatOperations.appendBookChat,
+            },
             {
                 token: BOOKS_PORTS,
                 useValue: {

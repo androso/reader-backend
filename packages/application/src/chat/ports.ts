@@ -1,4 +1,5 @@
 import type {
+    ChatHistoryMessage,
     ChatConversation,
     ChatFinishStatus,
     ChatGenerationResult,
@@ -53,11 +54,16 @@ export interface ChatMessageAppend {
     completionStatus?: ChatFinishStatus | null;
     finishReason?: string | null;
     executionMetadata?: Record<string, unknown> | null;
+    trace?: ChatTraceObservation;
+    signal?: AbortSignal;
 }
 
 export interface ChatMessageRepository {
     append(message: ChatMessageAppend): Promise<ChatMessage>;
     listForConversation(conversationId: string): Promise<ChatMessage[]>;
+    listHistoryForConversation?(
+        conversationId: string
+    ): Promise<ChatHistoryMessage[]>;
 }
 
 export interface ChatRetrievalResult {
@@ -76,6 +82,7 @@ export interface ChatContextRetrieval {
             messages: ChatPromptMessage[];
             query: string;
             highlightContext: ChatHighlight | null;
+            trace: ChatTraceObservation;
         },
         signal?: AbortSignal
     ): Promise<ChatRetrievalResult>;
@@ -86,6 +93,12 @@ export interface ChatAnswerGeneration {
         input: {
             messages: ChatPromptMessage[];
             model: string;
+            userId: string;
+            conversationId: string;
+            resourceType: ChatResourceType;
+            resourceId: string;
+            routeName: string;
+            trace: ChatTraceObservation;
         },
         options: {
             signal?: AbortSignal;
@@ -134,8 +147,24 @@ export interface ChatShadowScheduler {
 
 export interface ChatEventSink {
     emit(event: ChatStreamEvent): Promise<void>;
+    complete(): Promise<void>;
 }
 
 export interface Clock {
     now(): Date;
+}
+
+export interface ChatModelResolver {
+    resolve(model: unknown): string | null;
+}
+
+export interface ChatExecutionMetadataBuilder {
+    build(input: {
+        telemetry: ChatRetrievalDiagnostics;
+        model: string;
+        usage: Record<string, unknown> | null;
+        generationDurationMs: number;
+        totalLatencyMs: number;
+        langfuseTraceId?: string;
+    }): Record<string, unknown>;
 }

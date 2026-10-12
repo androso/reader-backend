@@ -14,11 +14,13 @@ const { CHAT_OPERATIONS } =
 const { RATE_LIMIT_CLIENT } =
     require("../src/common/rate-limit.module") as typeof import("../src/common/rate-limit.module");
 const {
+    APPEND_BOOK_CHAT,
     CHAT_RESOURCE_ACCESS,
     CHAT_CONVERSATION_REPOSITORY,
     CHAT_MESSAGE_REPOSITORY,
     LIST_BOOK_CONVERSATIONS,
     GET_BOOK_CONVERSATION,
+    START_BOOK_CHAT,
 } =
     require("../src/infrastructure/chat/chat.tokens") as typeof import("../src/infrastructure/chat/chat.tokens");
 const {
@@ -63,6 +65,20 @@ const createReadTestApp = ({
         providers: [
             { provide: DRIZZLE, useValue: {} },
             { provide: CHAT_OPERATIONS, useValue: {} },
+            {
+                provide: START_BOOK_CHAT,
+                useValue: {
+                    prepare: async () => ({}),
+                    executePrepared: async () => {},
+                },
+            },
+            {
+                provide: APPEND_BOOK_CHAT,
+                useValue: {
+                    prepare: async () => ({}),
+                    executePrepared: async () => {},
+                },
+            },
             {
                 provide: RATE_LIMIT_CLIENT,
                 useValue: { get: () => null, close: async () => {} },

@@ -10,3 +10,7 @@ export * from "./books/throwIfLockLost";
 export * from "./chat/ports";
 export * from "./chat/ListBookConversations";
 export * from "./chat/GetBookConversation";
+export * from "./chat/AppendBookChat";
+export * from "./chat/RunBookChat";
+export * from "./chat/StartBookChat";
+export * from "./chat/throwIfChatCancelled";

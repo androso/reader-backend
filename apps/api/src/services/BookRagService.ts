@@ -352,7 +352,7 @@ export const generateBookAnswer = async ({
     messages: ChatMessage[];
     model: OpenAIChatModel;
     options?: GenerateStreamResponseOptions;
-    onContent?: (content: string) => void;
+    onContent?: (content: string) => void | Promise<void>;
     shouldContinue?: () => boolean;
     service?: OpenAIService;
 }): Promise<GeneratedBookAnswer> => {
@@ -380,7 +380,7 @@ export const generateBookAnswer = async ({
             if ("usage" in chunk && chunk.usage) usage = chunk.usage;
             const content = choice?.delta?.content || "";
             answer += content;
-            onContent?.(content);
+            await onContent?.(content);
         }
     } catch (error) {
         if (!streamCompleted || !isPrematureCloseError(error)) throw error;

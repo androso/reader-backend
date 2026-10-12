@@ -156,6 +156,80 @@ test("Drizzle chat repositories preserve scope, order, and public message select
     assert.equal(scripted.remaining(), 0);
 });
 
+test("Drizzle chat write and history methods preserve the moved query shapes", async () => {
+    const scripted = createScriptedDb([
+        {
+            operation: "insert",
+            table: "conversations",
+            rows: [{ id: "conversation-2" }],
+        },
+        { operation: "update", table: "conversations" },
+        {
+            operation: "insert",
+            table: "messages",
+            rows: [{ id: "message-2" }],
+        },
+        {
+            operation: "select",
+            table: "messages",
+            rows: [{ role: "user", content: "Question" }],
+        },
+    ]);
+    const conversations = createDrizzleChatConversationRepository(
+        scripted.db as never
+    );
+    const messages = createDrizzleChatMessageRepository(scripted.db as never);
+
+    const created = await conversations.create({
+        userId: "user-1",
+        title: "Question...",
+        resourceType: "book",
+        resourceId: "book-1",
+    });
+    assert.equal(created.id, "conversation-2");
+    assert.deepEqual(scripted.queries[0].params, [
+        "user-1",
+        "Question...",
+        "book",
+        "book-1",
+    ]);
+    assert.match(scripted.queries[0].sql, /insert into "conversations"/);
+
+    await conversations.touch("conversation-2", new Date(0));
+    assert.deepEqual(scripted.queries[1].params, [
+        new Date(0).toISOString(),
+        "conversation-2",
+    ]);
+    assert.match(scripted.queries[1].sql, /update "conversations"/);
+
+    const saved = await messages.append({
+        conversationId: "conversation-2",
+        role: "user",
+        content: "Question",
+    });
+    assert.equal(saved.id, "message-2");
+    assert.deepEqual(scripted.queries[2].params.slice(0, 2), [
+        "conversation-2",
+        "user",
+    ]);
+    assert.match(scripted.queries[2].sql, /insert into "messages"/);
+    assert.match(
+        scripted.queries[2].sql,
+        /values \(default, \$1, \$2, \$3, default/
+    );
+
+    const history =
+        await messages.listHistoryForConversation!("conversation-2");
+    assert.deepEqual(history, [{ role: "user", content: "Question" }]);
+    assert.deepEqual(scripted.queries[3].params, ["conversation-2"]);
+    assert.ok(!scripted.queries[3].sql.includes("execution_metadata"));
+    assert.match(
+        scripted.queries[3].sql,
+        /order by "messages"\."created_at"( asc)?$/
+    );
+    assert.equal(scripted.remaining(), 0);
+});
+
 test("Chat resource access maps authorization outcomes to domain errors", async () => {
     let selects = 0;
     const dbWithRows = (rows: Record<string, unknown>[]) =>

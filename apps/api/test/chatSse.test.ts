@@ -23,6 +23,8 @@ const { DRIZZLE } =
     require("../src/database/database.module") as typeof import("../src/database/database.module");
 const { CHAT_OPERATIONS, createChatOperations, defaultChatStreamDependencies } =
     require("../src/chat/chat-stream") as typeof import("../src/chat/chat-stream");
+const { APPEND_BOOK_CHAT, START_BOOK_CHAT } =
+    require("../src/infrastructure/chat/chat.tokens") as typeof import("../src/infrastructure/chat/chat.tokens");
 const { RATE_LIMIT_CLIENT } =
     require("../src/common/rate-limit.module") as typeof import("../src/common/rate-limit.module");
 const { AUTH_OPERATIONS } =
@@ -579,6 +581,14 @@ before(async () => {
             {
                 token: CHAT_OPERATIONS,
                 useValue: createChatOperations(chatDependencies),
+            },
+            {
+                token: START_BOOK_CHAT,
+                useValue: createChatOperations(chatDependencies).startBookChat,
+            },
+            {
+                token: APPEND_BOOK_CHAT,
+                useValue: createChatOperations(chatDependencies).appendBookChat,
             },
             {
                 token: BOOKS_PORTS,

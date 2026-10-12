@@ -4,29 +4,19 @@ import {
     ChatResourceNotFoundError,
     ChatValidationError,
 } from "@reader/domain";
-import { eq } from "drizzle-orm";
 import {
     authorizeChatResource,
     type ChatResourceAuthorizationRepository,
 } from "../../services/ChatResourceAuthorization";
 import type { Database } from "../../database/database.module";
-import { Books } from "../../db/schema";
+import { createDrizzleChatResourceRepository } from "./drizzleChatResourceRepository";
 
 export const createChatResourceAccess = (
-    database: Database
+    database: Database,
+    existingRepository?: ChatResourceAuthorizationRepository
 ): ChatResourceAccess => {
-    const repository: ChatResourceAuthorizationRepository = {
-        findBookById: async (resourceId) => {
-            const [book] = await database
-                .select({
-                    id: Books.id,
-                    userId: Books.userId,
-                })
-                .from(Books)
-                .where(eq(Books.id, resourceId));
-            return book ?? null;
-        },
-    };
+    const repository: ChatResourceAuthorizationRepository =
+        existingRepository ?? createDrizzleChatResourceRepository(database);
 
     return {
         async authorize({ userId, resourceType, resourceId }) {

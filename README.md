@@ -92,6 +92,16 @@ Each processing attempt uses a unique collection. Publication points the book
 at the new collection, clears caches for both old and new names, and best-effort
 removes the previous collection only when no other live book references it.
 
+### Chat API
+
+Chat message validation, history-window selection, highlight normalization, and
+finish-reason mapping are framework-free domain policies. Conversation reads and
+streaming writes use application workflows with Drizzle adapters. SSE sessions
+serialize frames, wait for backpressure to clear, and cancel the shared request
+signal on a premature client disconnect; `[DONE]` is emitted only by the
+transport adapter. `pnpm test:integration:chat` verifies the HTTP stream against
+temporary local PostgreSQL and Redis with fake retrieval and generation.
+
 ## AWS infrastructure
 
 CloudFormation is the source of truth for a clean AWS rebuild. Follow

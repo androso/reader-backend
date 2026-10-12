@@ -4,6 +4,12 @@ import { rmSync } from "node:fs";
 import { delimiter, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
+const suite = process.argv[2] ?? "books";
+const integrationTest =
+    suite === "chat"
+        ? ".tmp/apps-api-integration/test-integration/chat.test.js"
+        : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
+const expectedPasses = suite === "chat" ? 3 : 10;
 const suffix = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const postgresName = `reader-it-postgres-${suffix}`;
 const redisName = `reader-it-redis-${suffix}`;
@@ -111,6 +117,8 @@ try {
             ...process.env,
             DATABASE_URL: `postgres://reader_it:reader_it@127.0.0.1:${postgresPort}/reader_it`,
             REDIS_URL: `redis://127.0.0.1:${redisPort}`,
+            JWT_SECRET: "reader-integration-test-secret",
+            FRONTEND_URL: "http://localhost:5173",
             DOTENV_CONFIG_PATH: "/dev/null",
             NODE_PATH: [
                 resolve(root, "apps/api/node_modules"),
@@ -142,18 +150,15 @@ try {
         );
         const testOutput = run(
             "node",
-            [
-                "--test",
-                ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js",
-            ],
+            ["--test", integrationTest],
             { env: integrationEnv }
         );
         if (
-            !/\bpass\s+10\b/.test(testOutput) ||
+            !new RegExp(`\\bpass\\s+${expectedPasses}\\b`).test(testOutput) ||
             !/\bfail\s+0\b/.test(testOutput)
         ) {
             throw new Error(
-                "Integration suite did not report all ten scenarios passing"
+                `Integration suite did not report all ${expectedPasses} scenarios passing`
             );
         }
     } catch (error) {

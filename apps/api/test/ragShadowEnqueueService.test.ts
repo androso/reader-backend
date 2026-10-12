@@ -90,28 +90,22 @@ test("invalid shadow configuration never rejects chat completion", async () => {
     }
 });
 
-test("chat ends the SSE response before awaiting shadow queue I/O", () => {
+test("chat completes the event sink before awaiting shadow queue I/O", () => {
     const route = readFileSync(
         join(
             resolve(__dirname, "../../.."),
-            "apps/api/src/chat/chat-stream.ts"
+            "packages/application/src/chat/RunBookChat.ts"
         ),
         "utf8"
     );
-    const completionStart = route.indexOf(
-        "const assistantMessage = await saveAssistantMessage"
+    const completion = route.lastIndexOf("await input.sink.complete()");
+    const shadowSchedule = route.indexOf(
+        "await this.deps.shadow.maybeSchedule"
     );
-    const completionEnd = route.indexOf(
-        "const runBookChatTraceIfNeeded",
-        completionStart
-    );
-    const completion = route.slice(completionStart, completionEnd);
 
-    assert.ok(completionStart >= 0);
-    assert.ok(completionEnd > completionStart);
-    assert.ok(completion.indexOf("res.end();") >= 0);
+    assert.ok(completion >= 0);
     assert.ok(
-        completion.indexOf("res.end();") <
-            completion.indexOf("await maybeEnqueueRagRerankShadow")
+        shadowSchedule > completion,
+        "shadow work starts after the sink is complete"
     );
 });

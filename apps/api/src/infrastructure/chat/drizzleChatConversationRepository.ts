@@ -6,12 +6,20 @@ import { Conversations } from "../../db/schema";
 
 export type DrizzleChatConversationRepository = Pick<
     ChatConversationRepository,
-    "findScoped" | "listScoped"
+    "create" | "findScoped" | "listScoped" | "touch"
 >;
 
 export const createDrizzleChatConversationRepository = (
     database: Database
 ): DrizzleChatConversationRepository => ({
+    async create({ userId, title, resourceType, resourceId }) {
+        const [conversation] = await database
+            .insert(Conversations)
+            .values({ userId, title, resourceType, resourceId })
+            .returning({ id: Conversations.id });
+        return conversation;
+    },
+
     async findScoped({ conversationId, userId, resourceType, resourceId }) {
         const [conversation] = await database
             .select()
@@ -44,5 +52,12 @@ export const createDrizzleChatConversationRepository = (
             .orderBy(desc(Conversations.lastMessageAt));
 
         return conversations as unknown as ChatConversation[];
+    },
+
+    async touch(conversationId, at) {
+        await database
+            .update(Conversations)
+            .set({ lastMessageAt: at })
+            .where(eq(Conversations.id, conversationId));
     },
 });
