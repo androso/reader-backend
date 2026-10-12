@@ -6,7 +6,7 @@
 - `pnpm --filter @reader/api test` — compile `tsconfig.test.json` then `node --test` the output in `.tmp/apps-api-test`.
 - `pnpm --filter @reader/api dev` — `ts-node-dev --transpile-only`; requires `.env` at repo root.
 - `pnpm test` / `pnpm build` — whole-workspace gates.
-- `pnpm test:foundation` — architecture, build, root and web tests, then books/chat/RAG/progress/auth integrations; `.github/workflows/foundation.yml` runs it on PRs and the main/migration branches.
+- `pnpm test:foundation` — architecture, build, root and web tests, then books/chat/RAG/progress/auth/journeys integrations; `.github/workflows/foundation.yml` runs it on PRs and the main/migration branches.
 - `pnpm --filter @reader/worker build` — the worker consumes built `@reader/api/*` subpath exports (`rag`, `ai-usage`, `book-processing`, `rag-shadow`); keep those barrels functional.
 
 ## API architecture (apps/api)
@@ -44,3 +44,4 @@ NestJS 11 on `@nestjs/platform-express` (Express 5). Entry point stays `src/inde
 - Reading progress uses application-owned validation and use cases. Saves lock the live owner book row before upserting so deletion races are deterministic; omitted chapter preserves an existing value, while explicit `null` clears it. `pnpm test:integration:progress` uses PostgreSQL only.
 - Auth/account sign-in and session authentication use application workflows behind account, Google identity, and session-token ports. The shared session module provides `AuthGuard`; keep compatibility exports and full account response rows unchanged.
 - Known auth hardening not done: concurrent-login upsert, account linking, stricter claims/cookies, password-field exposure, and revocation/refresh.
+- Known book-deletion gap: conversation rows remain orphaned when their book is deleted; chat list/detail/append endpoints still return their existing 404 responses for the missing book.

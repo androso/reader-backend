@@ -11,7 +11,7 @@ import type {
 import type { Book, BookProcessingRecord, NewBook } from "@reader/domain";
 import { createLogger } from "@reader/providers";
 import type { Database } from "../../database/database.module";
-import { Books, Conversations } from "../../db/schema";
+import { Books } from "../../db/schema";
 
 type BookRowMatchesDomain = typeof Books.$inferSelect extends Book
     ? true
@@ -227,29 +227,17 @@ export const createDrizzleBookRepository = (
     },
 
     async deleteDeletingRow(bookId, userId) {
-        return database.transaction(async (transaction) => {
-            const deleted = await transaction
-                .delete(Books)
-                .where(
-                    and(
-                        eq(Books.id, bookId),
-                        eq(Books.userId, userId),
-                        eq(Books.processingStatus, "deleting")
-                    )
+        const deleted = await database
+            .delete(Books)
+            .where(
+                and(
+                    eq(Books.id, bookId),
+                    eq(Books.userId, userId),
+                    eq(Books.processingStatus, "deleting")
                 )
-                .returning({ id: Books.id });
-            if (deleted.length !== 1) return false;
-
-            await transaction
-                .delete(Conversations)
-                .where(
-                    and(
-                        eq(Conversations.resourceId, bookId),
-                        eq(Conversations.userId, userId)
-                    )
-                );
-            return true;
-        });
+            )
+            .returning({ id: Books.id });
+        return deleted.length === 1;
     },
 
     async countLiveFileReferences(fileKey, excludingBookId) {

@@ -801,7 +801,7 @@ test("offline journeys (not live-provider validation): startup and shutdown rele
     assert.equal(api.getHttpServer().listening, true);
 });
 
-test("offline journeys (not live-provider validation): delete cleans all owned artifacts and endpoint state", async () => {
+test("offline journeys (not live-provider validation): delete cleans book artifacts, keeps orphaned conversations, and hides chat endpoints", async () => {
     assert.equal(
         (await request(`/api/books/${bookId}`, { method: "DELETE" })).status,
         204
@@ -829,6 +829,24 @@ test("offline journeys (not live-provider validation): delete cleans all owned a
     assert.deepEqual(await missingConversations.json(), {
         error: "Book not found",
     });
+    const missingConversationDetail = await request(
+        `/api/book/${bookId}/conversations/${conversationId}`
+    );
+    assert.equal(missingConversationDetail.status, 404);
+    assert.deepEqual(await missingConversationDetail.json(), {
+        error: "Book not found",
+    });
+    const missingConversationAppend = await request(
+        `/api/book/${bookId}/conversations/${conversationId}/messages`,
+        {
+            method: "POST",
+            body: JSON.stringify({ message: "not found" }),
+        }
+    );
+    assert.equal(missingConversationAppend.status, 404);
+    assert.deepEqual(await missingConversationAppend.json(), {
+        error: "Book not found",
+    });
     assert.equal(
         (await database.select().from(Books).where(eq(Books.id, bookId)))
             .length,
@@ -843,32 +861,15 @@ test("offline journeys (not live-provider validation): delete cleans all owned a
         ).length,
         0
     );
-    assert.equal(
-        (
-            await database
-                .select()
-                .from(Conversations)
-                .where(eq(Conversations.id, conversationId))
-        ).length,
-        0
-    );
-    assert.equal(
-        (
-            await database
-                .select()
-                .from(Conversations)
-                .where(eq(Conversations.resourceId, bookId))
-        ).length,
-        0
-    );
-    assert.equal(
-        (
-            await database
-                .select()
-                .from(Messages)
-                .where(eq(Messages.conversationId, conversationId))
-        ).length,
-        0
+    const orphanedConversations = await database
+        .select()
+        .from(Conversations)
+        .where(eq(Conversations.resourceId, bookId));
+    assert.ok(orphanedConversations.length > 0);
+    assert.ok(
+        orphanedConversations.some(
+            (conversation) => conversation.id === conversationId
+        )
     );
     assert.equal(
         (
