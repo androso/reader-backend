@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -10,11 +10,18 @@ const integrationTest =
         ? ".tmp/apps-api-integration/test-integration/chat.test.js"
         : suite === "rag"
           ? ".tmp/apps-api-integration/test-integration/rag.test.js"
-          : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
-const expectedPasses = suite === "chat" ? 3 : suite === "rag" ? 3 : 10;
+          : suite === "progress"
+            ? ".tmp/apps-api-integration/test-integration/progress.test.js"
+            : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
+const expectedPasses =
+    suite === "chat" ? 3 : suite === "rag" ? 3 : suite === "progress" ? 6 : 10;
 const suffix = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const postgresName = `reader-it-postgres-${suffix}`;
 const redisName = `reader-it-redis-${suffix}`;
+const upgradeDatabaseName = `reader_it_progress_upgrade_${suffix.replaceAll("-", "_")}`;
+const upgradeMigrationDir = resolve(root, ".tmp/progress-previous-migrations");
+const upgradeConfigPath = resolve(root, ".tmp/progress-previous.drizzle.config.ts");
+const usesRedis = suite !== "progress";
 
 const run = (command, args, options = {}) => {
     const result = spawnSync(command, args, {
@@ -51,6 +58,7 @@ const cleanup = (name) => {
 };
 
 let blockedReason;
+let upgradeDatabaseUrl;
 try {
     try {
         run("docker", ["info", "--format", "{{.ServerVersion}}"]);
@@ -70,23 +78,25 @@ try {
             "POSTGRES_DB=reader_it",
             "postgres:16",
         ]);
-        run("docker", [
-            "run",
-            "--rm",
-            "--detach",
-            "--name",
-            redisName,
-            "--publish",
-            "127.0.0.1::6379",
-            "redis:7-alpine",
-        ]);
+        if (usesRedis) {
+            run("docker", [
+                "run",
+                "--rm",
+                "--detach",
+                "--name",
+                redisName,
+                "--publish",
+                "127.0.0.1::6379",
+                "redis:7-alpine",
+            ]);
+        }
         const postgresPort = run("docker", ["port", postgresName, "5432/tcp"])
             .split(":")
             .at(-1);
-        const redisPort = run("docker", ["port", redisName, "6379/tcp"])
-            .split(":")
-            .at(-1);
-        if (!postgresPort || !redisPort) {
+        const redisPort = usesRedis
+            ? run("docker", ["port", redisName, "6379/tcp"]).split(":").at(-1)
+            : undefined;
+        if (!postgresPort || (usesRedis && !redisPort)) {
             throw new Error("Docker did not report dynamically assigned ports");
         }
 
@@ -107,18 +117,21 @@ try {
                     { encoding: "utf8" }
                 ).status === 0
         );
-        await waitFor(
-            "Redis readiness",
-            () =>
-                spawnSync("docker", ["exec", redisName, "redis-cli", "ping"], {
-                    encoding: "utf8",
-                }).stdout?.trim() === "PONG"
-        );
+        if (usesRedis) {
+            await waitFor(
+                "Redis readiness",
+                () =>
+                    spawnSync("docker", ["exec", redisName, "redis-cli", "ping"], {
+                        encoding: "utf8",
+                    }).stdout?.trim() === "PONG"
+            );
+        }
 
+        const databaseUrl = `postgres://reader_it:reader_it@127.0.0.1:${postgresPort}/reader_it`;
         const integrationEnv = {
             ...process.env,
-            DATABASE_URL: `postgres://reader_it:reader_it@127.0.0.1:${postgresPort}/reader_it`,
-            REDIS_URL: `redis://127.0.0.1:${redisPort}`,
+            DATABASE_URL: databaseUrl,
+            REDIS_URL: redisPort ? `redis://127.0.0.1:${redisPort}` : "",
             JWT_SECRET: "reader-integration-test-secret",
             FRONTEND_URL: "http://localhost:5173",
             DOTENV_CONFIG_PATH: "/dev/null",
@@ -140,6 +153,33 @@ try {
             { env: integrationEnv }
         );
 
+        if (suite === "progress") {
+            run("docker", ["exec", postgresName, "createdb", "-U", "reader_it", upgradeDatabaseName]);
+            upgradeDatabaseUrl = databaseUrl.replace(/\/reader_it$/, `/${upgradeDatabaseName}`);
+            const journal = JSON.parse(
+                readFileSync(resolve(root, "apps/api/migrations/meta/_journal.json"), "utf8")
+            );
+            const previousEntries = journal.entries.slice(0, -1);
+            mkdirSync(resolve(upgradeMigrationDir, "meta"), { recursive: true });
+            for (const entry of previousEntries) {
+                copyFileSync(
+                    resolve(root, `apps/api/migrations/${entry.tag}.sql`),
+                    resolve(upgradeMigrationDir, `${entry.tag}.sql`)
+                );
+            }
+            writeFileSync(
+                resolve(upgradeMigrationDir, "meta/_journal.json"),
+                JSON.stringify({ ...journal, entries: previousEntries }, null, 2)
+            );
+            writeFileSync(
+                upgradeConfigPath,
+                `import { defineConfig } from "drizzle-kit";\nexport default defineConfig({ out: ${JSON.stringify(upgradeMigrationDir)}, schema: ${JSON.stringify(resolve(root, "apps/api/src/db/schema.ts"))}, dialect: "postgresql", dbCredentials: { url: process.env.DATABASE_URL! } });\n`
+            );
+            run("pnpm", ["exec", "drizzle-kit", "migrate", `--config=${upgradeConfigPath}`], {
+                env: { ...integrationEnv, DATABASE_URL: upgradeDatabaseUrl },
+            });
+        }
+
         rmSync(resolve(root, ".tmp/apps-api-integration"), {
             recursive: true,
             force: true,
@@ -159,7 +199,14 @@ try {
         const testOutput = run(
             "node",
             ["--test", integrationTest],
-            { env: integrationEnv }
+            {
+                env: {
+                    ...integrationEnv,
+                    ...(upgradeDatabaseUrl
+                        ? { PROGRESS_UPGRADE_DATABASE_URL: upgradeDatabaseUrl }
+                        : {}),
+                },
+            }
         );
         if (
             !new RegExp(`\\bpass\\s+${expectedPasses}\\b`).test(testOutput) ||
@@ -182,6 +229,13 @@ try {
     }
 } finally {
     cleanup(redisName);
+    if (upgradeDatabaseUrl) {
+        try {
+            run("docker", ["exec", postgresName, "dropdb", "--if-exists", "-U", "reader_it", upgradeDatabaseName]);
+        } catch {}
+    }
+    rmSync(upgradeMigrationDir, { recursive: true, force: true });
+    rmSync(upgradeConfigPath, { force: true });
     cleanup(postgresName);
 }
 

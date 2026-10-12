@@ -267,6 +267,9 @@ export const createScriptedDbQueryHandler = (
         params?: unknown[]
     ): Promise<{ rows: Record<string, unknown>[] }> => {
         const text = extractQueryText(queryConfig);
+        if (/^(begin|commit|rollback)\b/i.test(text.trim())) {
+            return { rows: [] };
+        }
         const { op, table } = classifyDbQuery(text);
         const action: RecordedEffect = {
             type: "db",

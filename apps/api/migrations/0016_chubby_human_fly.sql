@@ -1,0 +1,1 @@
+ALTER TABLE "progress" ALTER COLUMN "progress_chapter" DROP NOT NULL;

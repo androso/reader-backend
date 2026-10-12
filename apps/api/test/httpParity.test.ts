@@ -170,6 +170,55 @@ const expectedCapture = (scenario: FixtureScenario): FixtureCapture => {
     const capture = JSON.parse(
         JSON.stringify(scenario.capture)
     ) as FixtureCapture;
+    if (
+        scenario.request.method === "POST" &&
+        /^\/api\/[^/]+\/progress$/.test(scenario.request.path)
+    ) {
+        // Keep the pinned fixture stable while accounting for the deliberate
+        // move to an owner/live-book row lock and nullable chapter upserts.
+        const bookId = decodeURIComponent(
+            scenario.request.path.match(/^\/api\/([^/]+)\/progress$/)?.[1] ?? ""
+        );
+        const body =
+            scenario.request.body?.kind === "json"
+                ? scenario.request.body.value
+                : scenario.request.body?.kind === "urlencoded"
+                  ? scenario.request.body.fields
+                  : {};
+        const chapterWasProvided =
+            body !== null &&
+            typeof body === "object" &&
+            Object.prototype.hasOwnProperty.call(body, "progress_chapter");
+
+        for (const effect of capture.effects) {
+            if (!effect || typeof effect !== "object") continue;
+            const record = effect as Record<string, unknown>;
+            if (record.operation === "select" && record.table === "books") {
+                record.sql =
+                    'select "id" from "books" where ("books"."id" = $1 and "books"."user_id" = $2 and "books"."processing_status" <> $3) for update';
+                record.params = [bookId, "owner-1", "deleting"];
+            }
+            if (
+                record.operation === "insert" &&
+                record.table === "progress" &&
+                !chapterWasProvided
+            ) {
+                record.sql =
+                    'insert into "progress" ("user_id", "book_id", "progress_position", "progress_chapter", "last_read_at", "created_at", "updated_at") values ($1, $2, $3, $4, default, $5, $6) on conflict ("user_id","book_id") do update set "progress_position" = $7, "updated_at" = $8 returning "user_id", "book_id", "progress_position", "progress_chapter", "last_read_at", "created_at", "updated_at"';
+                const params = record.params as unknown[];
+                record.params = [
+                    params[0],
+                    params[1],
+                    params[2],
+                    null,
+                    params[3],
+                    params[4],
+                    params[5],
+                    params[6],
+                ];
+            }
+        }
+    }
     switch (scenario.intentionalDifference) {
         case "unknown-route-json":
             capture.body = {
@@ -226,6 +275,28 @@ const expectedCapture = (scenario: FixtureScenario): FixtureCapture => {
             }
             break;
         }
+        case "progress-position-required-400":
+            // New validation responses are intentional; the legacy fixture remains pinned.
+            capture.status = 400;
+            capture.body = { message: "Progress Block is required" };
+            break;
+        case "progress-position-invalid-400":
+            capture.status = 400;
+            capture.body = {
+                message: "Progress Block must be a non-empty string",
+            };
+            break;
+        case "progress-chapter-invalid-400":
+            capture.status = 400;
+            capture.body = {
+                message: "Progress Chapter must be a string or null",
+            };
+            break;
+        case "progress-deleting-book-404":
+            // Saving now uses the live-book lock guard; deleting books are not saveable.
+            capture.status = 404;
+            capture.body = { message: "Book not found" };
+            break;
         default:
             break;
     }

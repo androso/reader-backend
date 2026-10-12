@@ -73,3 +73,21 @@ test("progress snapshot has uuid book IDs, composite primary key, and foreign ke
         ["id"]
     );
 });
+
+test("the progress chapter migration makes the chapter nullable", () => {
+    const migration = readWorkspaceFile(
+        "apps/api/migrations/0016_chubby_human_fly.sql"
+    );
+    assert.equal(
+        migration.trim(),
+        'ALTER TABLE "progress" ALTER COLUMN "progress_chapter" DROP NOT NULL;'
+    );
+
+    const snapshot = JSON.parse(
+        readWorkspaceFile("apps/api/migrations/meta/0016_snapshot.json")
+    );
+    assert.equal(
+        snapshot.tables["public.progress"].columns.progress_chapter.notNull,
+        false
+    );
+});

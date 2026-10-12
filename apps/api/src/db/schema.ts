@@ -104,8 +104,9 @@ export const Messages = pgTable("messages", {
     >(),
     completionStatus: messageCompletionStatusEnum("completion_status"),
     finishReason: text("finish_reason"),
-    executionMetadata:
-        jsonb("execution_metadata").$type<MessageExecutionMetadata | null>(),
+    executionMetadata: jsonb(
+        "execution_metadata"
+    ).$type<MessageExecutionMetadata | null>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -115,7 +116,7 @@ export const Progress = pgTable(
         userId: uuid("user_id").notNull(),
         bookId: uuid("book_id").notNull(),
         progressPosition: text("progress_position").notNull(),
-        progressChapter: text("progress_chapter").notNull(),
+        progressChapter: text("progress_chapter"),
         lastReadAt: timestamp("last_read_at", { withTimezone: true })
             .defaultNow()
             .notNull(),

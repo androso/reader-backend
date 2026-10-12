@@ -10,6 +10,7 @@
         "test:integration:books": "node scripts/integration/books.mjs",
         "test:integration:chat": "node scripts/integration/books.mjs chat",
         "test:integration:rag": "node scripts/integration/books.mjs rag",
+        "test:integration:progress": "node scripts/integration/books.mjs progress",
         "check:architecture": "node --test scripts/check-architecture.test.mjs && node scripts/check-architecture.mjs",
         "api:dev": "pnpm --filter @reader/api dev",
         "api:build": "pnpm --filter @reader/api build",
