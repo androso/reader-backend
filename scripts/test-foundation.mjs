@@ -17,6 +17,7 @@ const steps = [
     ["RAG integration", ["test:integration:rag"]],
     ["Progress integration", ["test:integration:progress"]],
     ["Auth integration", ["test:integration:auth"]],
+    ["Offline journeys integration", ["test:integration:journeys"]],
 ];
 
 for (const [name, args] of steps) {
@@ -40,4 +41,4 @@ for (const [name, args] of steps) {
     }
 }
 
-console.log("\nFoundation gate passed all 10 steps.");
+console.log(`\nFoundation gate passed all ${steps.length} steps.`);

@@ -12,6 +12,7 @@
         "test:integration:rag": "node scripts/integration/books.mjs rag",
         "test:integration:progress": "node scripts/integration/books.mjs progress",
         "test:integration:auth": "node scripts/integration/books.mjs auth",
+        "test:integration:journeys": "node scripts/integration/books.mjs journeys",
         "test:foundation": "node scripts/test-foundation.mjs",
         "check:architecture": "node --test scripts/check-architecture.test.mjs && node scripts/check-architecture.mjs",
         "api:dev": "pnpm --filter @reader/api dev",

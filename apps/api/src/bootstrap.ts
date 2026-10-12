@@ -1,7 +1,11 @@
 import { NestFactory, HttpAdapterHost } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { attachApiLifecycle, defaultApiResources } from "./api-lifecycle";
+import {
+    attachApiLifecycle,
+    defaultApiResources,
+    type ApiResources,
+} from "./api-lifecycle";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { handleBodyParserError } from "./common/middleware/body-errors";
@@ -41,6 +45,11 @@ export const corsOptions = {
     credentials: true,
 };
 
+export interface CreateAppOptions {
+    createApplication?: () => Promise<NestExpressApplication>;
+    resources?: ApiResources;
+}
+
 export function configureApp(app: NestExpressApplication): void {
     app.enableCors(corsOptions);
     app.useBodyParser("json");
@@ -67,14 +76,19 @@ export function configureApp(app: NestExpressApplication): void {
     );
 }
 
-export async function createApp(): Promise<NestExpressApplication> {
+export async function createApp(
+    options: CreateAppOptions = {}
+): Promise<NestExpressApplication> {
     let app: NestExpressApplication | undefined;
+    const resources = options.resources ?? defaultApiResources;
     try {
-        app = await NestFactory.create<NestExpressApplication>(AppModule, {
-            bodyParser: false,
-            abortOnError: false,
-        });
-        attachApiLifecycle(app, defaultApiResources);
+        app =
+            (await options.createApplication?.()) ??
+            (await NestFactory.create<NestExpressApplication>(AppModule, {
+                bodyParser: false,
+                abortOnError: false,
+            }));
+        attachApiLifecycle(app, resources);
         configureApp(app);
         return app;
     } catch (error) {
@@ -83,7 +97,7 @@ export async function createApp(): Promise<NestExpressApplication> {
             if (app) {
                 await app.close();
             } else {
-                await defaultApiResources.close();
+                await resources.close();
             }
         } catch (cleanupError) {
             errors.push(cleanupError);

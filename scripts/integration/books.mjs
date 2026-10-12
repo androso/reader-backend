@@ -20,7 +20,9 @@ const integrationTest =
             ? ".tmp/apps-api-integration/test-integration/rag.test.js"
             : suite === "progress"
               ? ".tmp/apps-api-integration/test-integration/progress.test.js"
-              : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
+              : suite === "journeys"
+                ? ".tmp/apps-api-integration/test-integration/journeys.test.js"
+                : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
 const expectedPasses =
     suite === "auth"
         ? 3
@@ -30,7 +32,9 @@ const expectedPasses =
             ? 3
             : suite === "progress"
               ? 6
-              : 10;
+              : suite === "journeys"
+                ? 9
+                : 10;
 const suffix = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const postgresName = `reader-it-postgres-${suffix}`;
 const redisName = `reader-it-redis-${suffix}`;
@@ -150,6 +154,7 @@ const cleanup = async (name) => {
 
 let blockedReason;
 let upgradeDatabaseUrl;
+let localStoragePath;
 try {
     try {
         await run("docker", ["info", "--format", "{{.ServerVersion}}"]);
@@ -255,6 +260,14 @@ try {
                       DEV_USER_NAME: "Auth Integration",
                   }
                 : {}),
+            ...(suite === "journeys"
+                ? {
+                      NODE_ENV: "test",
+                      STORAGE_DRIVER: "local",
+                      LOCAL_STORAGE_DIR: `.tmp/reader-it-storage-${suffix}`,
+                      RAG_RERANK_SHADOW_SAMPLE_RATE: "1",
+                  }
+                : {}),
             FRONTEND_URL: "http://localhost:5173",
             DOTENV_CONFIG_PATH: "/dev/null",
             NODE_PATH: [
@@ -266,6 +279,9 @@ try {
                 .filter(Boolean)
                 .join(delimiter),
         };
+        localStoragePath = integrationEnv.LOCAL_STORAGE_DIR
+            ? resolve(root, integrationEnv.LOCAL_STORAGE_DIR)
+            : undefined;
         await run("pnpm", ["--filter", "@reader/api", "prebuild"], {
             env: integrationEnv,
         });
@@ -344,7 +360,7 @@ try {
                 env: integrationEnv,
             }
         );
-        if (suite === "rag") {
+        if (suite === "rag" || suite === "journeys") {
             await run("pnpm", ["--filter", "@reader/worker", "build"], {
                 env: integrationEnv,
             });
@@ -400,6 +416,8 @@ try {
     }
     rmSync(upgradeMigrationDir, { recursive: true, force: true });
     rmSync(upgradeConfigPath, { force: true });
+    if (localStoragePath)
+        rmSync(localStoragePath, { recursive: true, force: true });
     await cleanup(postgresName);
     process.off("SIGINT", onSigint);
     process.off("SIGTERM", onSigterm);

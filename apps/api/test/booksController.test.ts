@@ -129,8 +129,12 @@ const createScriptedDb = (steps: ScriptedStep[]) => {
         release: () => undefined,
         end: async () => undefined,
     };
+    const database = drizzle(client as never);
+    (database as any).transaction = async (
+        callback: (transaction: unknown) => unknown
+    ) => callback(database);
     return {
-        db: drizzle(client as never),
+        db: database,
         effects,
         remaining: () => queue.length,
     };
@@ -186,7 +190,8 @@ const deleteSuccessfulSteps = (
     bookById(book),
     { op: "select", table: "books", rows: [{ count: fileReferences }] },
     { op: "select", table: "books", rows: [{ count: collectionReferences }] },
-    { op: "delete", table: "books" },
+    { op: "delete", table: "books", rows: [{ id: book.id }] },
+    { op: "delete", table: "conversations" },
 ];
 
 const assertScriptedDbComplete = (scripted: {
@@ -1576,6 +1581,7 @@ test("DELETE /api/books/:id runs the ordered cleanup and returns 204", async () 
             "bookSearchChunks.deleteCollection",
             "hybridBookSearch.clearCollectionCache",
             "db.delete books",
+            "db.delete conversations",
         ]);
         const marking = effects.find((effect) => effect.operation === "update");
         assert.deepEqual(marking?.params, [
@@ -1607,7 +1613,10 @@ test("DELETE /api/books/:id runs the ordered cleanup and returns 204", async () 
         assert.equal(vector?.collectionName, "collection-1");
         assert.equal(chunks?.collectionName, "collection-1");
         assert.equal(cache?.collectionName, "collection-1");
-        const rowDelete = effects.at(-1);
+        const rowDelete = effects.find(
+            (effect) =>
+                effect.operation === "delete" && effect.table === "books"
+        );
         assert.deepEqual(rowDelete?.params, ["book-1", "owner-1", "deleting"]);
         assert.ok(
             !effects.some((effect) =>
@@ -1644,6 +1653,7 @@ test("DELETE /api/books/:id keeps a shared file in storage but still cleans per-
             "bookSearchChunks.deleteCollection",
             "hybridBookSearch.clearCollectionCache",
             "db.delete books",
+            "db.delete conversations",
         ]);
         assert.ok(
             !effects.some((effect) => effect.target === "storage.deleteFile")
