@@ -123,7 +123,10 @@ export interface BookQueueControl {
 }
 
 export interface BookLifecycleLock {
-    withLock<T>(bookId: string, fn: () => Promise<T>): Promise<T>;
+    withLock<T>(
+        bookId: string,
+        fn: (signal: AbortSignal) => Promise<T>
+    ): Promise<T>;
 }
 
 export interface BookIngestion {

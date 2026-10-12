@@ -44,7 +44,10 @@ const createRepository = (
 
 const testLifecycle = {
     lock: {
-        withLock: async <T>(_bookId: string, fn: () => Promise<T>) => fn(),
+        withLock: async <T>(
+            _bookId: string,
+            fn: (signal: AbortSignal) => Promise<T>
+        ) => fn(new AbortController().signal),
     },
     references: {
         countLiveFileReferences: async () => 0,

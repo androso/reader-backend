@@ -210,17 +210,19 @@ const expectedCapture = (scenario: FixtureScenario): FixtureCapture => {
             const bookId = scenario.request.path.match(
                 /^\/api\/books\/([^/]+)\/retry$/
             )?.[1];
-            const bookSelect = capture.effects.find((effect) => {
+            const bookSelects = capture.effects.filter((effect) => {
                 if (!effect || typeof effect !== "object") return false;
                 const record = effect as Record<string, unknown>;
                 return (
                     record.operation === "select" && record.table === "books"
                 );
-            }) as Record<string, unknown> | undefined;
-            if (bookId && bookSelect) {
-                bookSelect.sql =
-                    'select "id", "title", "user_id", "file_key", "file_type", "collection_name", "processing_status", "processing_error", "created_at" from "books" where ("books"."id" = $1 and "books"."user_id" = $2)';
-                bookSelect.params = [decodeURIComponent(bookId), "owner-1"];
+            }) as Record<string, unknown>[];
+            if (bookId) {
+                for (const bookSelect of bookSelects) {
+                    bookSelect.sql =
+                        'select "id", "title", "user_id", "file_key", "file_type", "collection_name", "processing_status", "processing_error", "created_at" from "books" where ("books"."id" = $1 and "books"."user_id" = $2)';
+                    bookSelect.params = [decodeURIComponent(bookId), "owner-1"];
+                }
             }
             break;
         }

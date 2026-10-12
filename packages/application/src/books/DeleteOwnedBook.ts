@@ -9,6 +9,7 @@ import type {
     BookReadRepository,
     Logger,
 } from "./ports";
+import { throwIfLockLost } from "./throwIfLockLost";
 
 export interface DeleteOwnedBookDependencies {
     reads: Pick<BookReadRepository, "findById" | "findOwned">;
@@ -53,7 +54,7 @@ export class DeleteOwnedBook {
             });
         }
 
-        await this.deps.lock.withLock(bookId, async () => {
+        await this.deps.lock.withLock(bookId, async (signal) => {
             const deletingBook = await this.deps.reads.findOwned(
                 bookId,
                 userId
@@ -69,6 +70,7 @@ export class DeleteOwnedBook {
                     deletingBook.id
                 );
             if (fileReferences === 0) {
+                throwIfLockLost(signal);
                 await this.deps.cleanup.deleteFile(deletingBook.fileKey);
             }
 
@@ -78,11 +80,15 @@ export class DeleteOwnedBook {
                     deletingBook.id
                 );
             if (collectionReferences === 0) {
+                throwIfLockLost(signal);
                 await this.deps.cleanup.deleteVectorCollection(collectionName);
+                throwIfLockLost(signal);
                 await this.deps.cleanup.deleteSearchChunks(collectionName);
+                throwIfLockLost(signal);
                 this.deps.cleanup.clearCache(collectionName);
             }
 
+            throwIfLockLost(signal);
             await this.deps.deletion.deleteDeletingRow(bookId, userId);
         });
     }

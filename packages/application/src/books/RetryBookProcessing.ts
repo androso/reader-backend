@@ -1,4 +1,5 @@
 import {
+    BookLifecycleLockLostError,
     BookLifecycleLockTimeoutError,
     BookNotFoundError,
     BookNotRetryableError,
@@ -17,6 +18,7 @@ import type {
     Logger,
 } from "./ports";
 import type { RetryableBookStatus } from "./ports";
+import { throwIfLockLost } from "./throwIfLockLost";
 
 export interface RetryBookProcessingDependencies {
     reads: Pick<BookReadRepository, "findOwned">;
@@ -49,8 +51,11 @@ export class RetryBookProcessing {
         bookId: string;
         userId: string;
     }): Promise<RetryBookProcessingResult> {
+        const preflight = await this.deps.reads.findOwned(bookId, userId);
+        if (!preflight) throw new BookNotFoundError(bookId);
+
         try {
-            return await this.deps.lock.withLock(bookId, async () => {
+            return await this.deps.lock.withLock(bookId, async (signal) => {
                 const previous = await this.deps.reads.findOwned(
                     bookId,
                     userId
@@ -70,6 +75,7 @@ export class RetryBookProcessing {
 
                 const previousStatus =
                     previous.processingStatus as RetryableBookStatus;
+                throwIfLockLost(signal);
                 const claimed = await this.deps.retryState.claimRetry(
                     bookId,
                     userId,
@@ -89,6 +95,7 @@ export class RetryBookProcessing {
                 }
 
                 try {
+                    throwIfLockLost(signal);
                     await this.deps.queue.retryOrEnqueue({
                         bookId: claimed.id,
                         userId: claimed.userId,
@@ -97,6 +104,7 @@ export class RetryBookProcessing {
                     });
                 } catch (error) {
                     if (error instanceof BookProcessingBusyError) {
+                        throwIfLockLost(signal);
                         await this.deps.retryState.restoreRetryable(
                             bookId,
                             userId,
@@ -111,6 +119,7 @@ export class RetryBookProcessing {
                         bookId,
                         error: message,
                     });
+                    throwIfLockLost(signal);
                     await this.deps.queueState.markQueueFailed(
                         bookId,
                         userId,
@@ -119,9 +128,11 @@ export class RetryBookProcessing {
                     throw new BookProcessingQueueUnavailableError(message);
                 }
 
+                throwIfLockLost(signal);
                 return { bookId, status: "processing" };
             });
         } catch (error) {
+            if (error instanceof BookLifecycleLockLostError) throw error;
             if (error instanceof BookLifecycleLockTimeoutError) {
                 throw new BookProcessingBusyError(bookId);
             }

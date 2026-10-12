@@ -294,7 +294,7 @@ const processDeps = (
         countLiveCollectionReferences: async () => 0,
     },
     lock: {
-        withLock: async (_bookId, fn) => fn(),
+        withLock: async (_bookId, fn) => fn(new AbortController().signal),
     },
     ...overrides,
 });

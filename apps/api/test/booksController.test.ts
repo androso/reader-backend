@@ -40,6 +40,8 @@ const { createTestApp } =
     require("./helpers/nestApp") as typeof import("./helpers/nestApp");
 const helper =
     require("./helpers/httpParity") as typeof import("./helpers/httpParity");
+const { BookLifecycleLockTimeoutError } =
+    require("@reader/domain") as typeof import("@reader/domain");
 
 const INERT_RATE_LIMIT = { get: () => null, close: async () => {} };
 const AUTH_COOKIE = `reader_session=${jwt.sign(
@@ -267,7 +269,16 @@ const createPorts = (
         ...overrides,
     }) as unknown as BooksPorts;
 
-const createBooksTestApp = (scripted: { db: unknown }, ports: BooksPorts) =>
+const createBooksTestApp = (
+    scripted: { db: unknown },
+    ports: BooksPorts,
+    retryLock?: {
+        withLock<T>(
+            bookId: string,
+            fn: (signal: AbortSignal) => Promise<T>
+        ): Promise<T>;
+    }
+) =>
     createTestApp({
         controllers: [BooksController],
         providers: [
@@ -289,8 +300,9 @@ const createBooksTestApp = (scripted: { db: unknown }, ports: BooksPorts) =>
                             },
                             removePending: async () => {},
                         },
-                        lock: {
-                            withLock: async (_bookId, fn) => fn(),
+                        lock: retryLock ?? {
+                            withLock: async (_bookId, fn) =>
+                                fn(new AbortController().signal),
                         },
                     });
                 },
@@ -323,7 +335,8 @@ const createBooksTestApp = (scripted: { db: unknown }, ports: BooksPorts) =>
                         },
                         queue: { removePending: async () => {} },
                         lock: {
-                            withLock: async (_bookId, fn) => fn(),
+                            withLock: async (_bookId, fn) =>
+                                fn(new AbortController().signal),
                         },
                     });
                 },
@@ -1124,9 +1137,16 @@ test("POST /api/books/:id/retry returns 404 for a missing book", async () => {
 
 test("POST /api/books/:id/retry returns 404 for a non-owner book", async () => {
     const scripted = createScriptedDb([authUser, emptyBookSelect]);
+    let lockCalled = false;
     const testApp = await createBooksTestApp(
         scripted,
-        createPorts(scripted.effects)
+        createPorts(scripted.effects),
+        {
+            withLock: async () => {
+                lockCalled = true;
+                throw new BookLifecycleLockTimeoutError("book-1");
+            },
+        }
     );
     try {
         const res = await fetch(`${testApp.baseUrl}/api/books/book-1/retry`, {
@@ -1139,6 +1159,7 @@ test("POST /api/books/:id/retry returns 404 for a non-owner book", async () => {
             "db.select users",
             "db.select books",
         ]);
+        assert.equal(lockCalled, false);
     } finally {
         await testApp.close();
     }
@@ -1146,7 +1167,11 @@ test("POST /api/books/:id/retry returns 404 for a non-owner book", async () => {
 });
 
 test("POST /api/books/:id/retry returns 409 for a non-retryable book", async () => {
-    const scripted = createScriptedDb([authUser, bookById(BOOK_ROW)]);
+    const scripted = createScriptedDb([
+        authUser,
+        bookById(BOOK_ROW),
+        bookById(BOOK_ROW),
+    ]);
     const testApp = await createBooksTestApp(
         scripted,
         createPorts(scripted.effects)
@@ -1161,6 +1186,7 @@ test("POST /api/books/:id/retry returns 409 for a non-retryable book", async () 
         assert.deepEqual(effectNames(scripted.effects), [
             "db.select users",
             "db.select books",
+            "db.select books",
         ]);
     } finally {
         await testApp.close();
@@ -1171,6 +1197,7 @@ test("POST /api/books/:id/retry returns 409 for a non-retryable book", async () 
 test("POST /api/books/:id/retry returns 409 when fileType is missing", async () => {
     const scripted = createScriptedDb([
         authUser,
+        bookById({ ...FAILED_BOOK_ROW, file_type: null }),
         bookById({ ...FAILED_BOOK_ROW, file_type: null }),
     ]);
     const testApp = await createBooksTestApp(
@@ -1187,6 +1214,7 @@ test("POST /api/books/:id/retry returns 409 when fileType is missing", async () 
         assert.deepEqual(effectNames(scripted.effects), [
             "db.select users",
             "db.select books",
+            "db.select books",
         ]);
     } finally {
         await testApp.close();
@@ -1200,6 +1228,7 @@ for (const status of ["failed", "queue_failed"] as const) {
             status === "failed" ? FAILED_BOOK_ROW : QUEUE_FAILED_BOOK_ROW;
         const scripted = createScriptedDb([
             authUser,
+            bookById(row),
             bookById(row),
             {
                 op: "update",
@@ -1256,6 +1285,7 @@ for (const status of ["failed", "queue_failed"] as const) {
             assert.deepEqual(effectNames(effects), [
                 "db.select users",
                 "db.select books",
+                "db.select books",
                 "db.update books",
                 "queue.book-processing.add",
             ]);
@@ -1269,6 +1299,7 @@ for (const status of ["failed", "queue_failed"] as const) {
 test("POST /api/books/:id/retry returns 503 when the queue is unavailable and marks queue_failed", async () => {
     const scripted = createScriptedDb([
         authUser,
+        bookById(FAILED_BOOK_ROW),
         bookById(FAILED_BOOK_ROW),
         {
             op: "update",
@@ -1323,6 +1354,7 @@ test("POST /api/books/:id/retry returns 503 when the queue is unavailable and ma
         ]);
         assert.deepEqual(effectNames(scripted.effects), [
             "db.select users",
+            "db.select books",
             "db.select books",
             "db.update books",
             "queue.book-processing.add",

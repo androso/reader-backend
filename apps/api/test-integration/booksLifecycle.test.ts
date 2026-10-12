@@ -4,7 +4,11 @@ import { once } from "node:events";
 import test, { after, afterEach, before, beforeEach } from "node:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { BookProcessingSkippedError } from "@reader/domain";
+import {
+    BookLifecycleLockLostError,
+    BookNotFoundError,
+    BookProcessingSkippedError,
+} from "@reader/domain";
 import { ProcessUploadedBook } from "@reader/application";
 import { RetryBookProcessing } from "@reader/application";
 import { DeleteOwnedBook } from "@reader/application";
@@ -37,6 +41,14 @@ const db = drizzle(pool);
 const repository = createDrizzleBookRepository(db as never);
 const lifecycleLock = createPostgresBookLifecycleLock({ pool });
 let userId = "";
+
+const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((done) => {
+        resolve = done;
+    });
+    return { promise, resolve };
+};
 
 before(async () => {
     assert.ok(process.env.DATABASE_URL);
@@ -407,4 +419,176 @@ test("lock resources are released after lifecycle use-case queue failures", asyn
     assert.equal(entered, true);
     const [stored] = await db.select().from(Books).where(eq(Books.id, book.id));
     assert.equal(stored.processingStatus, "queue_failed");
+});
+
+test("a max-four pool completes concurrent retries and deletions without starvation", async () => {
+    const constrainedPool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        max: 4,
+    });
+    try {
+        const constrainedDb = drizzle(constrainedPool);
+        const constrainedRepository = createDrizzleBookRepository(
+            constrainedDb as never
+        );
+        const constrainedLock = createPostgresBookLifecycleLock({
+            pool: constrainedPool,
+        });
+        const retry = new RetryBookProcessing({
+            reads: constrainedRepository,
+            retryState: constrainedRepository,
+            queueState: constrainedRepository,
+            queue: {
+                retryOrEnqueue: async () => "enqueued" as const,
+                removePending: async () => {},
+            },
+            lock: constrainedLock,
+        });
+        const deletion = new DeleteOwnedBook({
+            reads: constrainedRepository,
+            deletion: constrainedRepository,
+            references: constrainedRepository,
+            cleanup: {
+                deleteFile: async () => {},
+                deleteVectorCollection: async () => {},
+                deleteSearchChunks: async () => {},
+                clearCache: () => {},
+                defaultCollectionName: (id) => `book_${id}`,
+            },
+            queue: { removePending: async () => {} },
+            lock: constrainedLock,
+        });
+        const retryBooks = await Promise.all(
+            Array.from({ length: 8 }, () => createBook("failed"))
+        );
+        const deleteBooks = await Promise.all(
+            Array.from({ length: 8 }, (_, index) =>
+                createBook("ready", {
+                    collectionName: `delete-collection-${index}`,
+                })
+            )
+        );
+
+        await Promise.all([
+            ...retryBooks.map((book) =>
+                retry.execute({ bookId: book.id, userId })
+            ),
+            ...deleteBooks.map((book) =>
+                deletion.execute({ bookId: book.id, userId })
+            ),
+        ]);
+    } finally {
+        await constrainedPool.end();
+    }
+});
+
+test("processing survives termination of its advisory-lock backend", async () => {
+    const book = await createBook("processing");
+    const ingestionStarted = deferred();
+    const releaseIngestion = deferred();
+    const processor = new ProcessUploadedBook({
+        repository,
+        ingestion: {
+            ingest: async () => {
+                ingestionStarted.resolve();
+                await releaseIngestion.promise;
+                return {
+                    collectionName: "terminated-lock-collection",
+                    chunks: 1,
+                    reusedCollection: false,
+                };
+            },
+        },
+        cleanup: { deleteCollection: async () => {} },
+        references: repository,
+        lock: lifecycleLock,
+        cache: { clearCollection: () => {} },
+    });
+    const processing = processor.execute({
+        bookId: book.id,
+        userId,
+        fileKey: book.fileKey,
+        fileType: "pdf",
+    });
+
+    try {
+        await ingestionStarted.promise;
+        const { rows } = await pool.query<{ pid: number }>(
+            "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND pid <> pg_backend_pid()"
+        );
+        assert.equal(rows.length, 1);
+        const termination = await pool.query<{ terminated: boolean }>(
+            "SELECT pg_terminate_backend($1) AS terminated",
+            [rows[0].pid]
+        );
+        assert.equal(termination.rows[0]?.terminated, true);
+        await assert.rejects(processing, BookLifecycleLockLostError);
+        releaseIngestion.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+
+        const [stored] = await db
+            .select()
+            .from(Books)
+            .where(eq(Books.id, book.id));
+        assert.equal(stored.processingStatus, "processing");
+    } finally {
+        releaseIngestion.resolve();
+        await processing.catch(() => {});
+    }
+});
+
+test("a non-owner retry returns not found while the owner's processing lock is held", async () => {
+    const book = await createBook("processing");
+    const ingestionStarted = deferred();
+    const releaseIngestion = deferred();
+    const processor = new ProcessUploadedBook({
+        repository,
+        ingestion: {
+            ingest: async () => {
+                ingestionStarted.resolve();
+                await releaseIngestion.promise;
+                return {
+                    collectionName: "non-owner-retry-collection",
+                    chunks: 1,
+                    reusedCollection: false,
+                };
+            },
+        },
+        cleanup: { deleteCollection: async () => {} },
+        references: repository,
+        lock: lifecycleLock,
+        cache: { clearCollection: () => {} },
+    });
+    const processing = processor.execute({
+        bookId: book.id,
+        userId,
+        fileKey: book.fileKey,
+        fileType: "pdf",
+    });
+
+    try {
+        await ingestionStarted.promise;
+        const retry = new RetryBookProcessing({
+            reads: repository,
+            retryState: repository,
+            queueState: repository,
+            queue: {
+                retryOrEnqueue: async () => "enqueued" as const,
+                removePending: async () => {},
+            },
+            lock: createPostgresBookLifecycleLock({
+                pool,
+                acquireTimeoutMs: 250,
+            }),
+        });
+        const startedAt = Date.now();
+        await assert.rejects(
+            retry.execute({ bookId: book.id, userId: randomUUID() }),
+            BookNotFoundError
+        );
+        assert.ok(Date.now() - startedAt < 1_000);
+    } finally {
+        releaseIngestion.resolve();
+        await processing;
+    }
 });

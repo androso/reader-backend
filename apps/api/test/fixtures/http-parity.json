@@ -3246,6 +3246,23 @@
               "created_at": "2024-01-01 00:00:00"
             }
           ]
+        },
+        {
+          "op": "select",
+          "table": "books",
+          "rows": [
+            {
+              "id": "book-1",
+              "title": "Example.pdf",
+              "user_id": "owner-1",
+              "file_key": "file-1",
+              "file_type": "pdf",
+              "collection_name": "collection-1",
+              "processing_status": "ready",
+              "processing_error": null,
+              "created_at": "2024-01-01 00:00:00"
+            }
+          ]
         }
       ],
       "capture": {
@@ -3274,6 +3291,15 @@
             "sql": "select \"id\", \"email\", \"name\", \"image\", \"google_id\", \"password\", \"username\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"id\" = $1",
             "params": [
               "owner-1"
+            ]
+          },
+          {
+            "type": "db",
+            "operation": "select",
+            "table": "books",
+            "sql": "select \"id\", \"title\", \"user_id\", \"file_key\", \"file_type\", \"collection_name\", \"processing_status\", \"processing_error\", \"created_at\" from \"books\" where \"books\".\"id\" = $1",
+            "params": [
+              "book-1"
             ]
           },
           {

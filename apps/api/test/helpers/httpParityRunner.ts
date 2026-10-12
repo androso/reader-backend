@@ -265,8 +265,10 @@ const main = async () => {
         require("../../src/books/books.tokens") as typeof import("../../src/books/books.tokens");
     const lifecycleRepository = createDrizzleBookRepository(fakeDb as never);
     const lifecycleLock = {
-        withLock: async <T>(_bookId: string, callback: () => Promise<T>) =>
-            callback(),
+        withLock: async <T>(
+            _bookId: string,
+            callback: (signal: AbortSignal) => Promise<T>
+        ) => callback(new AbortController().signal),
     };
     const retryBookProcessing = new RetryBookProcessing({
         reads: lifecycleRepository,

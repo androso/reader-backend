@@ -1,12 +1,14 @@
 import {
     BookDeletedDuringProcessingError,
     BookFileTypeMismatchError,
+    BookLifecycleLockLostError,
     BookProcessingSkippedError,
     type BookIngestionResult,
     type BookProcessingRequest,
     type ProcessUploadedBookOptions,
 } from "@reader/domain";
 import { noopLogger } from "./ports";
+import { throwIfLockLost } from "./throwIfLockLost";
 import type {
     BookArtifactReferences,
     BookCollectionCleanup,
@@ -41,7 +43,7 @@ export class ProcessUploadedBook {
         request: BookProcessingRequest,
         options: ProcessUploadedBookOptions = {}
     ): Promise<BookIngestionResult> {
-        return this.deps.lock.withLock(request.bookId, async () => {
+        return this.deps.lock.withLock(request.bookId, async (signal) => {
             const start = Date.now();
             let fileKey = request.fileKey;
             this.logger.info("Handling uploaded book processing", {
@@ -99,6 +101,7 @@ export class ProcessUploadedBook {
                     fileType: book.fileType,
                 });
 
+                throwIfLockLost(signal);
                 const published = await this.deps.repository.markReady(
                     request.bookId,
                     request.userId,
@@ -118,6 +121,7 @@ export class ProcessUploadedBook {
                             request.bookId
                         );
                     if (references === 0) {
+                        throwIfLockLost(signal);
                         await this.deps.cleanup.deleteCollection(
                             result.collectionName
                         );
@@ -148,6 +152,8 @@ export class ProcessUploadedBook {
                     });
                     throw error;
                 }
+                if (error instanceof BookLifecycleLockLostError) throw error;
+                throwIfLockLost(signal);
 
                 this.logger.error("Uploaded book processing failed", {
                     bookId: request.bookId,
@@ -156,6 +162,7 @@ export class ProcessUploadedBook {
                     error: getErrorMessage(error),
                 });
                 if (options.markFailedOnError ?? true) {
+                    throwIfLockLost(signal);
                     await this.deps.repository.markFailed(
                         request.bookId,
                         request.userId,

@@ -143,6 +143,13 @@ export class BookLifecycleLockUnavailableError extends Error {
     }
 }
 
+export class BookLifecycleLockLostError extends BookLifecycleLockUnavailableError {
+    constructor(bookId: string, cause?: unknown) {
+        super(bookId, cause);
+        this.name = "BookLifecycleLockLostError";
+    }
+}
+
 export type BookProcessingSkipReason =
     | "missing"
     | "ready"

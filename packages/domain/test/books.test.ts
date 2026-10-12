@@ -4,6 +4,7 @@ import {
     BookDeletedDuringProcessingError,
     BookFileTypeMismatchError,
     BookAccessDeniedError,
+    BookLifecycleLockLostError,
     BookLifecycleLockTimeoutError,
     BookLifecycleLockUnavailableError,
     BookNotFoundError,
@@ -118,4 +119,17 @@ test("domain errors retain their public names and messages", () => {
         assert.equal(error.name, name);
         assert.equal(error.message, message);
     }
+});
+
+test("lock-loss errors remain lifecycle-unavailable errors and retain their cause", () => {
+    const cause = new Error("backend disconnected");
+    const error = new BookLifecycleLockLostError("book-1", cause);
+
+    assert.equal(error.name, "BookLifecycleLockLostError");
+    assert.equal(error.message, "Book lifecycle lock unavailable for book-1");
+    assert.ok(error instanceof BookLifecycleLockUnavailableError);
+    assert.equal(
+        (error as BookLifecycleLockLostError & { cause?: unknown }).cause,
+        cause
+    );
 });

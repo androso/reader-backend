@@ -149,11 +149,11 @@ try {
             { env: integrationEnv }
         );
         if (
-            !/\bpass\s+6\b/.test(testOutput) ||
+            !/\bpass\s+9\b/.test(testOutput) ||
             !/\bfail\s+0\b/.test(testOutput)
         ) {
             throw new Error(
-                "Integration suite did not report all six scenarios passing"
+                "Integration suite did not report all nine scenarios passing"
             );
         }
     } catch (error) {

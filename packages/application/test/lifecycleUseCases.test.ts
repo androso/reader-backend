@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
     BookAccessDeniedError,
+    BookLifecycleLockLostError,
     BookLifecycleLockTimeoutError,
     BookLifecycleLockUnavailableError,
     BookNotFoundError,
@@ -140,7 +141,7 @@ const retryDependencies = (
     lock: {
         withLock: async (bookId, fn) => {
             calls.push(`lock:${bookId}`);
-            return fn();
+            return fn(new AbortController().signal);
         },
     },
     ...overrides,
@@ -160,8 +161,15 @@ test("RetryBookProcessing claims atomically and queues authoritative data", asyn
 });
 
 test("RetryBookProcessing rejects missing, non-retryable, and lost claims", async () => {
+    let missingLockCalled = false;
     const missing = retryDependencies([], {
         reads: { findOwned: async () => null },
+        lock: {
+            withLock: async () => {
+                missingLockCalled = true;
+                throw new BookLifecycleLockTimeoutError("book-1");
+            },
+        },
     });
     await assert.rejects(
         new RetryBookProcessing(missing).execute({
@@ -170,6 +178,7 @@ test("RetryBookProcessing rejects missing, non-retryable, and lost claims", asyn
         }),
         BookNotFoundError
     );
+    assert.equal(missingLockCalled, false);
 
     const notRetryable = retryDependencies([], {
         reads: {
@@ -321,7 +330,7 @@ const deleteDependencies = (
     lock: {
         withLock: async (bookId, fn) => {
             calls.push(`lock:${bookId}`);
-            return fn();
+            return fn(new AbortController().signal);
         },
     },
     ...overrides,
@@ -412,6 +421,42 @@ test("DeleteOwnedBook preserves shared artifacts and resumes failed cleanup", as
     assert.ok(!calls.some((call) => call.startsWith("delete-vector:")));
 });
 
+test("DeleteOwnedBook stops cleanup and never deletes the row after lock loss", async () => {
+    const calls: string[] = [];
+    const controller = new AbortController();
+    const lockLost = new BookLifecycleLockLostError("book-1");
+    const dependencies = deleteDependencies(calls, {
+        lock: {
+            withLock: async (_bookId, fn) => fn(controller.signal),
+        },
+        cleanup: {
+            deleteFile: async () => {
+                calls.push("delete-file");
+                controller.abort(lockLost);
+            },
+            deleteVectorCollection: async () => {
+                calls.push("delete-vector");
+            },
+            deleteSearchChunks: async () => {
+                calls.push("delete-chunks");
+            },
+            clearCache: () => calls.push("clear-cache"),
+            defaultCollectionName: (bookId) => `default-${bookId}`,
+        },
+    });
+
+    await assert.rejects(
+        new DeleteOwnedBook(dependencies).execute({
+            bookId: "book-1",
+            userId: "user-1",
+        }),
+        (error: unknown) => error === lockLost
+    );
+    assert.ok(!calls.includes("delete-row:book-1:user-1"));
+    assert.ok(!calls.includes("delete-vector"));
+    assert.ok(!calls.includes("delete-chunks"));
+});
+
 test("ProcessUploadedBook skips replays and ingests the stored file key", async () => {
     for (const [status, reason] of [
         ["ready", "ready"],
@@ -441,7 +486,10 @@ test("ProcessUploadedBook skips replays and ingests the stored file key", async 
                 countLiveFileReferences: async () => 0,
                 countLiveCollectionReferences: async () => 0,
             },
-            lock: { withLock: async (_bookId, fn) => fn() },
+            lock: {
+                withLock: async (_bookId, fn) =>
+                    fn(new AbortController().signal),
+            },
             cache: { clearCollection: () => {} },
         };
         await assert.rejects(
@@ -480,7 +528,9 @@ test("ProcessUploadedBook skips replays and ingests the stored file key", async 
             countLiveFileReferences: async () => 0,
             countLiveCollectionReferences: async () => 0,
         },
-        lock: { withLock: async (_bookId, fn) => fn() },
+        lock: {
+            withLock: async (_bookId, fn) => fn(new AbortController().signal),
+        },
         cache: { clearCollection: () => {} },
     };
     await new ProcessUploadedBook(dependencies).execute({
@@ -519,7 +569,9 @@ test("ProcessUploadedBook preserves shared collections on rejected publication",
             countLiveFileReferences: async () => 0,
             countLiveCollectionReferences: async () => 1,
         },
-        lock: { withLock: async (_bookId, fn) => fn() },
+        lock: {
+            withLock: async (_bookId, fn) => fn(new AbortController().signal),
+        },
         cache: { clearCollection: () => calls.push("clear-cache") },
     };
     await assert.rejects(
@@ -571,4 +623,69 @@ test("ProcessUploadedBook lock failures do not write lifecycle state", async () 
         BookLifecycleLockUnavailableError
     );
     assert.deepEqual(calls, []);
+});
+
+test("ProcessUploadedBook propagates lock loss during ingestion without publishing failure", async () => {
+    let signalIngestionStarted!: () => void;
+    const ingestionStarted = new Promise<void>((resolve) => {
+        signalIngestionStarted = resolve;
+    });
+    let releaseIngestion!: () => void;
+    const ingestionGate = new Promise<void>((resolve) => {
+        releaseIngestion = resolve;
+    });
+    const controller = new AbortController();
+    const lockLost = new BookLifecycleLockLostError("book-1");
+    const calls: string[] = [];
+    const dependencies: ProcessUploadedBookDependencies = {
+        repository: {
+            findBookForProcessing: async () => makeProcessingRecord(),
+            markReady: async () => {
+                calls.push("mark-ready");
+                return true;
+            },
+            markFailed: async () => {
+                calls.push("mark-failed");
+                return true;
+            },
+        },
+        ingestion: {
+            ingest: async () => {
+                calls.push("ingest");
+                signalIngestionStarted();
+                await ingestionGate;
+                return {
+                    collectionName: "collection",
+                    chunks: 1,
+                    reusedCollection: false,
+                };
+            },
+        },
+        cleanup: {
+            deleteCollection: async () => {
+                calls.push("delete");
+            },
+        },
+        references: {
+            countLiveFileReferences: async () => 0,
+            countLiveCollectionReferences: async () => 0,
+        },
+        lock: {
+            withLock: async (_bookId, fn) => fn(controller.signal),
+        },
+        cache: { clearCollection: () => {} },
+    };
+
+    const processing = new ProcessUploadedBook(dependencies).execute({
+        bookId: "book-1",
+        userId: "user-1",
+        fileKey: "key",
+        fileType: "pdf",
+    });
+    await ingestionStarted;
+    controller.abort(lockLost);
+    releaseIngestion();
+
+    await assert.rejects(processing, (error: unknown) => error === lockLost);
+    assert.deepEqual(calls, ["ingest"]);
 });
