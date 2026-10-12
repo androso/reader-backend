@@ -7,6 +7,9 @@ import type {
     RagRerankerResult,
     RagShadowResult,
     RagVectorResult,
+    RagModelCost,
+    RagModelUsage,
+    RagPipelineVersion,
 } from "@reader/domain";
 import type { Clock } from "../chat/ports";
 
@@ -30,8 +33,10 @@ export interface LexicalSearch {
     search(
         collectionName: string,
         query: string,
-        limit: number
+        limit: number,
+        options?: { trace?: RagTracing }
     ): Promise<RagLexicalResult[]>;
+    getCollectionChunks?(collectionName: string): Promise<RagChunk[]>;
     clearCollectionCache?(collectionName: string): void;
 }
 
@@ -39,14 +44,15 @@ export interface VectorSearch {
     search(
         collectionName: string,
         query: string,
-        limit: number
+        limit: number,
+        options?: { trace?: RagTracing }
     ): Promise<RagVectorResult[]>;
 }
 
 export interface Reranker {
     rerank(input: {
         query: string;
-        documents: RagCandidate[];
+        documents: Array<Pick<RagCandidate, "id" | "content">>;
         topN: number;
         signal?: AbortSignal;
     }): Promise<RagRerankerResult>;
@@ -128,4 +134,36 @@ export interface RagTracing {
     update(attributes: Record<string, unknown>): void;
     end(): void;
     setTraceIO?(attributes: Record<string, unknown>): void;
+}
+
+export type RagPipelineConfig = {
+    pipelineVersion: string;
+    retrievalStrategy: "baseline" | "reranked";
+    promptVersion: string;
+    answerPromptVersion: string;
+    rerankerPromptVersion: string | null;
+    rerankerModel: string | null;
+};
+
+export interface RagConfiguration {
+    getPipeline(version?: RagPipelineVersion): RagPipelineConfig;
+    getMinHybridScore(): number;
+}
+
+export interface RagUsageAccounting {
+    normalizeUsage(usage: unknown): RagModelUsage | null;
+    estimateCost(
+        model: string,
+        usage: RagModelUsage | null
+    ): RagModelCost | null;
+}
+
+export interface RagLogger {
+    warn(message: string, metadata?: Record<string, unknown>): void;
+    error(message: string, metadata?: Record<string, unknown>): void;
+}
+
+export interface RagLoggers {
+    bookRag: RagLogger;
+    rerankedRetrieval: RagLogger;
 }

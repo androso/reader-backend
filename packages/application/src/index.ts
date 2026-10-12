@@ -15,3 +15,6 @@ export * from "./chat/RunBookChat";
 export * from "./chat/StartBookChat";
 export * from "./chat/throwIfChatCancelled";
 export * from "./rag/ports";
+export * from "./rag/RetrieveBookEvidence";
+export * from "./rag/policies/hybridSearch";
+export * from "./rag/policies/reranking";

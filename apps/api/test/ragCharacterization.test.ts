@@ -3,6 +3,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { HybridBookSearchService } from "../src/services/HybridBookSearchService";
+import { RetrieveBookEvidence } from "@reader/application";
+import { ChatCancelledError } from "@reader/domain";
 import {
     estimateModelCost,
     normalizeModelUsage,
@@ -223,6 +225,7 @@ test("current exported RAG functions reproduce the deterministic golden scenario
             (error: Error) => error.message
         );
         const cancelSignal = AbortSignal.abort();
+        // Intentional Stage B change: caller cancellation now propagates instead of falling back as a timeout.
         const cancelled = await retrieveRerankedEvidence({
             collectionName: "book",
             query: "q",
@@ -239,7 +242,14 @@ test("current exported RAG functions reproduce the deterministic golden scenario
                 },
             },
             signal: cancelSignal,
-        });
+        }).then(
+            () => "not cancelled",
+            (error: unknown) =>
+                error instanceof ChatCancelledError ||
+                error === cancelSignal.reason
+                    ? "cancelled"
+                    : "unexpected"
+        );
         const timedOut = await retrieveRerankedEvidence({
             collectionName: "book",
             query: "q",
@@ -253,6 +263,39 @@ test("current exported RAG functions reproduce the deterministic golden scenario
                     throw new Error("request timed out");
                 },
             },
+        });
+        const directEngine = new RetrieveBookEvidence({
+            books: { findOwned: async () => null },
+            chunks: { getCollectionChunks: async () => [] },
+            lexical: { search: async () => [] },
+            vector: { search: async () => [] },
+            reranker: {
+                rerank: async () => {
+                    throw new Error("request timed out");
+                },
+            },
+            config: {
+                getPipeline: () => ({
+                    pipelineVersion: "rerank-rag-v1",
+                    retrievalStrategy: "reranked",
+                    promptVersion: "book-context-v1",
+                    answerPromptVersion: "book-context-v1",
+                    rerankerPromptVersion: "rerank-documents-v1",
+                    rerankerModel: "gpt-5.4-mini-2026-03-17",
+                }),
+                getMinHybridScore: () => 0.03,
+            },
+            clock: { now: () => new Date(1_000) },
+        });
+        const directTimedOut = await directEngine.retrieveReranked({
+            collectionName: "book",
+            query: "q",
+            minHybridScore: 0.03,
+            chunks: { getCollectionChunks: async () => [] },
+            firstStage: {
+                results: hybridResponse.results,
+                diagnostics: hybridResponse.diagnostics,
+            } as never,
         });
         const documents = [
             { id: "r0", content: "first document" },
@@ -416,7 +459,7 @@ test("current exported RAG functions reproduce the deterministic golden scenario
             },
             timeout: timedOut.diagnostics.reranker.fallbackReason,
             cancellation: {
-                category: cancelled.diagnostics.reranker.fallbackReason,
+                category: cancelled,
                 callerAborted: cancelSignal.aborted,
             },
             strictInfrastructureError: strictError,
@@ -474,6 +517,16 @@ test("current exported RAG functions reproduce the deterministic golden scenario
                 `${JSON.stringify(snapshots, null, 4)}\n`
             );
         } else {
+            assert.deepEqual(
+                normalize({
+                    results: directTimedOut.results,
+                    diagnostics: directTimedOut.diagnostics,
+                }),
+                normalize({
+                    results: timedOut.results,
+                    diagnostics: timedOut.diagnostics,
+                })
+            );
             assert.deepEqual(snapshots, golden);
             assert.equal(Object.keys(golden).length, 20);
         }

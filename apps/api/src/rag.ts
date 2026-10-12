@@ -33,6 +33,10 @@ export {
     type RagRetrievalStrategy,
 } from "./services/RagPipeline";
 export {
+    DEFAULT_RAG_MIN_HYBRID_SCORE,
+    getRagMinHybridScore,
+} from "./services/RagRetrievalConfig";
+export {
     BASELINE_MIN_HYBRID_SCORE,
     expandRerankCandidates,
     buildBoundedRerankerDocuments,

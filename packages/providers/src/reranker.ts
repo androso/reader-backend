@@ -1,11 +1,15 @@
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
+import {
+    RERANK_CANDIDATE_LIMIT,
+    RERANKER_MAX_DOCUMENT_CHARACTERS,
+} from "@reader/application";
 
 export const RERANKER_MODEL = "gpt-5.4-mini-2026-03-17" as const;
 export const RERANKER_PROMPT_VERSION = "rerank-documents-v1" as const;
-export const RERANKER_MAX_CANDIDATES = 30;
-export const RERANKER_MAX_DOCUMENT_CHARACTERS = 40_000;
+export const RERANKER_MAX_CANDIDATES = RERANK_CANDIDATE_LIMIT;
+export { RERANKER_MAX_DOCUMENT_CHARACTERS };
 export const RERANKER_MAX_COMPLETION_TOKENS = 800;
 export const RERANKER_TIMEOUT_MS = 10_000;
 

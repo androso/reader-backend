@@ -1,7 +1,12 @@
 import type { BookSearchCache } from "@reader/application";
-import { hybridBookSearchService } from "../../services/HybridBookSearchService";
+import type { LexicalSearch } from "@reader/application";
+import { lexicalSearch } from "../rag/lexicalSearch";
 
-export const bookSearchCache: BookSearchCache = {
+export const createBookSearchCache = (
+    lexical: Pick<LexicalSearch, "clearCollectionCache">
+): BookSearchCache => ({
     clearCollection: (collectionName) =>
-        hybridBookSearchService.clearCollectionCache(collectionName),
-};
+        lexical.clearCollectionCache?.(collectionName),
+});
+
+export const bookSearchCache = createBookSearchCache(lexicalSearch);

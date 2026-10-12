@@ -5,7 +5,7 @@
     "description": "Reader platform monorepo",
     "scripts": {
         "dev": "pnpm --parallel --filter @reader/api --filter @reader/web --filter @reader/worker dev",
-        "build": "pnpm --filter @reader/epub --filter @reader/providers --filter @reader/processing --filter @reader/jobs --filter @reader/domain --filter @reader/application --filter @reader/api --filter @reader/worker build",
+        "build": "pnpm --filter @reader/epub --filter @reader/domain --filter @reader/application --filter @reader/providers --filter @reader/processing --filter @reader/jobs --filter @reader/api --filter @reader/worker build",
         "test": "pnpm check:architecture && pnpm --filter @reader/domain test && pnpm --filter @reader/application test && pnpm --filter @reader/epub test && pnpm --filter @reader/providers test && pnpm --filter @reader/processing test && pnpm --filter @reader/jobs test && pnpm --filter @reader/api test && pnpm --filter @reader/worker test && pnpm --filter @reader/evals test",
         "test:integration:books": "node scripts/integration/books.mjs",
         "test:integration:chat": "node scripts/integration/books.mjs chat",
