@@ -6,6 +6,7 @@
 - `pnpm --filter @reader/api test` — compile `tsconfig.test.json` then `node --test` the output in `.tmp/apps-api-test`.
 - `pnpm --filter @reader/api dev` — `ts-node-dev --transpile-only`; requires `.env` at repo root.
 - `pnpm test` / `pnpm build` — whole-workspace gates.
+- `pnpm test:foundation` — architecture, build, root and web tests, then books/chat/RAG/progress/auth integrations; `.github/workflows/foundation.yml` runs it on PRs and the main/migration branches.
 - `pnpm --filter @reader/worker build` — the worker consumes built `@reader/api/*` subpath exports (`rag`, `ai-usage`, `book-processing`, `rag-shadow`); keep those barrels functional.
 
 ## API architecture (apps/api)
@@ -27,7 +28,7 @@ NestJS 11 on `@nestjs/platform-express` (Express 5). Entry point stays `src/inde
 ### Tests
 
 - `node --test` against `tsc` output — no jest/supertest. Use `test/helpers/nestApp.ts` `createTestApp()` + global `fetch`.
-- Unit tests do not use live Postgres/Redis: mock the `DRIZZLE` provider (`overrideProvider`/`useValue`). Only `pnpm test:integration:books` starts temporary local containers. Rate-limit guards no-op without `REDIS_URL`; set `process.env.JWT_SECRET ??=` before importing anything that pulls in `AuthService` (env must precede `require()` since imports hoist).
+- Unit tests do not use live Postgres/Redis: mock the `DRIZZLE` provider (`overrideProvider`/`useValue`). Integration commands use the shared harness with uniquely named temporary containers, bounded readiness/job waits, and cleanup on failure or signals; `test:integration:books` includes a SIGTERM cleanup probe. Rate-limit guards no-op without `REDIS_URL`; set `process.env.JWT_SECRET ??=` before importing anything that pulls in `AuthService` (env must precede `require()` since imports hoist).
 
 ## Clean Architecture (book processing slice)
 

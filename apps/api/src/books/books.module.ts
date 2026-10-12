@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { GetOwnedBookFile } from "@reader/application";
 import { SessionModule } from "../auth/session.module";
 import {
     createDeleteOwnedBook,
@@ -12,6 +13,7 @@ import { BooksController } from "./books.controller";
 import { BOOKS_PORTS, createBooksPorts } from "./books.ports";
 import {
     DELETE_OWNED_BOOK,
+    GET_OWNED_BOOK_FILE,
     GET_BOOK_STATUS,
     LIST_OWNED_BOOKS,
     RETRY_BOOK_PROCESSING,
@@ -19,6 +21,18 @@ import {
 } from "./books.tokens";
 
 export const BOOKS_USE_CASE_PROVIDERS = [
+    {
+        provide: GET_OWNED_BOOK_FILE,
+        useFactory: (ports: ReturnType<typeof createBooksPorts>) =>
+            new GetOwnedBookFile({
+                books: {
+                    findById: async (bookId) =>
+                        (await ports.bookFile.findBookById(bookId)) ?? null,
+                },
+                storage: { getFile: ports.bookFile.getFile },
+            }),
+        inject: [BOOKS_PORTS],
+    },
     {
         provide: UPLOAD_BOOK,
         useFactory: (

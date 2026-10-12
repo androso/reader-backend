@@ -1,6 +1,12 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+    copyFileSync,
+    mkdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from "node:fs";
 import { delimiter, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -9,44 +15,122 @@ const integrationTest =
     suite === "auth"
         ? ".tmp/apps-api-integration/test-integration/auth.test.js"
         : suite === "chat"
-        ? ".tmp/apps-api-integration/test-integration/chat.test.js"
-        : suite === "rag"
-          ? ".tmp/apps-api-integration/test-integration/rag.test.js"
-          : suite === "progress"
-            ? ".tmp/apps-api-integration/test-integration/progress.test.js"
-            : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
+          ? ".tmp/apps-api-integration/test-integration/chat.test.js"
+          : suite === "rag"
+            ? ".tmp/apps-api-integration/test-integration/rag.test.js"
+            : suite === "progress"
+              ? ".tmp/apps-api-integration/test-integration/progress.test.js"
+              : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
 const expectedPasses =
     suite === "auth"
         ? 3
-        : suite === "chat" ? 3 : suite === "rag" ? 3 : suite === "progress" ? 6 : 10;
+        : suite === "chat"
+          ? 3
+          : suite === "rag"
+            ? 3
+            : suite === "progress"
+              ? 6
+              : 10;
 const suffix = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const postgresName = `reader-it-postgres-${suffix}`;
 const redisName = `reader-it-redis-${suffix}`;
 const upgradeDatabaseName = `reader_it_progress_upgrade_${suffix.replaceAll("-", "_")}`;
 const upgradeMigrationDir = resolve(root, ".tmp/progress-previous-migrations");
-const upgradeConfigPath = resolve(root, ".tmp/progress-previous.drizzle.config.ts");
+const upgradeConfigPath = resolve(
+    root,
+    ".tmp/progress-previous.drizzle.config.ts"
+);
 const usesRedis = suite !== "progress" && suite !== "auth";
+const activeChildren = new Set();
+let receivedSignal;
+let resolveSignalProbe;
+let signalProbeKeepAlive;
 
-const run = (command, args, options = {}) => {
-    const result = spawnSync(command, args, {
-        cwd: root,
-        encoding: "utf8",
-        env: process.env,
-        ...options,
-    });
-    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-    if (output) process.stdout.write(output);
-    if (result.error) throw result.error;
-    if (result.status !== 0) {
-        throw new Error(
-            `${command} ${args.join(" ")} exited with ${result.status ?? "signal"}`
-        );
-    }
-    return result.stdout.trim();
+const terminate = (child, signal = "SIGTERM") => {
+    if (!child.pid) return;
+    try {
+        if (process.platform !== "win32") process.kill(-child.pid, signal);
+        else child.kill(signal);
+    } catch {}
 };
+
+const onSignal = (signal) => {
+    if (receivedSignal) return;
+    receivedSignal = signal;
+    for (const child of activeChildren) terminate(child);
+    resolveSignalProbe?.();
+};
+const onSigint = () => onSignal("SIGINT");
+const onSigterm = () => onSignal("SIGTERM");
+process.on("SIGINT", onSigint);
+process.on("SIGTERM", onSigterm);
+
+const run = (command, args, options = {}) =>
+    new Promise((resolvePromise, rejectPromise) => {
+        const {
+            timeoutMs = 10 * 60 * 1000,
+            allowAfterSignal = false,
+            ...spawnOptions
+        } = options;
+        if (receivedSignal && !allowAfterSignal) {
+            rejectPromise(
+                new Error(`Integration harness received ${receivedSignal}`)
+            );
+            return;
+        }
+        const child = spawn(command, args, {
+            cwd: root,
+            env: process.env,
+            detached: process.platform !== "win32",
+            stdio: ["ignore", "pipe", "pipe"],
+            ...spawnOptions,
+        });
+        activeChildren.add(child);
+        let stdout = "";
+        let stderr = "";
+        let timedOut = false;
+        const timer = setTimeout(() => {
+            timedOut = true;
+            terminate(child);
+        }, timeoutMs);
+        child.stdout.on("data", (chunk) => {
+            stdout += chunk;
+            process.stdout.write(chunk);
+        });
+        child.stderr.on("data", (chunk) => {
+            stderr += chunk;
+            process.stderr.write(chunk);
+        });
+        child.once("error", (error) => {
+            clearTimeout(timer);
+            activeChildren.delete(child);
+            rejectPromise(error);
+        });
+        child.once("close", (code, signal) => {
+            clearTimeout(timer);
+            activeChildren.delete(child);
+            if (timedOut) {
+                rejectPromise(
+                    new Error(
+                        `${command} ${args.join(" ")} timed out after ${timeoutMs}ms`
+                    )
+                );
+            } else if (code !== 0) {
+                rejectPromise(
+                    new Error(
+                        `${command} ${args.join(" ")} exited with ${code ?? signal ?? "unknown"}`
+                    )
+                );
+            } else {
+                resolvePromise(stdout.trim());
+            }
+        });
+    });
 
 const waitFor = async (description, check) => {
     for (let attempt = 0; attempt < 90; attempt += 1) {
+        if (receivedSignal)
+            throw new Error(`Interrupted while waiting for ${description}`);
         try {
             if (check()) return;
         } catch {}
@@ -55,9 +139,12 @@ const waitFor = async (description, check) => {
     throw new Error(`Timed out waiting for ${description}`);
 };
 
-const cleanup = (name) => {
+const cleanup = async (name) => {
     try {
-        run("docker", ["rm", "--force", name]);
+        await run("docker", ["rm", "--force", name], {
+            timeoutMs: 30_000,
+            allowAfterSignal: true,
+        });
     } catch {}
 };
 
@@ -65,8 +152,8 @@ let blockedReason;
 let upgradeDatabaseUrl;
 try {
     try {
-        run("docker", ["info", "--format", "{{.ServerVersion}}"]);
-        run("docker", [
+        await run("docker", ["info", "--format", "{{.ServerVersion}}"]);
+        await run("docker", [
             "run",
             "--rm",
             "--detach",
@@ -83,7 +170,7 @@ try {
             "postgres:16",
         ]);
         if (usesRedis) {
-            run("docker", [
+            await run("docker", [
                 "run",
                 "--rm",
                 "--detach",
@@ -94,11 +181,15 @@ try {
                 "redis:7-alpine",
             ]);
         }
-        const postgresPort = run("docker", ["port", postgresName, "5432/tcp"])
+        const postgresPort = (
+            await run("docker", ["port", postgresName, "5432/tcp"])
+        )
             .split(":")
             .at(-1);
         const redisPort = usesRedis
-            ? run("docker", ["port", redisName, "6379/tcp"]).split(":").at(-1)
+            ? (await run("docker", ["port", redisName, "6379/tcp"]))
+                  .split(":")
+                  .at(-1)
             : undefined;
         if (!postgresPort || (usesRedis && !redisPort)) {
             throw new Error("Docker did not report dynamically assigned ports");
@@ -118,17 +209,37 @@ try {
                         "-d",
                         "reader_it",
                     ],
-                    { encoding: "utf8" }
+                    { encoding: "utf8", timeout: 1_000 }
                 ).status === 0
         );
         if (usesRedis) {
             await waitFor(
                 "Redis readiness",
                 () =>
-                    spawnSync("docker", ["exec", redisName, "redis-cli", "ping"], {
-                        encoding: "utf8",
-                    }).stdout?.trim() === "PONG"
+                    spawnSync(
+                        "docker",
+                        ["exec", redisName, "redis-cli", "ping"],
+                        {
+                            encoding: "utf8",
+                            timeout: 1_000,
+                        }
+                    ).stdout?.trim() === "PONG"
             );
+        }
+
+        if (process.env.READER_IT_SIGNAL_PROBE === "1") {
+            await new Promise((resolvePromise) => {
+                resolveSignalProbe = resolvePromise;
+                signalProbeKeepAlive = setInterval(() => {}, 1_000);
+                console.log("SIGNAL_PROBE_READY");
+            });
+            clearInterval(signalProbeKeepAlive);
+            signalProbeKeepAlive = undefined;
+            if (receivedSignal) {
+                throw new Error(
+                    `Integration harness received ${receivedSignal}`
+                );
+            }
         }
 
         const databaseUrl = `postgres://reader_it:reader_it@127.0.0.1:${postgresPort}/reader_it`;
@@ -155,23 +266,38 @@ try {
                 .filter(Boolean)
                 .join(delimiter),
         };
-        run("pnpm", ["--filter", "@reader/api", "prebuild"], {
+        await run("pnpm", ["--filter", "@reader/api", "prebuild"], {
             env: integrationEnv,
         });
-        run(
+        await run(
             "pnpm",
             ["exec", "drizzle-kit", "migrate", "--config=drizzle.config.ts"],
             { env: integrationEnv }
         );
 
         if (suite === "progress") {
-            run("docker", ["exec", postgresName, "createdb", "-U", "reader_it", upgradeDatabaseName]);
-            upgradeDatabaseUrl = databaseUrl.replace(/\/reader_it$/, `/${upgradeDatabaseName}`);
+            await run("docker", [
+                "exec",
+                postgresName,
+                "createdb",
+                "-U",
+                "reader_it",
+                upgradeDatabaseName,
+            ]);
+            upgradeDatabaseUrl = databaseUrl.replace(
+                /\/reader_it$/,
+                `/${upgradeDatabaseName}`
+            );
             const journal = JSON.parse(
-                readFileSync(resolve(root, "apps/api/migrations/meta/_journal.json"), "utf8")
+                readFileSync(
+                    resolve(root, "apps/api/migrations/meta/_journal.json"),
+                    "utf8"
+                )
             );
             const previousEntries = journal.entries.slice(0, -1);
-            mkdirSync(resolve(upgradeMigrationDir, "meta"), { recursive: true });
+            mkdirSync(resolve(upgradeMigrationDir, "meta"), {
+                recursive: true,
+            });
             for (const entry of previousEntries) {
                 copyFileSync(
                     resolve(root, `apps/api/migrations/${entry.tag}.sql`),
@@ -180,22 +306,38 @@ try {
             }
             writeFileSync(
                 resolve(upgradeMigrationDir, "meta/_journal.json"),
-                JSON.stringify({ ...journal, entries: previousEntries }, null, 2)
+                JSON.stringify(
+                    { ...journal, entries: previousEntries },
+                    null,
+                    2
+                )
             );
             writeFileSync(
                 upgradeConfigPath,
                 `import { defineConfig } from "drizzle-kit";\nexport default defineConfig({ out: ${JSON.stringify(upgradeMigrationDir)}, schema: ${JSON.stringify(resolve(root, "apps/api/src/db/schema.ts"))}, dialect: "postgresql", dbCredentials: { url: process.env.DATABASE_URL! } });\n`
             );
-            run("pnpm", ["exec", "drizzle-kit", "migrate", `--config=${upgradeConfigPath}`], {
-                env: { ...integrationEnv, DATABASE_URL: upgradeDatabaseUrl },
-            });
+            await run(
+                "pnpm",
+                [
+                    "exec",
+                    "drizzle-kit",
+                    "migrate",
+                    `--config=${upgradeConfigPath}`,
+                ],
+                {
+                    env: {
+                        ...integrationEnv,
+                        DATABASE_URL: upgradeDatabaseUrl,
+                    },
+                }
+            );
         }
 
         rmSync(resolve(root, ".tmp/apps-api-integration"), {
             recursive: true,
             force: true,
         });
-        run(
+        await run(
             "pnpm",
             ["exec", "tsc", "-p", "apps/api/tsconfig.integration.json"],
             {
@@ -203,22 +345,18 @@ try {
             }
         );
         if (suite === "rag") {
-            run("pnpm", ["--filter", "@reader/worker", "build"], {
+            await run("pnpm", ["--filter", "@reader/worker", "build"], {
                 env: integrationEnv,
             });
         }
-        const testOutput = run(
-            "node",
-            ["--test", integrationTest],
-            {
-                env: {
-                    ...integrationEnv,
-                    ...(upgradeDatabaseUrl
-                        ? { PROGRESS_UPGRADE_DATABASE_URL: upgradeDatabaseUrl }
-                        : {}),
-                },
-            }
-        );
+        const testOutput = await run("node", ["--test", integrationTest], {
+            env: {
+                ...integrationEnv,
+                ...(upgradeDatabaseUrl
+                    ? { PROGRESS_UPGRADE_DATABASE_URL: upgradeDatabaseUrl }
+                    : {}),
+            },
+        });
         if (
             !new RegExp(`\\bpass\\s+${expectedPasses}\\b`).test(testOutput) ||
             !/\bfail\s+0\b/.test(testOutput)
@@ -228,7 +366,9 @@ try {
             );
         }
     } catch (error) {
-        if (
+        if (receivedSignal) {
+            process.exitCode = 128 + (receivedSignal === "SIGINT" ? 2 : 15);
+        } else if (
             error?.message?.toLowerCase().includes("docker") ||
             error?.message?.includes("Timed out waiting") ||
             error?.message?.includes("Docker did not report")
@@ -239,18 +379,36 @@ try {
         }
     }
 } finally {
-    cleanup(redisName);
+    clearInterval(signalProbeKeepAlive);
+    await cleanup(redisName);
     if (upgradeDatabaseUrl) {
         try {
-            run("docker", ["exec", postgresName, "dropdb", "--if-exists", "-U", "reader_it", upgradeDatabaseName]);
+            await run(
+                "docker",
+                [
+                    "exec",
+                    postgresName,
+                    "dropdb",
+                    "--if-exists",
+                    "-U",
+                    "reader_it",
+                    upgradeDatabaseName,
+                ],
+                { allowAfterSignal: true }
+            );
         } catch {}
     }
     rmSync(upgradeMigrationDir, { recursive: true, force: true });
     rmSync(upgradeConfigPath, { force: true });
-    cleanup(postgresName);
+    await cleanup(postgresName);
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
 }
 
 if (blockedReason) {
     console.error(`BLOCKED: ${blockedReason}`);
     process.exitCode = 2;
+}
+if (receivedSignal) {
+    process.exitCode = 128 + (receivedSignal === "SIGINT" ? 2 : 15);
 }

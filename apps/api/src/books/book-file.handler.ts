@@ -1,62 +1,57 @@
-import { Request, Response } from "express";
-import { getFile } from "@reader/providers";
-import { db } from "../db";
-import { Books, type SelectBook } from "../db/schema";
-import { eq } from "drizzle-orm";
+import type { Request, Response } from "express";
+import { GetOwnedBookFile } from "@reader/application";
+import {
+    BookAccessDeniedError,
+    BookNotFoundError,
+    type Book,
+} from "@reader/domain";
 
-type BookFileRecord = Pick<
-    SelectBook,
-    "id" | "userId" | "fileKey" | "fileType"
->;
+type BookFileRecord = Pick<Book, "id" | "userId" | "fileKey" | "fileType">;
 
 export type BookFileDependencies = {
     findBookById(bookId: string): Promise<BookFileRecord | undefined>;
     getFile(fileKey: string): Promise<Buffer>;
 };
 
-const bookFileDependencies: BookFileDependencies = {
-    async findBookById(bookId) {
-        const [book] = await db
-            .select()
-            .from(Books)
-            .where(eq(Books.id, bookId));
-        return book;
-    },
-    getFile,
-};
-
-const getBookFileContentType = (book: BookFileRecord) => {
-    if (book.fileType === "pdf") return "application/pdf";
-    if (book.fileType === "epub") return "application/epub+zip";
+const getBookFileContentType = (fileType: Book["fileType"]) => {
+    if (fileType === "pdf") return "application/pdf";
+    if (fileType === "epub") return "application/epub+zip";
     return "application/octet-stream";
 };
 
 export const handleGetBookFile = async (
     req: Request,
     res: Response,
-    dependencies: BookFileDependencies = bookFileDependencies
+    dependencies: BookFileDependencies
 ) => {
     const bookId = req.params.id as string;
+    const getOwnedBookFile = new GetOwnedBookFile({
+        books: {
+            findById: async (id) =>
+                (await dependencies.findBookById(id)) ?? null,
+        },
+        storage: { getFile: dependencies.getFile },
+    });
 
     try {
-        const book = await dependencies.findBookById(bookId);
-        if (!book) {
+        const file = await getOwnedBookFile.execute({
+            bookId,
+            userId: req.user.id,
+        });
+        res.setHeader("Cache-Control", "private");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.type(getBookFileContentType(file.fileType));
+        res.send(file.bytes);
+    } catch (error) {
+        if (error instanceof BookNotFoundError) {
             res.status(404).json({ error: "Book was not found" });
             return;
         }
-
-        if (book.userId !== req.user.id) {
+        if (error instanceof BookAccessDeniedError) {
             res.status(403).json({ error: "Not authorized" });
             return;
         }
-
-        const fileBuffer = await dependencies.getFile(book.fileKey);
-        res.setHeader("Cache-Control", "private");
-        res.setHeader("X-Content-Type-Options", "nosniff");
-        res.type(getBookFileContentType(book));
-        res.send(fileBuffer);
-    } catch (er) {
-        console.error("Error fetching file", er);
+        console.error("Error fetching file", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };

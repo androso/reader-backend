@@ -33,6 +33,7 @@ export interface BookFileValidator {
 
 export interface BookFileStorage {
     save(fileKey: string, buffer: Uint8Array): Promise<void>;
+    getFile(fileKey: string): Promise<Uint8Array>;
 }
 
 export interface BookRepository {

@@ -27,6 +27,7 @@ import type { Request, Response } from "express";
 import { createLogger } from "@reader/providers";
 import type {
     DeleteOwnedBook,
+    GetOwnedBookFile,
     GetBookStatus,
     ListOwnedBooks,
     RetryBookProcessing,
@@ -45,10 +46,9 @@ import {
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthGuard } from "../common/guards/auth.guard";
 import { UploadRateLimitGuard } from "../common/guards/rate-limit.guard";
-import { handleGetBookFile } from "./book-file.handler";
-import { BOOKS_PORTS, type BooksPorts } from "./books.ports";
 import {
     DELETE_OWNED_BOOK,
+    GET_OWNED_BOOK_FILE,
     GET_BOOK_STATUS,
     LIST_OWNED_BOOKS,
     RETRY_BOOK_PROCESSING,
@@ -64,7 +64,8 @@ const log = createLogger("books");
 @UseGuards(AuthGuard)
 export class BooksController {
     constructor(
-        @Inject(BOOKS_PORTS) private readonly ports: BooksPorts,
+        @Inject(GET_OWNED_BOOK_FILE)
+        private readonly getOwnedBookFileUseCase: GetOwnedBookFile,
         @Inject(UPLOAD_BOOK) private readonly uploadBookUseCase: UploadBook,
         @Inject(LIST_OWNED_BOOKS)
         private readonly listOwnedBooksUseCase: ListOwnedBooks,
@@ -261,7 +262,33 @@ export class BooksController {
     @ApiResponse({ status: 401, description: "Authentication failed" })
     @ApiResponse({ status: 500, description: "Internal server error" })
     async getBookFile(@Req() req: Request, @Res() res: Response) {
-        await handleGetBookFile(req, res, this.ports.bookFile);
+        try {
+            const file = await this.getOwnedBookFileUseCase.execute({
+                bookId: req.params.id as string,
+                userId: req.user.id,
+            });
+            res.setHeader("Cache-Control", "private");
+            res.setHeader("X-Content-Type-Options", "nosniff");
+            res.type(
+                file.fileType === "pdf"
+                    ? "application/pdf"
+                    : file.fileType === "epub"
+                      ? "application/epub+zip"
+                      : "application/octet-stream"
+            );
+            res.send(file.bytes);
+        } catch (error) {
+            if (error instanceof BookNotFoundError) {
+                res.status(404).json({ error: "Book was not found" });
+                return;
+            }
+            if (error instanceof BookAccessDeniedError) {
+                res.status(403).json({ error: "Not authorized" });
+                return;
+            }
+            console.error("Error fetching file", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
     }
 
     @Delete(":id")

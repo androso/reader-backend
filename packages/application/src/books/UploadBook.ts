@@ -22,7 +22,7 @@ import type {
 export interface UploadBookDependencies {
     ids: IdGenerator;
     validator: BookFileValidator;
-    storage: BookFileStorage;
+    storage: Pick<BookFileStorage, "save">;
     books: BookRepository;
     scheduler: BookProcessingScheduler;
     logger?: Logger;

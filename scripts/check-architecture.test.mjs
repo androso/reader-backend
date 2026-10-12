@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findImportViolations } from "./check-architecture.mjs";
+import {
+    findImportViolations,
+    findManifestViolations,
+    findTransportViolations,
+    findWorkspaceCycles,
+} from "./check-architecture.mjs";
 
 const rules = {
     packageName: "@reader/application",
@@ -114,4 +119,116 @@ test("rejects a relative path that escapes the package", () => {
     );
     assert.equal(violations.length, 1);
     assert.equal(violations[0].specifier, "../../../apps/api");
+});
+
+test("rejects forbidden runtime manifest dependencies", () => {
+    assert.deepEqual(
+        findManifestViolations("@reader/domain", {
+            dependencies: { zod: "^3.0.0" },
+        }),
+        ["invalid runtime dependencies"]
+    );
+    assert.deepEqual(
+        findManifestViolations("@reader/domain", {
+            optionalDependencies: { zod: "^3.0.0" },
+        }),
+        ["invalid runtime dependencies"]
+    );
+    assert.deepEqual(
+        findManifestViolations("@reader/application", {
+            dependencies: {
+                "@reader/domain": "workspace:*",
+                "@reader/providers": "workspace:*",
+            },
+        }),
+        ["invalid runtime dependencies"]
+    );
+});
+
+test("rejects an alias that resolves outside the application package", () => {
+    const violations = findImportViolations(
+        'export { retrieve } from "@reader/api/rag";',
+        srcFile,
+        {
+            ...rules,
+            allowedPackageRoots: ["/repo/packages/domain"],
+            resolveModule: () => "/repo/apps/api/src/rag/index.ts",
+        }
+    );
+    assert.equal(violations.length, 1);
+    assert.equal(violations[0].specifier, "@reader/api/rag");
+});
+
+test("reports workspace cycles with their full path", () => {
+    const cycles = findWorkspaceCycles([
+        {
+            name: "pkg-a",
+            dependencies: { "pkg-b": "workspace:*" },
+            devDependencies: {},
+        },
+        {
+            name: "pkg-b",
+            dependencies: {},
+            devDependencies: { "pkg-a": "workspace:*" },
+        },
+    ]);
+    assert.deepEqual(cycles, [["pkg-a", "pkg-b", "pkg-a"]]);
+});
+
+test("rejects all forbidden persistence, SDK, and legacy service imports from thin transports", () => {
+    const specifiers = [
+        "drizzle-orm",
+        "../db/schema",
+        "../../database/database.module",
+        "openai",
+        "google-auth-library",
+        "jsonwebtoken",
+        "chromadb",
+        "bullmq",
+        "ioredis",
+        "langfuse-node",
+        "@aws-sdk/client-s3",
+        "minisearch",
+        "../../services/RagPipeline",
+    ];
+    const violations = findTransportViolations(
+        specifiers.map((specifier) => `import "${specifier}";`).join("\n"),
+        "/repo/apps/api/src/books/example.controller.ts",
+        { apiSrcRoot: "/repo/apps/api/src" }
+    );
+    assert.deepEqual(
+        violations.map(({ specifier }) => specifier),
+        specifiers
+    );
+});
+
+test("rejects database token imports from thin transports", () => {
+    const violations = findTransportViolations(
+        'import { DRIZZLE } from "../../database/database.module";',
+        "/repo/apps/api/src/common/guards/example.ts",
+        { apiSrcRoot: "/repo/apps/api/src" }
+    );
+    assert.deepEqual(
+        violations.map(({ specifier }) => specifier),
+        ["../../database/database.module"]
+    );
+});
+
+test("rejects transport aliases resolving into database modules or legacy services", () => {
+    const resolvedModules = new Map([
+        ["@database", "/repo/apps/api/src/database/index.ts"],
+        ["@services", "/repo/apps/api/src/services/RagPipeline.ts"],
+    ]);
+    const violations = findTransportViolations(
+        'import { DatabaseModule } from "@database";\nimport { retrieve } from "@services";',
+        "/repo/apps/api/src/common/guards/example.ts",
+        {
+            apiSrcRoot: "/repo/apps/api/src",
+            resolveModule: (specifier) => resolvedModules.get(specifier),
+        }
+    );
+    assert.deepEqual(
+        violations.map(({ specifier }) => specifier),
+        ["@database", "@services"]
+    );
 });
