@@ -93,6 +93,30 @@ const postProgress = (
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
+const assertProgressBlockRequired = async (response: Response) => {
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+        message: "Progress Block is required",
+    });
+};
+
+const createSaveSpy = () => {
+    const calls: unknown[] = [];
+    const save = new SaveReadingProgress({
+        repository: {
+            saveForLiveOwnedBook: async (input) => {
+                calls.push(input);
+                return readingProgress;
+            },
+        },
+        clock: { now: () => new Date("2025-01-01T00:00:00Z") },
+    });
+    return {
+        calls,
+        save,
+    };
+};
+
 test("rejects unauthenticated GET and POST progress access", async () => {
     const testApp = await createTrackerTestApp();
     try {
@@ -154,10 +178,24 @@ test("GET returns position and nullable chapter", async () => {
     }
 });
 
-test("GET maps a missing or foreign book to the existing 404 body", async () => {
+test("GET maps a non-owner book id to 404 without reading progress", async () => {
+    let progressReads = 0;
     const get = new GetReadingProgress({
-        books: { findOwned: async () => null },
-        progress: { find: async () => readingProgress },
+        books: {
+            findOwned: async (input) => {
+                assert.deepEqual(input, {
+                    userId: "owner-1",
+                    bookId: "foreign-book",
+                });
+                return null;
+            },
+        },
+        progress: {
+            find: async () => {
+                progressReads += 1;
+                return readingProgress;
+            },
+        },
     });
     const testApp = await createTrackerTestApp({ user: owner, get });
     try {
@@ -166,23 +204,51 @@ test("GET maps a missing or foreign book to the existing 404 body", async () => 
         );
         assert.equal(response.status, 404);
         assert.deepEqual(await response.json(), { message: "Book not found" });
+        assert.equal(progressReads, 0);
     } finally {
         await testApp.close();
     }
 });
 
-test("GET preserves unexpected-error logging and response", async () => {
+test("GET maps a missing owned book to 404", async () => {
+    const get = new GetReadingProgress({
+        books: { findOwned: async () => null },
+        progress: { find: async () => readingProgress },
+    });
+    const testApp = await createTrackerTestApp({ user: owner, get });
+    try {
+        const response = await fetch(
+            `${testApp.baseUrl}/api/missing-book/progress`
+        );
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), { message: "Book not found" });
+    } finally {
+        await testApp.close();
+    }
+});
+
+test("GET logs an owned-book lookup failure and returns the existing 500", async () => {
     const failure = new Error("database unavailable");
     const errors: unknown[][] = [];
     const previous = console.error;
     console.error = (...args: unknown[]) => errors.push(args);
-    const testApp = await createTrackerTestApp({
-        user: owner,
-        get: {
-            execute: async () => {
+    const get = new GetReadingProgress({
+        books: {
+            findOwned: async () => {
                 throw failure;
             },
         },
+        progress: {
+            find: async () => {
+                assert.fail(
+                    "progress lookup must not follow a failed book lookup"
+                );
+            },
+        },
+    });
+    const testApp = await createTrackerTestApp({
+        user: owner,
+        get,
     });
     try {
         const response = await fetch(`${testApp.baseUrl}/api/book-1/progress`);
@@ -271,14 +337,18 @@ test("POST preserves urlencoded empty chapter", async () => {
     }
 });
 
-test("POST maps chapter omission and explicit null distinctly", async () => {
+test("POST without a chapter stores null and distinguishes explicit null", async () => {
     const requests: unknown[] = [];
     const testApp = await createTrackerTestApp({
         user: owner,
         save: {
             execute: async (input) => {
                 requests.push(input);
-                return readingProgress;
+                return {
+                    ...readingProgress,
+                    progressPosition: input.position as string,
+                    progressChapter: input.chapter ?? null,
+                };
             },
         },
     });
@@ -296,6 +366,8 @@ test("POST maps chapter omission and explicit null distinctly", async () => {
         });
         assert.equal(omitted.status, 201);
         assert.equal(cleared.status, 201);
+        assert.equal((await omitted.json()).data.progressChapter, null);
+        assert.equal((await cleared.json()).data.progressChapter, null);
         assert.deepEqual(requests, [
             {
                 userId: "owner-1",
@@ -328,10 +400,6 @@ test("POST rejects invalid positions and chapters before repository access", asy
     const testApp = await createTrackerTestApp({ user: owner, save });
     try {
         const invalidRequests = [
-            {
-                body: JSON.stringify({ progress_block: 123 }),
-                message: "Progress Block must be a non-empty string",
-            },
             {
                 body: JSON.stringify({ progress_block: " \t " }),
                 message: "Progress Block must be a non-empty string",
@@ -369,37 +437,43 @@ test("POST rejects invalid positions and chapters before repository access", asy
     }
 });
 
-test("POST maps deleting-book not found and preserves unexpected-error logging", async () => {
+test("POST maps a missing owned book to 404", async () => {
     const missing = new SaveReadingProgress({
         repository: { saveForLiveOwnedBook: async () => null },
         clock: { now: () => new Date("2025-01-01T00:00:00Z") },
     });
-    const notFoundApp = await createTrackerTestApp({
+    const testApp = await createTrackerTestApp({
         user: owner,
         save: missing,
     });
     try {
-        const response = await postProgress(notFoundApp.baseUrl, {
+        const response = await postProgress(testApp.baseUrl, {
             headers: jsonHeaders,
             body: JSON.stringify({ progress_block: "p1" }),
         });
         assert.equal(response.status, 404);
         assert.deepEqual(await response.json(), { message: "Book not found" });
     } finally {
-        await notFoundApp.close();
+        await testApp.close();
     }
+});
 
+test("POST logs a repository save failure and returns the existing 500", async () => {
     const failure = new Error("database unavailable");
     const errors: unknown[][] = [];
     const previous = console.error;
     console.error = (...args: unknown[]) => errors.push(args);
-    const errorApp = await createTrackerTestApp({
-        user: owner,
-        save: {
-            execute: async () => {
+    const save = new SaveReadingProgress({
+        repository: {
+            saveForLiveOwnedBook: async () => {
                 throw failure;
             },
         },
+        clock: { now: () => new Date("2025-01-01T00:00:00Z") },
+    });
+    const errorApp = await createTrackerTestApp({
+        user: owner,
+        save,
     });
     try {
         const response = await postProgress(errorApp.baseUrl, {
@@ -414,5 +488,141 @@ test("POST maps deleting-book not found and preserves unexpected-error logging",
     } finally {
         console.error = previous;
         await errorApp.close();
+    }
+});
+
+test("POST progress without a body returns 400", async () => {
+    const saveSpy = createSaveSpy();
+    const testApp = await createTrackerTestApp({
+        user: owner,
+        save: saveSpy.save,
+    });
+    try {
+        const response = await postProgress(testApp.baseUrl);
+        await assertProgressBlockRequired(response);
+        assert.equal(saveSpy.calls.length, 0);
+    } finally {
+        await testApp.close();
+    }
+});
+
+test("POST progress with an empty json body returns 400", async () => {
+    const saveSpy = createSaveSpy();
+    const testApp = await createTrackerTestApp({
+        user: owner,
+        save: saveSpy.save,
+    });
+    try {
+        const response = await postProgress(testApp.baseUrl, {
+            headers: jsonHeaders,
+            body: "",
+        });
+        await assertProgressBlockRequired(response);
+        assert.equal(saveSpy.calls.length, 0);
+    } finally {
+        await testApp.close();
+    }
+});
+
+test("POST progress with a text/plain body returns 400", async () => {
+    const saveSpy = createSaveSpy();
+    const testApp = await createTrackerTestApp({
+        user: owner,
+        save: saveSpy.save,
+    });
+    try {
+        const response = await postProgress(testApp.baseUrl, {
+            headers: { "Content-Type": "text/plain" },
+            body: "{}",
+        });
+        await assertProgressBlockRequired(response);
+        assert.equal(saveSpy.calls.length, 0);
+    } finally {
+        await testApp.close();
+    }
+});
+
+test("POST progress with an empty urlencoded body returns 400", async () => {
+    const saveSpy = createSaveSpy();
+    const testApp = await createTrackerTestApp({
+        user: owner,
+        save: saveSpy.save,
+    });
+    try {
+        const response = await postProgress(testApp.baseUrl, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "",
+        });
+        await assertProgressBlockRequired(response);
+        assert.equal(saveSpy.calls.length, 0);
+    } finally {
+        await testApp.close();
+    }
+});
+
+test("POST progress with an empty progress_block returns 400", async () => {
+    const saveSpy = createSaveSpy();
+    const testApp = await createTrackerTestApp({
+        user: owner,
+        save: saveSpy.save,
+    });
+    try {
+        const response = await postProgress(testApp.baseUrl, {
+            headers: jsonHeaders,
+            body: JSON.stringify({ progress_block: "" }),
+        });
+        await assertProgressBlockRequired(response);
+        assert.equal(saveSpy.calls.length, 0);
+    } finally {
+        await testApp.close();
+    }
+});
+
+test("POST progress with an empty object body returns 400", async () => {
+    const saveSpy = createSaveSpy();
+    const testApp = await createTrackerTestApp({
+        user: owner,
+        save: saveSpy.save,
+    });
+    try {
+        const response = await postProgress(testApp.baseUrl, {
+            headers: jsonHeaders,
+            body: JSON.stringify({}),
+        });
+        await assertProgressBlockRequired(response);
+        assert.equal(saveSpy.calls.length, 0);
+    } finally {
+        await testApp.close();
+    }
+});
+
+test("POST progress with a numeric position returns the new 400", async () => {
+    const saveSpy = createSaveSpy();
+    const testApp = await createTrackerTestApp({
+        user: owner,
+        save: saveSpy.save,
+    });
+    try {
+        const response = await postProgress(testApp.baseUrl, {
+            headers: jsonHeaders,
+            body: JSON.stringify({ progress_block: 123 }),
+        });
+        assert.equal(response.status, 400);
+        assert.deepEqual(await response.json(), {
+            message: "Progress Block must be a non-empty string",
+        });
+        assert.equal(saveSpy.calls.length, 0);
+    } finally {
+        await testApp.close();
+    }
+});
+
+test("GET /api/progress is not exposed", async () => {
+    const testApp = await createTrackerTestApp({ user: owner });
+    try {
+        const response = await fetch(`${testApp.baseUrl}/api/progress`);
+        assert.equal(response.status, 404);
+    } finally {
+        await testApp.close();
     }
 });
