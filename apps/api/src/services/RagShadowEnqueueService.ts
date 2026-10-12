@@ -3,6 +3,10 @@ import {
     shouldSampleRagRerankShadow,
     type RagRerankShadowJobData,
 } from "@reader/jobs";
+import {
+    EnqueueRagShadowComparison,
+    type RagShadowEnqueueInput as ApplicationRagShadowEnqueueInput,
+} from "@reader/application";
 import { createLogger } from "@reader/providers";
 import { enqueueRagRerankShadow } from "./RagShadowQueue";
 
@@ -23,46 +27,46 @@ export const maybeEnqueueRagRerankShadow = async (
         enqueue: enqueueRagRerankShadow,
     }
 ) => {
-    if (input.hasHighlightContext) return "excluded_highlight" as const;
-    let sampleRate: number;
-    try {
-        sampleRate =
+    const result = await new EnqueueRagShadowComparison({
+        getSampleRate: () =>
             dependencies.sampleRate ??
             parseRagRerankShadowSampleRate(
                 process.env.RAG_RERANK_SHADOW_SAMPLE_RATE
-            );
-    } catch (error) {
+            ),
+        shouldSample: shouldSampleRagRerankShadow,
+        enqueue: dependencies.enqueue,
+    }).execute(input as ApplicationRagShadowEnqueueInput);
+
+    if (result.status === "invalid_configuration") {
         log.error("RAG shadow sampling configuration is invalid", {
             assistantMessageId: input.assistantMessageId,
-            error: error instanceof Error ? error.message : String(error),
+            error:
+                result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error),
         });
-        return "invalid_configuration" as const;
+        return result.status;
     }
-    if (
-        !shouldSampleRagRerankShadow(
-            input.assistantMessageId,
-            sampleRate
-        )
-    ) {
-        return "not_sampled" as const;
-    }
-
-    const { hasHighlightContext: _hasHighlightContext, ...payload } = input;
-    try {
-        await dependencies.enqueue(payload);
-        log.info("RAG shadow job enqueued", {
-            assistantMessageId: payload.assistantMessageId,
-            conversationId: payload.conversationId,
-            bookId: payload.bookId,
-        });
-        return "enqueued" as const;
-    } catch (error) {
+    if (result.status === "enqueue_failed") {
+        const { hasHighlightContext: _hasHighlightContext, ...payload } = input;
         log.error("RAG shadow enqueue failed", {
             assistantMessageId: payload.assistantMessageId,
             conversationId: payload.conversationId,
             bookId: payload.bookId,
-            error: error instanceof Error ? error.message : String(error),
+            error:
+                result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error),
         });
-        return "enqueue_failed" as const;
+        return result.status;
     }
+
+    if (result.status === "enqueued") {
+        log.info("RAG shadow job enqueued", {
+            assistantMessageId: input.assistantMessageId,
+            conversationId: input.conversationId,
+            bookId: input.bookId,
+        });
+    }
+    return result.status;
 };

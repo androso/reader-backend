@@ -7,6 +7,7 @@ import {
     GenerateGroundedAnswer,
     PrepareGroundedContext,
     RetrieveBookEvidence,
+    compareShadowSourceRanks as compareShadowSourceRanksPolicy,
     estimateModelCost as estimateModelCostPolicy,
     normalizeModelUsage as normalizeModelUsagePolicy,
 } from "@reader/application";
@@ -553,7 +554,7 @@ test("current exported RAG functions reproduce the deterministic golden scenario
                     estimateModelCost(model, usage)?.amount ?? null,
                 ])
             ),
-            shadowComparison: compareShadowSourceRanks(
+            shadowComparison: compareShadowSourceRanksPolicy(
                 [
                     { id: "a", rank: 1 },
                     { id: "b", rank: 2 },
@@ -632,6 +633,19 @@ test("current exported RAG functions reproduce the deterministic golden scenario
                     results: timedOut.results,
                     diagnostics: timedOut.diagnostics,
                 })
+            );
+            assert.deepEqual(
+                compareShadowSourceRanks(
+                    [
+                        { id: "a", rank: 1 },
+                        { id: "b", rank: 2 },
+                    ],
+                    [
+                        { id: "b", rank: 1 },
+                        { id: "c", rank: 2 },
+                    ]
+                ),
+                snapshots.shadowComparison
             );
             assert.deepEqual(snapshots, golden);
             assert.equal(Object.keys(golden).length, 20);

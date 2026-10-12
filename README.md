@@ -102,6 +102,16 @@ signal on a premature client disconnect; `[DONE]` is emitted only by the
 transport adapter. `pnpm test:integration:chat` verifies the HTTP stream against
 temporary local PostgreSQL and Redis with fake retrieval and generation.
 
+### Shared RAG engine
+
+Retrieval/ranking, grounded prompt generation, usage accounting, and shadow
+comparison are application workflows with portable domain contracts. API
+infrastructure supplies database, lexical/vector/reranker/model, tracing, and
+queue adapters. The `@reader/api/rag`, `ai-usage`, and `rag-shadow`
+compatibility barrels remain the entry points for chat, worker, and evaluation
+callers. `pnpm test:integration:rag` checks owner-scoped retrieval, atomic
+shadow persistence/replay/concurrency, and worker wiring with fake providers.
+
 ## AWS infrastructure
 
 CloudFormation is the source of truth for a clean AWS rebuild. Follow

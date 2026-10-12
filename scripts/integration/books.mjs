@@ -8,8 +8,10 @@ const suite = process.argv[2] ?? "books";
 const integrationTest =
     suite === "chat"
         ? ".tmp/apps-api-integration/test-integration/chat.test.js"
-        : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
-const expectedPasses = suite === "chat" ? 3 : 10;
+        : suite === "rag"
+          ? ".tmp/apps-api-integration/test-integration/rag.test.js"
+          : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
+const expectedPasses = suite === "chat" ? 3 : suite === "rag" ? 3 : 10;
 const suffix = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const postgresName = `reader-it-postgres-${suffix}`;
 const redisName = `reader-it-redis-${suffix}`;
@@ -122,6 +124,7 @@ try {
             DOTENV_CONFIG_PATH: "/dev/null",
             NODE_PATH: [
                 resolve(root, "apps/api/node_modules"),
+                resolve(root, "apps/worker/node_modules"),
                 resolve(root, "packages/jobs/node_modules"),
                 process.env.NODE_PATH,
             ]
@@ -148,6 +151,11 @@ try {
                 env: integrationEnv,
             }
         );
+        if (suite === "rag") {
+            run("pnpm", ["--filter", "@reader/worker", "build"], {
+                env: integrationEnv,
+            });
+        }
         const testOutput = run(
             "node",
             ["--test", integrationTest],

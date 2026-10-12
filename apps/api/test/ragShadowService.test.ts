@@ -333,6 +333,8 @@ test("retrieval infrastructure errors fail the one-attempt job", async () => {
 });
 
 test("shadow retrieval traces redact query-bearing errors", async () => {
+    const previousCapture = process.env.LANGFUSE_CAPTURE_CONTENT;
+    process.env.LANGFUSE_CAPTURE_CONTENT = "snippets";
     const updates: unknown[] = [];
     let trace: TraceObservation;
     trace = {
@@ -348,28 +350,39 @@ test("shadow retrieval traces redact query-bearing errors", async () => {
         getSpanContext: () => undefined,
     };
 
-    await assert.rejects(
-        processRagRerankShadow(
-            payload,
-            dependencies({
-                retrieve: async ({ trace: retrievalTrace }) => {
-                    const error = new Error(
-                        "provider echoed private user query"
-                    );
-                    recordObservationError(
-                        retrievalTrace,
-                        error,
-                        "Shadow retrieval failed"
-                    );
-                    throw error;
-                },
-            }),
-            trace
-        ),
-        /provider echoed private user query/
-    );
-    assert.equal(JSON.stringify(updates).includes("private user query"), false);
-    assert.equal(JSON.stringify(updates).includes("[redacted]"), true);
+    try {
+        await assert.rejects(
+            processRagRerankShadow(
+                payload,
+                dependencies({
+                    retrieve: async ({ trace: retrievalTrace }) => {
+                        const error = new Error(
+                            "provider echoed private user query"
+                        );
+                        recordObservationError(
+                            retrievalTrace,
+                            error,
+                            "Shadow retrieval failed"
+                        );
+                        throw error;
+                    },
+                }),
+                trace
+            ),
+            /provider echoed private user query/
+        );
+        assert.equal(
+            JSON.stringify(updates).includes("private user query"),
+            false
+        );
+        assert.equal(JSON.stringify(updates).includes("[redacted]"), true);
+    } finally {
+        if (previousCapture === undefined) {
+            delete process.env.LANGFUSE_CAPTURE_CONTENT;
+        } else {
+            process.env.LANGFUSE_CAPTURE_CONTENT = previousCapture;
+        }
+    }
 });
 
 test("a book deleted after authorization is a benign missing result", async () => {

@@ -109,6 +109,7 @@ export interface RagShadowJob {
     conversationId: string;
     bookId: string;
     assistantMessageId: string;
+    userMessageId: string;
 }
 
 export interface RagShadowRecords {
@@ -140,6 +141,22 @@ export interface ShadowRepository {
         assistantMessageId: string,
         result: RagShadowResult
     ): Promise<boolean>;
+}
+
+export type RagShadowTraceContext = {
+    userId: string;
+    conversationId: string;
+    bookId: string;
+    assistantMessageId: string;
+    baselineTraceId: string | null;
+};
+
+export interface RagShadowTracing {
+    withShadowTrace<T>(
+        context: RagShadowTraceContext,
+        callback: (trace: RagTracing) => Promise<T>
+    ): Promise<T>;
+    contentFree(trace: RagTracing): RagTracing;
 }
 
 export interface RagTracing {

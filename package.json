@@ -9,6 +9,7 @@
         "test": "pnpm check:architecture && pnpm --filter @reader/domain test && pnpm --filter @reader/application test && pnpm --filter @reader/epub test && pnpm --filter @reader/providers test && pnpm --filter @reader/processing test && pnpm --filter @reader/jobs test && pnpm --filter @reader/api test && pnpm --filter @reader/worker test && pnpm --filter @reader/evals test",
         "test:integration:books": "node scripts/integration/books.mjs",
         "test:integration:chat": "node scripts/integration/books.mjs chat",
+        "test:integration:rag": "node scripts/integration/books.mjs rag",
         "check:architecture": "node --test scripts/check-architecture.test.mjs && node scripts/check-architecture.mjs",
         "api:dev": "pnpm --filter @reader/api dev",
         "api:build": "pnpm --filter @reader/api build",

@@ -5,4 +5,6 @@ export * from "./ownedBookLookup";
 export * from "./openAIGeneration";
 export * from "./ragConfig";
 export * from "./reranker";
+export * from "./shadowRepository";
+export * from "./shadowTracing";
 export * from "./vectorSearch";
