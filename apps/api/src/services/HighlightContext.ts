@@ -1,34 +1,12 @@
 import type { ChatMessage } from "./OpenAIServices";
+import type { ChatHighlight as HighlightContext } from "@reader/domain";
 import { getRagPipeline } from "./RagPipeline";
 
-export const HIGHLIGHT_CONTEXT_MAX_CHARS = 4000;
-
-export type HighlightContext = {
-    sourceType: "epub";
-    text: string;
-};
-
-export const normalizeHighlightContext = (
-    value: unknown
-): HighlightContext | null => {
-    if (!value || typeof value !== "object") return null;
-
-    const candidate = value as {
-        sourceType?: unknown;
-        text?: unknown;
-    };
-    if (candidate.sourceType !== "epub" || typeof candidate.text !== "string") {
-        return null;
-    }
-
-    const text = candidate.text.trim();
-    if (!text) return null;
-
-    return {
-        sourceType: "epub",
-        text: text.slice(0, HIGHLIGHT_CONTEXT_MAX_CHARS),
-    };
-};
+export {
+    HIGHLIGHT_CONTEXT_MAX_CHARS,
+    normalizeEpubHighlight as normalizeHighlightContext,
+    type ChatHighlight as HighlightContext,
+} from "@reader/domain";
 
 export const buildRetrievalQuery = (
     query: string,

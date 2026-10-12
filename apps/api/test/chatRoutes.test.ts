@@ -232,6 +232,48 @@ test("chat-stream exposes the default-operation named exports", () => {
     );
 });
 
+test("legacy chat policy modules re-export the domain function identities", () => {
+    const domain = require("@reader/domain") as typeof import("@reader/domain");
+    const history =
+        require("../src/services/ChatServerHistory") as typeof import("../src/services/ChatServerHistory");
+    const highlights =
+        require("../src/services/HighlightContext") as typeof import("../src/services/HighlightContext");
+    const stream =
+        require("../src/chat/chat-stream") as typeof import("../src/chat/chat-stream");
+
+    assert.equal(
+        history.getSubmittedUserMessage,
+        domain.getSubmittedUserMessage
+    );
+    assert.equal(history.toChatHistory, domain.selectHistoryWindow);
+    assert.equal(
+        highlights.normalizeHighlightContext,
+        domain.normalizeEpubHighlight
+    );
+    assert.equal(stream.mapFinishReason, domain.mapFinishReason);
+});
+
+test("chat request validation keeps message errors ahead of model errors", async () => {
+    const testApp = await createChatTestApp({});
+    try {
+        const res = await fetch(
+            `${testApp.baseUrl}/api/book/b1/conversations`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    message: "   ",
+                    model: "not-a-model",
+                }),
+            }
+        );
+        assert.equal(res.status, 400);
+        assert.deepEqual(await res.json(), { error: "Message is required" });
+    } finally {
+        await testApp.close();
+    }
+});
+
 type EffectRecord = Record<string, unknown> & { type: string };
 
 const scriptedState: {

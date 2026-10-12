@@ -38,6 +38,9 @@ import { authorizeChatResource } from "../services/ChatResourceAuthorization";
 import { buildMessageExecutionMetadata } from "../services/ChatExecutionMetadata";
 import type { MessageExecutionMetadata } from "../types/ragTelemetry";
 import { maybeEnqueueRagRerankShadow } from "../services/RagShadowEnqueueService";
+import { mapFinishReason } from "@reader/domain";
+
+export { mapFinishReason } from "@reader/domain";
 
 const log = createLogger("chat");
 
@@ -441,12 +444,7 @@ export const createChatOperations = (deps: ChatStreamDependencies) => {
         });
 
         if (!res.writableEnded) {
-            const completionStatus =
-                generated.finishReason === "stop"
-                    ? "complete"
-                    : generated.finishReason === "length"
-                      ? "truncated"
-                      : "failed";
+            const completionStatus = mapFinishReason(generated.finishReason);
             const telemetry =
                 "telemetry" in ragResult
                     ? ragResult.telemetry

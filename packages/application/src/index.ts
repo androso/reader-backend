@@ -7,3 +7,4 @@ export * from "./books/GetBookStatus";
 export * from "./books/RetryBookProcessing";
 export * from "./books/DeleteOwnedBook";
 export * from "./books/throwIfLockLost";
+export * from "./chat/ports";
