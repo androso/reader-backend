@@ -2,11 +2,32 @@ import type { Request, Response } from "express";
 import { GetOwnedBookFile } from "@reader/application";
 import {
     BookAccessDeniedError,
+    BookFileUnavailableError,
     BookNotFoundError,
     type Book,
 } from "@reader/domain";
 
-type BookFileRecord = Pick<Book, "id" | "userId" | "fileKey" | "fileType">;
+type BookFileRecord = Pick<Book, "id" | "userId" | "fileKey" | "fileType"> &
+    Partial<Pick<Book, "processingStatus">>;
+
+export const getBookFileErrorResponse = (error: unknown) => {
+    if (error instanceof BookNotFoundError) {
+        return { status: 404, body: { error: "Book was not found" } };
+    }
+    if (error instanceof BookAccessDeniedError) {
+        return { status: 403, body: { error: "Not authorized" } };
+    }
+    if (error instanceof BookFileUnavailableError) {
+        return {
+            status: 404,
+            body: {
+                error: "Book file is missing from storage. Restore the original file or upload the book again.",
+                code: "BOOK_FILE_MISSING",
+            },
+        };
+    }
+    return null;
+};
 
 export type BookFileDependencies = {
     findBookById(bookId: string): Promise<BookFileRecord | undefined>;
@@ -43,12 +64,9 @@ export const handleGetBookFile = async (
         res.type(getBookFileContentType(file.fileType));
         res.send(file.bytes);
     } catch (error) {
-        if (error instanceof BookNotFoundError) {
-            res.status(404).json({ error: "Book was not found" });
-            return;
-        }
-        if (error instanceof BookAccessDeniedError) {
-            res.status(403).json({ error: "Not authorized" });
+        const response = getBookFileErrorResponse(error);
+        if (response) {
+            res.status(response.status).json(response.body);
             return;
         }
         console.error("Error fetching file", error);

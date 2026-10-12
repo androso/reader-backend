@@ -1,9 +1,10 @@
 import {
     BookAccessDeniedError,
+    BookFileUnavailableError,
     BookNotFoundError,
     type Book,
 } from "@reader/domain";
-import type { BookFileStorage } from "./ports";
+import { StoredBookFileNotFoundError, type BookFileStorage } from "./ports";
 
 export interface GetOwnedBookFileInput {
     bookId: string;
@@ -15,7 +16,8 @@ export interface OwnedBookFile {
     fileType: Book["fileType"];
 }
 
-type BookFileBook = Pick<Book, "id" | "userId" | "fileKey" | "fileType">;
+type BookFileBook = Pick<Book, "id" | "userId" | "fileKey" | "fileType"> &
+    Partial<Pick<Book, "processingStatus">>;
 
 export class GetOwnedBookFile {
     constructor(
@@ -33,10 +35,20 @@ export class GetOwnedBookFile {
         if (book.userId !== input.userId) {
             throw new BookAccessDeniedError(input.bookId);
         }
+        if (book.processingStatus === "deleting") {
+            throw new BookNotFoundError(input.bookId);
+        }
 
-        return {
-            bytes: await this.deps.storage.getFile(book.fileKey),
-            fileType: book.fileType,
-        };
+        try {
+            return {
+                bytes: await this.deps.storage.getFile(book.fileKey),
+                fileType: book.fileType,
+            };
+        } catch (error) {
+            if (error instanceof StoredBookFileNotFoundError) {
+                throw new BookFileUnavailableError(input.bookId);
+            }
+            throw error;
+        }
     }
 }

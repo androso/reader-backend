@@ -5,6 +5,7 @@ import type { Request, Response } from "express";
 import { handleGetBookFile } from "../src/books/book-file.handler";
 import type { RecordedEffect } from "./helpers/httpParity";
 import type { BooksPorts } from "../src/books/books.ports";
+import { StoredBookFileNotFoundError } from "@reader/application";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "reader-api-test-secret";
 process.env.DATABASE_URL = "postgres://test:test@127.0.0.1:1/test";
@@ -495,6 +496,75 @@ test("GET /api/books/:id returns 500 when storage fails", async () => {
         await testApp.close();
     }
     assertScriptedDbComplete(scripted);
+});
+
+test("GET /api/books/:id returns an actionable 404 when the original is missing", async () => {
+    const scripted = createScriptedDb([authUser, bookById(helper.BOOK_ROW)]);
+    const testApp = await createFileRouteTestApp(scripted, async () => {
+        throw new StoredBookFileNotFoundError();
+    });
+    try {
+        const response = await fetch(`${testApp.baseUrl}/api/books/book-1`, {
+            headers: { cookie: AUTH_COOKIE },
+        });
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), {
+            error: "Book file is missing from storage. Restore the original file or upload the book again.",
+            code: "BOOK_FILE_MISSING",
+        });
+    } finally {
+        await testApp.close();
+    }
+    assertScriptedDbComplete(scripted);
+});
+
+test("GET /api/books/:id does not read a deleting book's file", async () => {
+    const scripted = createScriptedDb([
+        authUser,
+        bookById({ ...helper.BOOK_ROW, processing_status: "deleting" }),
+    ]);
+    let reads = 0;
+    const testApp = await createFileRouteTestApp(scripted, async () => {
+        reads += 1;
+        throw new StoredBookFileNotFoundError();
+    });
+    try {
+        const response = await fetch(`${testApp.baseUrl}/api/books/book-1`, {
+            headers: { cookie: AUTH_COOKIE },
+        });
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), {
+            error: "Book was not found",
+        });
+        assert.equal(reads, 0);
+    } finally {
+        await testApp.close();
+    }
+    assertScriptedDbComplete(scripted);
+});
+
+test("compatibility file handler reports missing storage without a 500", async () => {
+    const response = createResponse();
+    await handleGetBookFile(
+        createRequest("book-1", "user-1"),
+        response as unknown as Response,
+        {
+            findBookById: async () => ({
+                id: "book-1",
+                userId: "user-1",
+                fileKey: "missing-original",
+                fileType: "epub",
+            }),
+            getFile: async () => {
+                throw new StoredBookFileNotFoundError();
+            },
+        }
+    );
+    assert.equal(response.statusCode, 404);
+    assert.deepEqual(response.body, {
+        error: "Book file is missing from storage. Restore the original file or upload the book again.",
+        code: "BOOK_FILE_MISSING",
+    });
 });
 
 test("HEAD /api/books/:id returns the file headers without a body", async () => {

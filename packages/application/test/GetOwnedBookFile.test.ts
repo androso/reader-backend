@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
     BookAccessDeniedError,
+    BookFileUnavailableError,
     BookNotFoundError,
     type Book,
 } from "@reader/domain";
 import { GetOwnedBookFile } from "../src/books/GetOwnedBookFile";
+import { StoredBookFileNotFoundError } from "../src/books/ports";
 
 const book = {
     id: "book-1",
@@ -57,4 +59,59 @@ test("GetOwnedBookFile preserves missing and foreign-book errors", async () => {
         BookAccessDeniedError
     );
     assert.equal(storageReads, 0);
+});
+
+test("GetOwnedBookFile reports a missing original separately from a missing book", async () => {
+    const useCase = new GetOwnedBookFile({
+        books: { findById: async () => book },
+        storage: {
+            getFile: async () => {
+                throw new StoredBookFileNotFoundError();
+            },
+        },
+    });
+    await assert.rejects(
+        useCase.execute({ bookId: book.id, userId: book.userId }),
+        BookFileUnavailableError
+    );
+});
+
+test("GetOwnedBookFile preserves unexpected storage failures", async () => {
+    const failure = new Error("storage unavailable");
+    const useCase = new GetOwnedBookFile({
+        books: { findById: async () => book },
+        storage: {
+            getFile: async () => {
+                throw failure;
+            },
+        },
+    });
+    await assert.rejects(
+        useCase.execute({ bookId: book.id, userId: book.userId }),
+        (error) => error === failure
+    );
+});
+
+test("GetOwnedBookFile does not read files from deleting books", async () => {
+    let reads = 0;
+    const useCase = new GetOwnedBookFile({
+        books: {
+            findById: async () => ({ ...book, processingStatus: "deleting" }),
+        },
+        storage: {
+            getFile: async () => {
+                reads += 1;
+                return new Uint8Array();
+            },
+        },
+    });
+    await assert.rejects(
+        useCase.execute({ bookId: book.id, userId: book.userId }),
+        BookNotFoundError
+    );
+    await assert.rejects(
+        useCase.execute({ bookId: book.id, userId: "other-owner" }),
+        BookAccessDeniedError
+    );
+    assert.equal(reads, 0);
 });

@@ -114,6 +114,13 @@ export class BookAccessDeniedError extends Error {
     }
 }
 
+export class BookFileUnavailableError extends Error {
+    constructor(bookId: string) {
+        super(`Original file for book ${bookId} was not found`);
+        this.name = "BookFileUnavailableError";
+    }
+}
+
 export class BookNotRetryableError extends Error {
     constructor(bookId: string, status: string) {
         super(`Book ${bookId} is not retryable in status ${status}`);

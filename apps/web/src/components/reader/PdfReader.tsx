@@ -2,6 +2,7 @@
 
 import React, { memo, useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { getBookFileErrorMessage } from "@/lib/bookFileErrors";
 
 interface PdfReaderProps {
     url: string;
@@ -25,7 +26,7 @@ const PdfReader: React.FC<PdfReaderProps> = memo(({ url }) => {
                 });
 
                 if (!response.ok) {
-                    throw new Error(`Failed to fetch PDF: ${response.status}`);
+                    throw new Error(await getBookFileErrorMessage(response));
                 }
 
                 const blob = await response.blob();

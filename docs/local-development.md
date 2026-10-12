@@ -132,9 +132,11 @@ containers' image IDs against the pinned images and requires `restart=no`.
 It never deletes or replaces an existing container. Resolve mismatches manually
 after preserving data. Only one service can use each host port.
 
-Chroma 0.6.3 is pinned for the API's `chromadb@1.9.4` JavaScript client, which
-uses `/api/v1`. Newer Chroma releases can remove that API. Upgrade the client and
-server together after testing collection operations; do not use `latest`.
+Chroma 0.6.3 is tested with the API's `chromadb@1.9.4` JavaScript client. The
+client uses v2 collection endpoints; the local readiness check uses the pinned
+server's v1 heartbeat endpoint. A heartbeat alone does not establish client
+compatibility. Upgrade the client and server together after testing actual
+collection operations; do not use `latest`.
 Do not mount data from a newer Chroma release into this older server.
 
 The previous Chroma 1.4.4 container is retained locally as
@@ -171,6 +173,24 @@ package, restart the affected dev processes so its built exports are refreshed.
   migrations have been applied to the intended database.
 - Redis and Chroma are unauthenticated local services, bound to localhost on
   newly created containers. These settings are not suitable for deployment.
+
+### Missing original book files
+
+PostgreSQL stores book metadata and storage keys, not the uploaded PDF/EPUB
+bytes. With `STORAGE_DRIVER=local`, those bytes live under `LOCAL_STORAGE_DIR`
+(default: this repository's `.local-storage`). Keep that directory backed up
+alongside the database. Restoring or copying a database alone does not restore
+its books' files, and switching from S3 to local storage does not download them.
+
+If a live book's original is missing, the file endpoint returns `404` with
+`code=BOOK_FILE_MISSING`. Restore the exact original from a trusted backup at
+its existing storage key to retain the same book ID and reading progress, or
+upload the book again to create a new record. Do not substitute another book's
+file or remove database records as an automatic repair.
+
+Books marked `deleting` are no longer readable, even if their original file
+still exists. Retry deletion through the library if cleanup was interrupted;
+do not reset the database state just to make the reader open the book.
 
 ```bash
 corepack pnpm test:dev

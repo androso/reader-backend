@@ -115,6 +115,11 @@ export const isCollectionNotFoundError = (error: unknown) => {
         details.code === "404" ||
         details.status === 404 ||
         details.status === "404" ||
+        ((details.name === "InvalidArgumentError" ||
+            details.name === "InvalidCollectionError" ||
+            details.name === "InvalidCollectionException") &&
+            typeof details.message === "string" &&
+            /^Collection .+ does not exist\.?$/i.test(details.message)) ||
         (typeof details.message === "string" &&
             details.message.toLowerCase().includes("not found"))
     );
@@ -562,7 +567,14 @@ export class ChromaVectorStore implements VectorStoreProvider {
 
     async deleteCollection(name: string): Promise<boolean> {
         log.info("Deleting collection", { name });
-        await this.client.deleteCollection({ name });
+        try {
+            await this.client.deleteCollection({ name });
+        } catch (error) {
+            if (!isCollectionNotFoundError(error)) throw error;
+            this.collections.delete(name);
+            log.debug("Collection already absent", { name });
+            return false;
+        }
         this.collections.delete(name);
         log.info("Collection deleted", { name });
         return true;

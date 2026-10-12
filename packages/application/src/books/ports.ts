@@ -36,6 +36,13 @@ export interface BookFileStorage {
     getFile(fileKey: string): Promise<Uint8Array>;
 }
 
+export class StoredBookFileNotFoundError extends Error {
+    constructor() {
+        super("Stored book file was not found");
+        this.name = "StoredBookFileNotFoundError";
+    }
+}
+
 export interface BookRepository {
     create(book: NewBook): Promise<Book>;
     findById(bookId: string): Promise<Book | null>;

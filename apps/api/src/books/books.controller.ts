@@ -55,6 +55,7 @@ import {
     UPLOAD_BOOK,
 } from "./books.tokens";
 import type { User } from "../types";
+import { getBookFileErrorResponse } from "./book-file.handler";
 
 const log = createLogger("books");
 
@@ -260,6 +261,11 @@ export class BooksController {
     @ApiOperation({ summary: "Get book by id", description: "Get book by id" })
     @ApiResponse({ status: 200, description: "Book successfully fetched" })
     @ApiResponse({ status: 401, description: "Authentication failed" })
+    @ApiResponse({ status: 403, description: "Not authorized" })
+    @ApiResponse({
+        status: 404,
+        description: "Book or original file was not found",
+    })
     @ApiResponse({ status: 500, description: "Internal server error" })
     async getBookFile(@Req() req: Request, @Res() res: Response) {
         try {
@@ -278,12 +284,9 @@ export class BooksController {
             );
             res.send(file.bytes);
         } catch (error) {
-            if (error instanceof BookNotFoundError) {
-                res.status(404).json({ error: "Book was not found" });
-                return;
-            }
-            if (error instanceof BookAccessDeniedError) {
-                res.status(403).json({ error: "Not authorized" });
+            const response = getBookFileErrorResponse(error);
+            if (response) {
+                res.status(response.status).json(response.body);
                 return;
             }
             console.error("Error fetching file", error);

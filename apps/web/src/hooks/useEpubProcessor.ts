@@ -4,6 +4,7 @@ import { type EpubContent } from "@/types/EpubReader";
 import JSZip from "jszip";
 import ePub from "epubjs";
 import Section from "epubjs/types/section";
+import { getBookFileErrorMessage } from "@/lib/bookFileErrors";
 
 export const useEpubProcessor = () => {
     const [isLoading, setIsLoading] = useState(false);
@@ -19,7 +20,7 @@ export const useEpubProcessor = () => {
                 credentials: "include",
             });
             if (!response.ok) {
-                throw new Error(`Failed to fetch EPUB: ${response.statusText}`);
+                throw new Error(await getBookFileErrorMessage(response));
             }
 
             const arrayBuffer = await response.arrayBuffer();

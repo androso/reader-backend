@@ -4,6 +4,7 @@ import {
     PutObjectCommand,
     S3Client,
 } from "@aws-sdk/client-s3";
+import { StoredBookFileNotFoundError } from "@reader/application";
 import fs from "fs/promises";
 import path from "path";
 
@@ -18,12 +19,14 @@ export class ObjectStorageProvider implements StorageProvider {
     private readonly storageDriver: string;
     private readonly localStorageDir: string;
 
-    constructor() {
+    constructor(s3Client?: S3Client) {
         const endpoint = process.env.S3_ENDPOINT;
-        this.s3Client = new S3Client({
-            ...(endpoint ? { endpoint } : {}),
-            region: process.env.S3_REGION || "us-east-1",
-        });
+        this.s3Client =
+            s3Client ??
+            new S3Client({
+                ...(endpoint ? { endpoint } : {}),
+                region: process.env.S3_REGION || "us-east-1",
+            });
         this.storageDriver = process.env.STORAGE_DRIVER || "s3";
 
         const platformRoot = path.resolve(__dirname, "../../..");
@@ -61,6 +64,24 @@ export class ObjectStorageProvider implements StorageProvider {
     }
 
     async getFile(key: string) {
+        try {
+            return await this.readFile(key);
+        } catch (error) {
+            if (
+                (this.storageDriver === "local" &&
+                    (error as NodeJS.ErrnoException | null)?.code ===
+                        "ENOENT") ||
+                (this.storageDriver !== "local" &&
+                    error instanceof Error &&
+                    error.name === "NoSuchKey")
+            ) {
+                throw new StoredBookFileNotFoundError();
+            }
+            throw error;
+        }
+    }
+
+    private async readFile(key: string) {
         if (this.storageDriver === "local") {
             return fs.readFile(this.localFilePath(key));
         }
