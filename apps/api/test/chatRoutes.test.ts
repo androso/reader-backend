@@ -18,6 +18,22 @@ const { DRIZZLE } =
     require("../src/database/database.module") as typeof import("../src/database/database.module");
 const { CHAT_OPERATIONS, createChatOperations, defaultChatStreamDependencies } =
     require("../src/chat/chat-stream") as typeof import("../src/chat/chat-stream");
+const { GetBookConversation, ListBookConversations } =
+    require("@reader/application") as typeof import("@reader/application");
+const {
+    createChatResourceAccess,
+    createDrizzleChatConversationRepository,
+    createDrizzleChatMessageRepository,
+} =
+    require("../src/infrastructure/chat") as typeof import("../src/infrastructure/chat");
+const {
+    CHAT_CONVERSATION_REPOSITORY,
+    CHAT_MESSAGE_REPOSITORY,
+    CHAT_RESOURCE_ACCESS,
+    GET_BOOK_CONVERSATION,
+    LIST_BOOK_CONVERSATIONS,
+} =
+    require("../src/infrastructure/chat/chat.tokens") as typeof import("../src/infrastructure/chat/chat.tokens");
 const { RATE_LIMIT_CLIENT } =
     require("../src/common/rate-limit.module") as typeof import("../src/common/rate-limit.module");
 const { AUTH_OPERATIONS } =
@@ -99,6 +115,11 @@ const createFakeDb = ({
 
 const createChatTestApp = (rows: DbRows) => {
     const fakeDb = createFakeDb(rows);
+    const resourceAccess = createChatResourceAccess(fakeDb as never);
+    const conversations = createDrizzleChatConversationRepository(
+        fakeDb as never
+    );
+    const messages = createDrizzleChatMessageRepository(fakeDb as never);
     return createTestApp({
         controllers: [ChatController],
         providers: [
@@ -108,6 +129,33 @@ const createChatTestApp = (rows: DbRows) => {
                 useValue: createChatOperations({
                     ...defaultChatStreamDependencies,
                     db: fakeDb as never,
+                }),
+            },
+            {
+                provide: CHAT_RESOURCE_ACCESS,
+                useValue: resourceAccess,
+            },
+            {
+                provide: CHAT_CONVERSATION_REPOSITORY,
+                useValue: conversations,
+            },
+            {
+                provide: CHAT_MESSAGE_REPOSITORY,
+                useValue: messages,
+            },
+            {
+                provide: LIST_BOOK_CONVERSATIONS,
+                useValue: new ListBookConversations({
+                    resourceAccess,
+                    conversations,
+                }),
+            },
+            {
+                provide: GET_BOOK_CONVERSATION,
+                useValue: new GetBookConversation({
+                    resourceAccess,
+                    conversations,
+                    messages,
                 }),
             },
             {

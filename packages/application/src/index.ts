@@ -8,3 +8,5 @@ export * from "./books/RetryBookProcessing";
 export * from "./books/DeleteOwnedBook";
 export * from "./books/throwIfLockLost";
 export * from "./chat/ports";
+export * from "./chat/ListBookConversations";
+export * from "./chat/GetBookConversation";

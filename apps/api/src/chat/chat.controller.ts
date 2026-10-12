@@ -11,14 +11,22 @@ import {
     Res,
     UseGuards,
 } from "@nestjs/common";
-import { and, desc, eq } from "drizzle-orm";
+import {
+    ChatConversationNotFoundError,
+    ChatResourceAccessDeniedError,
+    ChatResourceNotFoundError,
+    ChatValidationError,
+} from "@reader/domain";
+import {
+    GetBookConversation,
+    ListBookConversations,
+} from "@reader/application";
 import type { Request, Response } from "express";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthGuard } from "../common/guards/auth.guard";
 import { ChatRateLimitGuard } from "../common/guards/rate-limit.guard";
 import { DRIZZLE, type Database } from "../database/database.module";
-import { Conversations, Messages } from "../db/schema";
-import { PUBLIC_MESSAGE_SELECTION } from "../services/ChatExecutionMetadata";
+import { Messages } from "../db/schema";
 import {
     createAuthorizedChatConversation,
     isSupportedChatResourceType,
@@ -31,10 +39,30 @@ import {
 import { normalizeHighlightContext } from "../services/HighlightContext";
 import type { User } from "../types";
 import { CHAT_OPERATIONS, type ChatOperations } from "./chat-stream";
+import {
+    GET_BOOK_CONVERSATION,
+    LIST_BOOK_CONVERSATIONS,
+} from "../infrastructure/chat/chat.tokens";
 
 type ChatRequestBody = {
     model?: unknown;
     highlightContext?: unknown;
+};
+
+const mapChatReadError = (error: unknown): HttpException | null => {
+    if (error instanceof ChatValidationError) {
+        return new HttpException({ error: error.message }, 400);
+    }
+    if (error instanceof ChatResourceNotFoundError) {
+        return new HttpException({ error: error.message }, 404);
+    }
+    if (error instanceof ChatResourceAccessDeniedError) {
+        return new HttpException({ error: error.message }, 403);
+    }
+    if (error instanceof ChatConversationNotFoundError) {
+        return new HttpException({ error: error.message }, 404);
+    }
+    return null;
 };
 
 @Controller("api")
@@ -42,7 +70,11 @@ type ChatRequestBody = {
 export class ChatController {
     constructor(
         @Inject(DRIZZLE) private readonly db: Database,
-        @Inject(CHAT_OPERATIONS) private readonly operations: ChatOperations
+        @Inject(CHAT_OPERATIONS) private readonly operations: ChatOperations,
+        @Inject(LIST_BOOK_CONVERSATIONS)
+        private readonly listBookConversations: ListBookConversations,
+        @Inject(GET_BOOK_CONVERSATION)
+        private readonly getBookConversation: GetBookConversation
     ) {}
 
     @Post(":resourceType/:id/conversations")
@@ -151,29 +183,15 @@ export class ChatController {
         @CurrentUser() user: User
     ) {
         try {
-            const authorization =
-                await this.operations.authorizeRequestResource({
-                    resourceType,
-                    resourceId,
-                    userId: user.id,
-                });
-
-            const conversations = await this.db
-                .select()
-                .from(Conversations)
-                .where(
-                    and(
-                        eq(Conversations.userId, user.id),
-                        eq(
-                            Conversations.resourceType,
-                            authorization.resourceType
-                        ),
-                        eq(Conversations.resourceId, resourceId)
-                    )
-                )
-                .orderBy(desc(Conversations.lastMessageAt));
+            const conversations = await this.listBookConversations.execute({
+                userId: user.id,
+                resourceType,
+                resourceId,
+            });
             return { conversations };
         } catch (error) {
+            const mapped = mapChatReadError(error);
+            if (mapped) throw mapped;
             if (error instanceof HttpException) throw error;
             console.error("Error fetching conversations", error);
             throw new HttpException(
@@ -304,35 +322,17 @@ export class ChatController {
         @CurrentUser() user: User
     ) {
         try {
-            const authorization =
-                await this.operations.authorizeRequestResource({
-                    resourceType,
-                    resourceId,
-                    userId: user.id,
-                });
-
-            const conversation = await this.operations.findScopedConversation({
-                conversationId,
+            const messages = await this.getBookConversation.execute({
                 userId: user.id,
-                resourceType: authorization.resourceType,
+                resourceType,
                 resourceId,
+                conversationId,
             });
-
-            if (!conversation) {
-                throw new HttpException(
-                    { error: "Conversation not found" },
-                    404
-                );
-            }
-
-            const messages = await this.db
-                .select(PUBLIC_MESSAGE_SELECTION)
-                .from(Messages)
-                .where(eq(Messages.conversationId, conversationId))
-                .orderBy(Messages.createdAt);
 
             return { messages };
         } catch (error) {
+            const mapped = mapChatReadError(error);
+            if (mapped) throw mapped;
             if (error instanceof HttpException) throw error;
             console.error("Error fetching conversation details", error);
             throw new HttpException(
