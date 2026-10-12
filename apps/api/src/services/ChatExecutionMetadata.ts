@@ -1,11 +1,7 @@
 import { Messages } from "../db/schema";
 import type { MessageExecutionMetadata } from "../types/ragTelemetry";
 import type { BookContextResult } from "./BookRagService";
-import {
-    AI_PRICING_VERSION,
-    estimateModelCost,
-    normalizeModelUsage,
-} from "./AiUsage";
+import { calculateChatExecutionCosts } from "@reader/application";
 
 export const PUBLIC_MESSAGE_SELECTION = {
     id: Messages.id,
@@ -33,40 +29,25 @@ export const buildMessageExecutionMetadata = ({
     totalLatencyMs: number;
     langfuseTraceId?: string;
 }): MessageExecutionMetadata => {
-    const normalizedUsage = normalizeModelUsage(usage);
-    const generationCost = estimateModelCost(model, normalizedUsage);
-    const retrievalCost =
-        telemetry.retrieval?.mode === "reranked"
-            ? telemetry.retrieval.reranker.estimatedCost
-            : null;
-    const retrievalCostKnownZero =
-        telemetry.retrieval?.mode === "reranked" &&
-        telemetry.retrieval.reranker.status === "skipped";
-    const combinedCost =
-        generationCost &&
-        (telemetry.retrieval?.mode !== "reranked" ||
-            retrievalCost ||
-            retrievalCostKnownZero)
-            ? {
-                  currency: "USD" as const,
-                  amount: generationCost.amount + (retrievalCost?.amount ?? 0),
-                  pricingVersion: AI_PRICING_VERSION,
-              }
-            : null;
+    const costs = calculateChatExecutionCosts({
+        model,
+        usage,
+        retrieval: telemetry.retrieval as never,
+    });
     return {
         pipelineVersion: telemetry.pipelineVersion,
         promptVersion: telemetry.promptVersion,
-        pricingVersion: AI_PRICING_VERSION,
+        pricingVersion: costs.pricingVersion,
         modelVersion: model,
         queryPlan: telemetry.queryPlan,
         retrieval: telemetry.retrieval,
         generation: {
             durationMs: generationDurationMs,
-            usage: normalizedUsage,
-            estimatedCost: generationCost,
+            usage: costs.normalizedUsage,
+            estimatedCost: costs.generationCost,
         },
-        retrievalCost,
-        combinedCost,
+        retrievalCost: costs.retrievalCost,
+        combinedCost: costs.combinedCost,
         totalLatencyMs,
         langfuseTraceId: langfuseTraceId ?? null,
     };

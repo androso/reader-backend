@@ -3,7 +3,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { HybridBookSearchService } from "../src/services/HybridBookSearchService";
-import { RetrieveBookEvidence } from "@reader/application";
+import {
+    GenerateGroundedAnswer,
+    PrepareGroundedContext,
+    RetrieveBookEvidence,
+    estimateModelCost as estimateModelCostPolicy,
+    normalizeModelUsage as normalizeModelUsagePolicy,
+} from "@reader/application";
 import { ChatCancelledError } from "@reader/domain";
 import {
     estimateModelCost,
@@ -16,6 +22,7 @@ import {
     buildRetrievalQuery,
     buildBookContextSystemPrompt,
 } from "../src/services/HighlightContext";
+import { buildGroundedSystemPrompt } from "@reader/application";
 import {
     buildBoundedRerankerDocuments,
     classifyRerankerFallback,
@@ -378,6 +385,21 @@ test("current exported RAG functions reproduce the deterministic golden scenario
             [],
             promptWithoutHighlight
         );
+        const preparedPrompt = new PrepareGroundedContext().execute({
+            evidence: {
+                status: "ready",
+                sources: null,
+                results: [result("prompt", 0, 0.03, "retrieved excerpt")],
+                telemetry: {
+                    pipelineVersion: "baseline-rag-v1",
+                    promptVersion: "book-context-v1",
+                    queryPlan: null,
+                    retrieval: null,
+                },
+            },
+            messages: promptHistory,
+            highlightContext: highlight,
+        });
 
         const streamAnswer = async (complete: boolean) => {
             const service = {
@@ -403,6 +425,38 @@ test("current exported RAG functions reproduce the deterministic golden scenario
                 model: "gpt-4o-mini",
                 service: service as never,
             }).then(
+                (answer) => ({
+                    answer: answer.answer,
+                    streamCompleted: answer.streamCompleted,
+                    transportWarning: answer.transportWarning ?? null,
+                }),
+                (error: Error) => ({ error: error.message })
+            );
+        };
+        const applicationStreamAnswer = async (complete: boolean) => {
+            const failure = Object.assign(new Error("Premature close"), {
+                kind: "premature_close" as const,
+                transportWarning:
+                    "Error ERR_STREAM_PREMATURE_CLOSE Premature close",
+            });
+            const engine = new GenerateGroundedAnswer({
+                model: {
+                    stream: async function* () {
+                        yield {
+                            delta: "partial answer",
+                            finishReason: complete ? "stop" : null,
+                            usage: {
+                                prompt_tokens: 2,
+                                completion_tokens: 2,
+                            },
+                            resolvedModel: "resolved-model",
+                        };
+                        throw failure;
+                    },
+                },
+                clock: { now: () => new Date(1_000) },
+            });
+            return engine.execute({ messages: [], model: "gpt-4o-mini" }).then(
                 (answer) => ({
                     answer: answer.answer,
                     streamCompleted: answer.streamCompleted,
@@ -509,7 +563,7 @@ test("current exported RAG functions reproduce the deterministic golden scenario
                     { id: "c", rank: 2 },
                 ]
             ),
-        });
+        }) as Record<string, unknown>;
 
         if (process.env.UPDATE_RAG_CHARACTERIZATION === "1") {
             writeFileSync(
@@ -517,6 +571,58 @@ test("current exported RAG functions reproduce the deterministic golden scenario
                 `${JSON.stringify(snapshots, null, 4)}\n`
             );
         } else {
+            assert.equal(
+                preparedPrompt.systemPrompt,
+                buildGroundedSystemPrompt("retrieved excerpt", highlight)
+            );
+            assert.equal(preparedPrompt.systemPrompt, promptWithHighlight);
+            const preparedWithoutHighlight =
+                new PrepareGroundedContext().execute({
+                    evidence: {
+                        status: "ready",
+                        sources: null,
+                        results: [
+                            result("prompt", 0, 0.03, "retrieved excerpt"),
+                        ],
+                        telemetry: {
+                            pipelineVersion: "baseline-rag-v1",
+                            promptVersion: "book-context-v1",
+                            queryPlan: null,
+                            retrieval: null,
+                        },
+                    },
+                    messages: [],
+                    highlightContext: null,
+                });
+            assert.equal(
+                preparedWithoutHighlight.systemPrompt,
+                promptWithoutHighlight
+            );
+            assert.deepEqual(
+                normalize(await applicationStreamAnswer(true)),
+                normalize(snapshots.completedStream)
+            );
+            assert.deepEqual(
+                normalize(await applicationStreamAnswer(false)),
+                normalize(snapshots.incompleteStream)
+            );
+            const policyUsage = normalizeModelUsagePolicy({
+                prompt_tokens: 1_000,
+                completion_tokens: 300,
+                total_tokens: 1_300,
+                prompt_tokens_details: { cached_tokens: 200 },
+            });
+            assert.deepEqual(policyUsage, usage);
+            assert.deepEqual(
+                Object.fromEntries(
+                    models.map((model) => [
+                        model,
+                        estimateModelCostPolicy(model, policyUsage)?.amount ??
+                            null,
+                    ])
+                ),
+                snapshots.costs
+            );
             assert.deepEqual(
                 normalize({
                     results: directTimedOut.results,

@@ -19,6 +19,7 @@ import type {
     Clock,
 } from "./ports";
 import { throwIfChatCancelled } from "./throwIfChatCancelled";
+import { buildRetrievalQuery } from "../rag/policies/groundedPrompt";
 
 export type RunBookChatInput = {
     userId: string;
@@ -45,14 +46,6 @@ export interface RunBookChatDependencies {
     metadata: ChatExecutionMetadataBuilder;
     clock: Clock;
 }
-
-const buildRetrievalQuery = (
-    query: string,
-    highlightContext: ChatHighlight | null
-) =>
-    highlightContext
-        ? `${query}\n\nSelected passage:\n${highlightContext.text}`
-        : query;
 
 const asUsageRecord = (
     usage: Record<string, unknown> | null | undefined

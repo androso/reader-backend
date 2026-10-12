@@ -74,7 +74,22 @@ export type RagStreamFailureKind =
 export interface RagStreamFailure {
     kind: RagStreamFailureKind;
     message: string;
+    transportWarning?: string;
 }
+
+export type RagGenerationTrace = {
+    userId: string;
+    sessionId: string;
+    generationName: string;
+    tags?: string[];
+    generationMetadata?: Record<string, unknown>;
+    parentSpanContext?: Record<string, unknown>;
+};
+
+export type RagGenerationOptions = {
+    temperature?: number;
+    langfuse?: RagGenerationTrace;
+};
 
 export interface AnswerModelStream {
     stream(input: {
@@ -84,6 +99,8 @@ export interface AnswerModelStream {
         }>;
         model: string;
         signal?: AbortSignal;
+        temperature?: number;
+        langfuse?: RagGenerationTrace;
     }): AsyncIterable<RagAnswerModelChunk>;
 }
 

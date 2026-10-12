@@ -3,6 +3,13 @@ import { db } from "../../db";
 import { estimateModelCost, normalizeModelUsage } from "../../services/AiUsage";
 import { createLogger } from "@reader/providers";
 import type { RetrieveBookEvidenceDependencies } from "@reader/application";
+import {
+    GenerateGroundedAnswer,
+    PrepareGroundedContext,
+    type GenerateGroundedAnswerDependencies,
+} from "@reader/application";
+import type { OpenAIService } from "../../services/OpenAIServices";
+import { createOpenAIAnswerModelStream } from "./openAIGeneration";
 import { createBookChunkReader } from "./chunkReader";
 import { createOwnedBookLookup } from "./ownedBookLookup";
 import { lexicalSearch } from "./lexicalSearch";
@@ -35,3 +42,15 @@ export const createRetrieveBookEvidence = (
     });
 
 export const retrieveBookEvidenceUseCase = createRetrieveBookEvidence();
+
+export const createGenerateGroundedAnswer = (
+    service?: OpenAIService,
+    overrides: Partial<GenerateGroundedAnswerDependencies> = {}
+) =>
+    new GenerateGroundedAnswer({
+        model: createOpenAIAnswerModelStream(service),
+        clock: { now: () => new Date() },
+        ...overrides,
+    });
+
+export const prepareGroundedContextUseCase = new PrepareGroundedContext();

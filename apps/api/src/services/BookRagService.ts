@@ -1,14 +1,10 @@
 import { type MessageContextSource } from "../db/schema";
-import {
-    buildBookContextSystemPrompt,
-    type HighlightContext,
-} from "./HighlightContext";
+import type { HighlightContext } from "./HighlightContext";
 import { hybridBookSearchService } from "./HybridBookSearchService";
 import {
-    OpenAIService,
-    resolveStreamModelVersion,
     type ChatMessage,
     type GenerateStreamResponseOptions,
+    type OpenAIService,
     type OpenAIChatModel,
 } from "./OpenAIServices";
 import {
@@ -18,26 +14,12 @@ import {
     type TraceObservation,
 } from "../observability/langfuse";
 import { getRagPipeline, type RagPipelineVersion } from "./RagPipeline";
-import { retrieveBookEvidenceUseCase } from "../infrastructure/rag/composition";
+import {
+    createGenerateGroundedAnswer,
+    prepareGroundedContextUseCase,
+    retrieveBookEvidenceUseCase,
+} from "../infrastructure/rag/composition";
 import { getRagMinHybridScore } from "../infrastructure/rag/ragConfig";
-
-const getErrorDetail = (error: unknown) => {
-    if (!error || typeof error !== "object") return String(error);
-    const details = error as {
-        code?: unknown;
-        errno?: unknown;
-        message?: unknown;
-        name?: unknown;
-    };
-
-    return [details.name, details.code, details.errno, details.message]
-        .filter(Boolean)
-        .join(" ");
-};
-
-const isPrematureCloseError = (error: unknown) =>
-    getErrorDetail(error).includes("ERR_STREAM_PREMATURE_CLOSE") ||
-    getErrorDetail(error).includes("Premature close");
 
 const summarizeRetrievedChunks = (
     results: Awaited<ReturnType<typeof hybridBookSearchService.search>>,
@@ -131,9 +113,11 @@ export const retrieveBookContext = async ({
     if (evidence.status !== "ready" || !evidence.results?.length) {
         return { ...evidence, messages };
     }
-    const context = evidence.results
-        .map((result) => result.content)
-        .join("\n\n---\n\n");
+    const prepared = prepareGroundedContextUseCase.execute({
+        evidence,
+        messages,
+        highlightContext,
+    });
     const promptSpan = (
         options.trace ?? getNoopTraceObservation()
     ).startObservation("build_rag_prompt", {
@@ -144,8 +128,8 @@ export const retrieveBookContext = async ({
     });
     promptSpan.update({
         output: {
-            contextLength: context.length,
-            messageCount: messages.length + 1,
+            contextLength: prepared.context?.length ?? 0,
+            messageCount: prepared.messages.length,
             selectedChunks: summarizeRetrievedChunks(
                 evidence.results,
                 getRagPipeline().retrievalStrategy !== "reranked"
@@ -153,19 +137,11 @@ export const retrieveBookContext = async ({
         },
     });
     promptSpan.end();
+    getRagPipeline();
     const { results: _results, ...bookContext } = evidence;
     return {
         ...bookContext,
-        messages: [
-            {
-                role: "system",
-                content: buildBookContextSystemPrompt(
-                    context,
-                    highlightContext
-                ),
-            },
-            ...messages,
-        ],
+        messages: prepared.messages,
     };
 };
 
@@ -194,52 +170,13 @@ export const generateBookAnswer = async ({
     shouldContinue?: () => boolean;
     service?: OpenAIService;
 }): Promise<GeneratedBookAnswer> => {
-    const activeService = service ?? new OpenAIService();
-    const startedAt = Date.now();
-    let answer = "";
-    let modelVersion: string = model;
-    let streamCompleted = false;
-    let finishReason: string | null = null;
-    let usage: unknown;
-
-    try {
-        const textStream = await activeService.generateStreamResponse(
-            messages,
-            undefined,
-            { ...options, model }
-        );
-
-        for await (const chunk of textStream) {
-            if (!shouldContinue()) break;
-            modelVersion = resolveStreamModelVersion(modelVersion, chunk.model);
-            const choice = chunk.choices[0];
-            if (choice?.finish_reason) finishReason = choice.finish_reason;
-            if (choice?.finish_reason === "stop") streamCompleted = true;
-            if ("usage" in chunk && chunk.usage) usage = chunk.usage;
-            const content = choice?.delta?.content || "";
-            answer += content;
-            await onContent?.(content);
-        }
-    } catch (error) {
-        if (!streamCompleted || !isPrematureCloseError(error)) throw error;
-
-        return {
-            answer,
-            modelVersion,
-            finishReason,
-            streamCompleted,
-            usage,
-            durationMs: Date.now() - startedAt,
-            transportWarning: getErrorDetail(error),
-        };
-    }
-
-    return {
-        answer,
-        modelVersion,
-        finishReason,
-        streamCompleted,
-        usage,
-        durationMs: Date.now() - startedAt,
-    };
+    return (await createGenerateGroundedAnswer(service).execute({
+        messages: messages as never,
+        model,
+        signal: options?.signal,
+        temperature: options?.temperature,
+        langfuse: options?.langfuse as never,
+        onContent,
+        shouldContinue,
+    })) as GeneratedBookAnswer;
 };
