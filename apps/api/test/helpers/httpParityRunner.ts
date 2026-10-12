@@ -148,10 +148,8 @@ const main = async () => {
     const jwt = require("jsonwebtoken") as typeof import("jsonwebtoken");
     const { createTestApp } =
         require("./nestApp") as typeof import("./nestApp");
-    const { AUTH_OPERATIONS } =
-        require("../../src/auth/auth.operations") as typeof import("../../src/auth/auth.operations");
-    const { generateToken, getOrCreateDevUser } =
-        require("../../src/services/AuthService") as typeof import("../../src/services/AuthService");
+    const { GOOGLE_IDENTITY_VERIFIER } =
+        require("../../src/auth/auth.tokens") as typeof import("../../src/auth/auth.tokens");
     const { RATE_LIMIT_CLIENT } =
         require("../../src/common/rate-limit.module") as typeof import("../../src/common/rate-limit.module");
     const { BOOKS_PORTS, createBookFileDependencies } =
@@ -317,17 +315,14 @@ const main = async () => {
         ),
     });
 
-    const authOperations = {
-        verifyGoogleToken: verifyGoogleTokenStub,
-        generateToken,
-        getOrCreateDevUser: () => getOrCreateDevUser(fakeDb as never),
-    };
-
     const testApp = await createTestApp({
         fullStack: true,
         db: fakeDb,
         overrides: [
-            { token: AUTH_OPERATIONS, useValue: authOperations },
+            {
+                token: GOOGLE_IDENTITY_VERIFIER,
+                useValue: { verify: verifyGoogleTokenStub },
+            },
             {
                 token: RATE_LIMIT_CLIENT,
                 useValue: { get: () => null, close: async () => undefined },

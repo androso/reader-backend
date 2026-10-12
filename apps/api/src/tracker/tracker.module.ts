@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { SessionModule } from "../auth/session.module";
 import { GetReadingProgress, SaveReadingProgress } from "@reader/application";
 import { DRIZZLE, type Database } from "../database/database.module";
 import { createOwnedBookLookup } from "../infrastructure/rag/ownedBookLookup";
@@ -47,6 +48,7 @@ export const TRACKER_USE_CASE_PROVIDERS = [
 ];
 
 @Module({
+    imports: [SessionModule],
     controllers: [TrackerController],
     providers: [...TRACKER_USE_CASE_PROVIDERS],
 })

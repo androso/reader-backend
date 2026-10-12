@@ -7,10 +7,12 @@ const { AuthController } =
     require("../src/auth/auth.controller") as typeof import("../src/auth/auth.controller");
 const { DRIZZLE } =
     require("../src/database/database.module") as typeof import("../src/database/database.module");
-const { AUTH_OPERATIONS } =
-    require("../src/auth/auth.operations") as typeof import("../src/auth/auth.operations");
-const { generateToken, getOrCreateDevUser } =
-    require("../src/services/AuthService") as typeof import("../src/services/AuthService");
+const { DEV_AUTH_CONFIG, SIGN_IN_FOR_DEVELOPMENT, SIGN_IN_WITH_GOOGLE } =
+    require("../src/auth/auth.tokens") as typeof import("../src/auth/auth.tokens");
+const { createDrizzleAccountRepository, createJsonWebTokenSessionTokens } =
+    require("../src/infrastructure/auth") as typeof import("../src/infrastructure/auth");
+const { SignInForDevelopment, SignInWithGoogle } =
+    require("@reader/application") as typeof import("@reader/application");
 const { RATE_LIMIT_CLIENT } =
     require("../src/common/rate-limit.module") as typeof import("../src/common/rate-limit.module");
 const { createTestApp } =
@@ -75,24 +77,63 @@ const createAuthTestApp = (
     } = {}
 ) => {
     const db = options.db ?? {};
+    const accounts = createDrizzleAccountRepository(db as never);
+    const sessionTokens = createJsonWebTokenSessionTokens(
+        process.env.JWT_SECRET!
+    );
+    const devAuthConfig = {
+        enabled: process.env.NODE_ENV !== "production",
+        email: process.env.DEV_USER_EMAIL || "dev@example.com",
+        name: process.env.DEV_USER_NAME || "Dev User",
+    };
     return createTestApp({
         controllers: [AuthController],
         providers: [
             { provide: DRIZZLE, useValue: db },
             {
-                provide: AUTH_OPERATIONS,
-                useValue: {
-                    verifyGoogleToken:
-                        options.verifyGoogleToken ??
-                        (async () => {
-                            throw new Error("Failed to verify token");
-                        }),
-                    generateToken,
-                    getOrCreateDevUser:
-                        options.getOrCreateDevUser ??
-                        (() => getOrCreateDevUser(db as never)),
-                },
+                provide: SIGN_IN_WITH_GOOGLE,
+                useValue: new SignInWithGoogle({
+                    googleIdentityVerifier: {
+                        verify: async (token: string) =>
+                            (await (
+                                options.verifyGoogleToken ??
+                                (async () => {
+                                    throw new Error("Failed to verify token");
+                                })
+                            )(token)) as {
+                                sub: string;
+                                email: string;
+                                name: string;
+                                picture?: string;
+                            },
+                    },
+                    accounts,
+                    sessionTokens,
+                    clock: { now: () => new Date() },
+                }),
             },
+            {
+                provide: SIGN_IN_FOR_DEVELOPMENT,
+                useValue: options.getOrCreateDevUser
+                    ? {
+                          execute: async () => {
+                              const account =
+                                  await options.getOrCreateDevUser!();
+                              return {
+                                  account,
+                                  token: sessionTokens.issue(
+                                      (account as { id: string }).id
+                                  ),
+                              };
+                          },
+                      }
+                    : new SignInForDevelopment({
+                          accounts,
+                          sessionTokens,
+                          config: devAuthConfig,
+                      }),
+            },
+            { provide: DEV_AUTH_CONFIG, useValue: devAuthConfig },
             {
                 provide: RATE_LIMIT_CLIENT,
                 useValue: { get: () => null, close: async () => {} },
@@ -129,18 +170,18 @@ test("POST /api/auth/logout clears the auth cookies", async () => {
 });
 
 test("POST /api/auth/dev returns 404 in production", async () => {
-    const testApp = await createAuthTestApp();
-    try {
-        await withNodeEnv("production", async () => {
+    await withNodeEnv("production", async () => {
+        const testApp = await createAuthTestApp();
+        try {
             const res = await fetch(`${testApp.baseUrl}/api/auth/dev`, {
                 method: "POST",
             });
             assert.equal(res.status, 404);
             assert.deepEqual(await res.json(), { message: "Not found" });
-        });
-    } finally {
-        await testApp.close();
-    }
+        } finally {
+            await testApp.close();
+        }
+    });
 });
 
 test("POST /api/auth/google with an invalid token returns 401", async () => {

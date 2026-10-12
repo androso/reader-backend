@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { SessionModule } from "../auth/session.module";
 import {
     AppendBookChat,
     GetBookConversation,
@@ -44,6 +45,7 @@ import {
 } from "./chat-stream";
 
 @Module({
+    imports: [SessionModule],
     controllers: [ChatController],
     providers: [
         {

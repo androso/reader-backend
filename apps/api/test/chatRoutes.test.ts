@@ -38,12 +38,8 @@ const {
     require("../src/infrastructure/chat/chat.tokens") as typeof import("../src/infrastructure/chat/chat.tokens");
 const { RATE_LIMIT_CLIENT } =
     require("../src/common/rate-limit.module") as typeof import("../src/common/rate-limit.module");
-const { AUTH_OPERATIONS } =
-    require("../src/auth/auth.operations") as typeof import("../src/auth/auth.operations");
 const { BOOKS_PORTS } =
     require("../src/books/books.ports") as typeof import("../src/books/books.ports");
-const { generateToken, getOrCreateDevUser } =
-    require("../src/services/AuthService") as typeof import("../src/services/AuthService");
 const { Books, Conversations, Messages } =
     require("../src/db/schema") as typeof import("../src/db/schema");
 const { createTestApp } =
@@ -429,17 +425,6 @@ const createScriptedChatApp = (steps: DbStep[]) => {
                         findBookById: unexpectedExternal("books.findBookById"),
                         getFile: unexpectedExternal("storage.getFile"),
                     },
-                },
-            },
-            {
-                token: AUTH_OPERATIONS,
-                useValue: {
-                    verifyGoogleToken: unexpectedExternal(
-                        "google.verifyIdToken"
-                    ),
-                    generateToken,
-                    getOrCreateDevUser: () =>
-                        getOrCreateDevUser(scriptedDb as never),
                 },
             },
         ],

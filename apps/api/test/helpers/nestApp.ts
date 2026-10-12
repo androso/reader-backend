@@ -4,6 +4,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { ModuleMetadata, Provider, Type } from "@nestjs/common";
 import type { Request } from "express";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
+import { AUTHENTICATE_SESSION } from "../../src/auth/auth.tokens";
 import { DRIZZLE } from "../../src/database/database.module";
 import type { User } from "../../src/types";
 
@@ -32,7 +33,41 @@ export const createTestApp = async (options: TestAppOptions) => {
     let builder = Test.createTestingModule({
         imports,
         controllers: options.controllers ?? [],
-        providers: options.providers ?? [],
+        providers: [
+            ...(!options.fullStack
+                ? [
+                      {
+                          provide: AUTHENTICATE_SESSION,
+                          useValue: {
+                              execute: async (token: string) => {
+                                  const { verifyToken } =
+                                      require("../../src/services/AuthService") as typeof import("../../src/services/AuthService");
+                                  const dbProvider = options.providers?.find(
+                                      (provider) =>
+                                          typeof provider === "object" &&
+                                          provider !== null &&
+                                          "provide" in provider &&
+                                          provider.provide === DRIZZLE &&
+                                          "useValue" in provider
+                                  );
+                                  const configuredDb =
+                                      options.db ??
+                                      (
+                                          dbProvider as
+                                              | { useValue?: unknown }
+                                              | undefined
+                                      )?.useValue;
+                                  return verifyToken(
+                                      token,
+                                      configuredDb as never
+                                  );
+                              },
+                          },
+                      },
+                  ]
+                : []),
+            ...(options.providers ?? []),
+        ],
     });
 
     if (options.user !== undefined) {

@@ -27,12 +27,8 @@ const { APPEND_BOOK_CHAT, START_BOOK_CHAT } =
     require("../src/infrastructure/chat/chat.tokens") as typeof import("../src/infrastructure/chat/chat.tokens");
 const { RATE_LIMIT_CLIENT } =
     require("../src/common/rate-limit.module") as typeof import("../src/common/rate-limit.module");
-const { AUTH_OPERATIONS } =
-    require("../src/auth/auth.operations") as typeof import("../src/auth/auth.operations");
 const { BOOKS_PORTS } =
     require("../src/books/books.ports") as typeof import("../src/books/books.ports");
-const { generateToken, getOrCreateDevUser } =
-    require("../src/services/AuthService") as typeof import("../src/services/AuthService");
 const { drizzle } =
     require("drizzle-orm/node-postgres") as typeof import("drizzle-orm/node-postgres");
 const jwt = require("jsonwebtoken") as typeof import("jsonwebtoken");
@@ -611,15 +607,6 @@ before(async () => {
                         findBookById: inertExternal("books.findBookById"),
                         getFile: inertExternal("storage.getFile"),
                     },
-                },
-            },
-            {
-                token: AUTH_OPERATIONS,
-                useValue: {
-                    verifyGoogleToken: inertExternal("google.verifyIdToken"),
-                    generateToken,
-                    getOrCreateDevUser: () =>
-                        getOrCreateDevUser(fakeDb as never),
                 },
             },
         ],

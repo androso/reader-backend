@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { SessionModule } from "../auth/session.module";
 import {
     createDeleteOwnedBook,
     createGetBookStatus,
@@ -49,6 +50,7 @@ export const BOOKS_USE_CASE_PROVIDERS = [
 ];
 
 @Module({
+    imports: [SessionModule],
     controllers: [BooksController],
     providers: [
         ...BOOKS_USE_CASE_PROVIDERS,

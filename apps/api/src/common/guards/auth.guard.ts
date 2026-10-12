@@ -6,8 +6,8 @@ import {
     UnauthorizedException,
 } from "@nestjs/common";
 import type { Request } from "express";
-import { DRIZZLE, type Database } from "../../database/database.module";
-import { verifyToken } from "../../services/AuthService";
+import type { AuthenticateSession } from "@reader/application";
+import { AUTHENTICATE_SESSION } from "../../auth/auth.tokens";
 import {
     DEV_AUTH_COOKIE,
     parseCookies,
@@ -16,7 +16,13 @@ import {
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-    constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+    constructor(
+        @Inject(AUTHENTICATE_SESSION)
+        private readonly authenticateSession: Pick<
+            AuthenticateSession,
+            "execute"
+        >
+    ) {}
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
         const req = context.switchToHttp().getRequest<Request>();
@@ -25,7 +31,7 @@ export class AuthGuard implements CanActivate {
         if (!token) {
             throw new UnauthorizedException({ message: "No token provided" });
         }
-        const user = await verifyToken(token, this.db);
+        const user = await this.authenticateSession.execute(token);
         if (!user) {
             throw new UnauthorizedException({ message: "Invalid token" });
         }

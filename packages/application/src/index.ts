@@ -29,3 +29,7 @@ export * from "./rag/policies/shadowComparison";
 export * from "./progress/ports";
 export * from "./progress/GetReadingProgress";
 export * from "./progress/SaveReadingProgress";
+export * from "./auth/ports";
+export * from "./auth/SignInWithGoogle";
+export * from "./auth/SignInForDevelopment";
+export * from "./auth/AuthenticateSession";

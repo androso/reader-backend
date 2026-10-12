@@ -12,21 +12,33 @@ import {
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import { eq } from "drizzle-orm";
+import type {
+    DevAuthConfig,
+    SignInForDevelopment,
+    SignInWithGoogle,
+} from "@reader/application";
 import { AuthRateLimitGuard } from "../common/guards/rate-limit.guard";
-import { DRIZZLE, type Database } from "../database/database.module";
-import { Users } from "../db/schema";
 import { clearAuthCookies, setAuthCookie } from "../utils/authCookie";
-import { AUTH_OPERATIONS, type AuthOperations } from "./auth.operations";
+import {
+    DEV_AUTH_CONFIG,
+    SIGN_IN_FOR_DEVELOPMENT,
+    SIGN_IN_WITH_GOOGLE,
+} from "./auth.tokens";
 
 @ApiTags("Auth")
 @Controller("api/auth")
 @UseGuards(AuthRateLimitGuard)
 export class AuthController {
     constructor(
-        @Inject(DRIZZLE) private readonly db: Database,
-        @Inject(AUTH_OPERATIONS)
-        private readonly operations: AuthOperations
+        @Inject(SIGN_IN_WITH_GOOGLE)
+        private readonly signInWithGoogle: Pick<SignInWithGoogle, "execute">,
+        @Inject(SIGN_IN_FOR_DEVELOPMENT)
+        private readonly signInForDevelopment: Pick<
+            SignInForDevelopment,
+            "execute"
+        >,
+        @Inject(DEV_AUTH_CONFIG)
+        private readonly devAuthConfig: DevAuthConfig
     ) {}
 
     @Post("google")
@@ -57,35 +69,11 @@ export class AuthController {
     ) {
         try {
             const { idToken } = body;
-            const payload = await this.operations.verifyGoogleToken(
+            const { account, token } = await this.signInWithGoogle.execute(
                 idToken as string
             );
-            const [existingUser] = await this.db
-                .select()
-                .from(Users)
-                .where(eq(Users.googleId, payload.sub));
-
-            let user = existingUser;
-            if (!user) {
-                [user] = await this.db
-                    .insert(Users)
-                    .values({
-                        googleId: payload.sub,
-                        email: payload.email,
-                        name: payload.name,
-                    })
-                    .returning();
-            } else {
-                [user] = await this.db
-                    .update(Users)
-                    .set({ updatedAt: new Date() })
-                    .where(eq(Users.googleId, payload.sub))
-                    .returning();
-            }
-
-            const jwtToken = this.operations.generateToken(user);
-            setAuthCookie(res, jwtToken);
-            return { user };
+            setAuthCookie(res, token);
+            return { user: account };
         } catch (e) {
             console.error(e);
             throw new UnauthorizedException({
@@ -97,15 +85,15 @@ export class AuthController {
     @Post("dev")
     @HttpCode(200)
     async dev(@Res({ passthrough: true }) res: Response) {
-        if (process.env.NODE_ENV === "production") {
+        if (!this.devAuthConfig.enabled) {
             throw new NotFoundException({ message: "Not found" });
         }
 
         try {
-            const user = await this.operations.getOrCreateDevUser();
-            const token = this.operations.generateToken(user);
+            const { account, token } =
+                await this.signInForDevelopment.execute();
             setAuthCookie(res, token);
-            return { user };
+            return { user: account };
         } catch (error) {
             console.error("Dev auth failed", error);
             throw new HttpException({ message: "Dev auth failed" }, 500);

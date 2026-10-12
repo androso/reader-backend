@@ -6,7 +6,9 @@ import { delimiter, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "../..");
 const suite = process.argv[2] ?? "books";
 const integrationTest =
-    suite === "chat"
+    suite === "auth"
+        ? ".tmp/apps-api-integration/test-integration/auth.test.js"
+        : suite === "chat"
         ? ".tmp/apps-api-integration/test-integration/chat.test.js"
         : suite === "rag"
           ? ".tmp/apps-api-integration/test-integration/rag.test.js"
@@ -14,14 +16,16 @@ const integrationTest =
             ? ".tmp/apps-api-integration/test-integration/progress.test.js"
             : ".tmp/apps-api-integration/test-integration/booksLifecycle.test.js";
 const expectedPasses =
-    suite === "chat" ? 3 : suite === "rag" ? 3 : suite === "progress" ? 6 : 10;
+    suite === "auth"
+        ? 3
+        : suite === "chat" ? 3 : suite === "rag" ? 3 : suite === "progress" ? 6 : 10;
 const suffix = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const postgresName = `reader-it-postgres-${suffix}`;
 const redisName = `reader-it-redis-${suffix}`;
 const upgradeDatabaseName = `reader_it_progress_upgrade_${suffix.replaceAll("-", "_")}`;
 const upgradeMigrationDir = resolve(root, ".tmp/progress-previous-migrations");
 const upgradeConfigPath = resolve(root, ".tmp/progress-previous.drizzle.config.ts");
-const usesRedis = suite !== "progress";
+const usesRedis = suite !== "progress" && suite !== "auth";
 
 const run = (command, args, options = {}) => {
     const result = spawnSync(command, args, {
@@ -133,6 +137,13 @@ try {
             DATABASE_URL: databaseUrl,
             REDIS_URL: redisPort ? `redis://127.0.0.1:${redisPort}` : "",
             JWT_SECRET: "reader-integration-test-secret",
+            ...(suite === "auth"
+                ? {
+                      NODE_ENV: "test",
+                      DEV_USER_EMAIL: "reader-auth-integration@example.invalid",
+                      DEV_USER_NAME: "Auth Integration",
+                  }
+                : {}),
             FRONTEND_URL: "http://localhost:5173",
             DOTENV_CONFIG_PATH: "/dev/null",
             NODE_PATH: [
