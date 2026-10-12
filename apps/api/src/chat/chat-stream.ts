@@ -178,6 +178,7 @@ export const createChatOperations = (deps: ChatStreamDependencies) => {
         input.signal?.addEventListener("abort", abortSession, { once: true });
         if (input.signal?.aborted) abortSession();
         try {
+            if (!session.signal.aborted) session.open();
             await runner.execute({
                 userId: input.userId,
                 bookId: input.resourceId,
@@ -194,6 +195,7 @@ export const createChatOperations = (deps: ChatStreamDependencies) => {
             });
         } finally {
             input.signal?.removeEventListener("abort", abortSession);
+            session.dispose();
         }
     };
 

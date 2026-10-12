@@ -8,11 +8,16 @@ process.env.JWT_SECRET ??= "reader-api-test-secret";
 const { createSseChatSession } =
     require("../src/infrastructure/chat/sseChatSession") as typeof import("../src/infrastructure/chat/sseChatSession");
 
-class FakeRequest extends EventEmitter {}
+class FakeRequest extends EventEmitter {
+    destroyed = false;
+    aborted = false;
+    socket = { destroyed: false };
+}
 
 class FakeResponse extends EventEmitter {
     headers: Record<string, string> = {};
     frames: string[] = [];
+    destroyed = false;
     writableEnded = false;
     writableFinished = false;
     writeResult = true;
@@ -39,8 +44,63 @@ const createSession = () => {
     const res = new FakeResponse();
     const request = req as never;
     const response = res as never;
-    return { req, res, session: createSseChatSession(request, response) };
+    const session = createSseChatSession(request, response);
+    session.open();
+    return { req, res, session };
 };
+
+test("SSE session registers before opening and sets headers only when opened", () => {
+    const req = new FakeRequest();
+    const res = new FakeResponse();
+    const session = createSseChatSession(req as never, res as never);
+
+    assert.deepEqual(res.headers, {});
+    assert.equal(req.listenerCount("aborted"), 1);
+    assert.equal(res.listenerCount("close"), 1);
+    assert.equal(res.listenerCount("drain"), 1);
+
+    session.open();
+    assert.deepEqual(res.headers, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+    });
+    session.dispose();
+});
+
+test("body-parser's destroyed request stream does not imply a disconnected socket", () => {
+    const req = new FakeRequest();
+    const res = new FakeResponse();
+    req.destroyed = true;
+
+    const session = createSseChatSession(req as never, res as never);
+
+    assert.equal(session.signal.aborted, false);
+    session.open();
+    assert.equal(res.headers["Content-Type"], "text/event-stream");
+    session.dispose();
+});
+
+test("an already-destroyed request or response aborts before any SSE write", async () => {
+    const req = new FakeRequest();
+    const res = new FakeResponse();
+    req.destroyed = true;
+    req.socket.destroyed = true;
+    res.destroyed = true;
+
+    const session = createSseChatSession(req as never, res as never);
+
+    assert.equal(session.signal.aborted, true);
+    assert.deepEqual(res.headers, {});
+    assert.equal(req.listenerCount("aborted"), 0);
+    assert.equal(res.listenerCount("close"), 0);
+    assert.equal(res.listenerCount("drain"), 0);
+    await assert.rejects(
+        session.sink.emit({ content: "cancelled" }),
+        ChatCancelledError
+    );
+    session.dispose();
+});
 
 test("SSE writes wait for drain when the response applies backpressure", async () => {
     const { res, session } = createSession();

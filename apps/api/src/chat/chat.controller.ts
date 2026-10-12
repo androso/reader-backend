@@ -86,8 +86,10 @@ export class ChatController {
         @Param("resourceType") resourceType: string,
         @Param("id") resourceId: string
     ) {
-        let session: SseChatSession | null = null;
+        const session = createSseChatSession(req, res);
+        let opened = false;
         try {
+            if (session.signal.aborted) return;
             const prepared = await this.startBookChat.prepare({
                 userId: req.user.id,
                 resourceType,
@@ -96,7 +98,9 @@ export class ChatController {
                 model: body?.model,
                 highlightContext: body?.highlightContext,
             });
-            session = createSseChatSession(req, res);
+            if (session.signal.aborted) return;
+            session.open();
+            opened = true;
             await this.startBookChat.executePrepared({
                 prepared,
                 sink: session.sink,
@@ -104,19 +108,31 @@ export class ChatController {
                 routeName: "create_conversation",
             });
         } catch (error) {
-            const mapped = mapChatReadError(error);
-            if (mapped && !session) throw mapped;
-            if (
-                error instanceof ChatCancelledError ||
-                session?.signal.aborted
-            ) {
+            if (error instanceof ChatCancelledError || session.signal.aborted) {
                 return;
             }
-            if (session) {
+            if (!opened) {
+                const mapped = mapChatReadError(error);
+                if (mapped) throw mapped;
+            }
+            if (error instanceof HttpException) throw error;
+            console.error("Error in chat stream", error);
+            if (!opened) {
+                throw new HttpException({ error: "An error occurred" }, 500);
+            }
+            try {
                 await session.fail({ error: "An error occurred" });
-                return;
+            } catch (failError) {
+                if (
+                    failError instanceof ChatCancelledError ||
+                    session.signal.aborted
+                ) {
+                    return;
+                }
+                throw failError;
             }
-            throw new HttpException({ error: "An error occurred" }, 500);
+        } finally {
+            session.dispose();
         }
     }
 
@@ -156,8 +172,10 @@ export class ChatController {
         @Param("rid") resourceId: string,
         @Param("cid") conversationId: string
     ) {
-        let session: SseChatSession | null = null;
+        const session = createSseChatSession(req, res);
+        let opened = false;
         try {
+            if (session.signal.aborted) return;
             const prepared = await this.appendBookChat.prepare({
                 userId: req.user.id,
                 resourceType,
@@ -167,7 +185,9 @@ export class ChatController {
                 model: body?.model,
                 highlightContext: body?.highlightContext,
             });
-            session = createSseChatSession(req, res);
+            if (session.signal.aborted) return;
+            session.open();
+            opened = true;
             await this.appendBookChat.executePrepared({
                 prepared,
                 sink: session.sink,
@@ -175,19 +195,31 @@ export class ChatController {
                 routeName: "append_message",
             });
         } catch (error) {
-            const mapped = mapChatReadError(error);
-            if (mapped && !session) throw mapped;
-            if (
-                error instanceof ChatCancelledError ||
-                session?.signal.aborted
-            ) {
+            if (error instanceof ChatCancelledError || session.signal.aborted) {
                 return;
             }
-            if (session) {
+            if (!opened) {
+                const mapped = mapChatReadError(error);
+                if (mapped) throw mapped;
+            }
+            if (error instanceof HttpException) throw error;
+            console.error("Error in chat messages", error);
+            if (!opened) {
+                throw new HttpException({ error: "An error occurred" }, 500);
+            }
+            try {
                 await session.fail({ error: "An error occurred" });
-                return;
+            } catch (failError) {
+                if (
+                    failError instanceof ChatCancelledError ||
+                    session.signal.aborted
+                ) {
+                    return;
+                }
+                throw failError;
             }
-            throw new HttpException({ error: "An error occurred" }, 500);
+        } finally {
+            session.dispose();
         }
     }
 

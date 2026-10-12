@@ -5,22 +5,28 @@ import type { ChatEventSink } from "@reader/application";
 export type SseChatSession = {
     signal: AbortSignal;
     sink: ChatEventSink;
+    open(): void;
     fail(payload: Record<string, unknown>): Promise<void>;
+    dispose(): void;
 };
 
 export const createSseChatSession = (
     req: Request,
     res: Response
 ): SseChatSession => {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
     const controller = new AbortController();
     let terminated = false;
     let terminalRequested = false;
+    let opened = false;
     let writeChain: Promise<void> = Promise.resolve();
     let drainWaiter: (() => void) | null = null;
+
+    // body-parser auto-destroys the fully consumed request stream, so it isn't a disconnect signal.
+    const isAlreadyDisconnected = () =>
+        req.aborted ||
+        req.socket?.destroyed === true ||
+        res.destroyed ||
+        res.writableEnded;
 
     const cleanup = () => {
         req.removeListener("aborted", onAborted);
@@ -50,9 +56,33 @@ export const createSseChatSession = (
     res.on("close", onClose);
     res.on("drain", onDrain);
 
+    if (isAlreadyDisconnected()) terminate();
+
+    const open = () => {
+        if (
+            terminated ||
+            controller.signal.aborted ||
+            isAlreadyDisconnected()
+        ) {
+            terminate();
+            throw new ChatCancelledError();
+        }
+        if (opened) return;
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        opened = true;
+    };
+
     const waitForDrain = () =>
         new Promise<void>((resolve, reject) => {
-            if (terminated || controller.signal.aborted) {
+            if (
+                terminated ||
+                controller.signal.aborted ||
+                res.destroyed ||
+                res.writableEnded
+            ) {
+                terminate();
                 reject(new ChatCancelledError());
                 return;
             }
@@ -72,11 +102,24 @@ export const createSseChatSession = (
     };
 
     const writeFrame = async (frame: string) => {
-        if (terminated || controller.signal.aborted) {
+        if (
+            !opened ||
+            terminated ||
+            controller.signal.aborted ||
+            res.destroyed ||
+            res.writableEnded
+        ) {
+            if (res.destroyed || res.writableEnded) terminate();
             throw new ChatCancelledError();
         }
         if (!res.write(frame)) await waitForDrain();
-        if (terminated || controller.signal.aborted) {
+        if (
+            terminated ||
+            controller.signal.aborted ||
+            res.destroyed ||
+            res.writableEnded
+        ) {
+            if (res.destroyed || res.writableEnded) terminate();
             throw new ChatCancelledError();
         }
     };
@@ -119,5 +162,14 @@ export const createSseChatSession = (
         });
     };
 
-    return { signal: controller.signal, sink, fail };
+    return {
+        signal: controller.signal,
+        sink,
+        open,
+        fail,
+        dispose() {
+            if (!terminated) terminate();
+            else cleanup();
+        },
+    };
 };
